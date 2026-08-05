@@ -1,0 +1,60 @@
+menu "MS51FC0AE ICP programmer"
+
+    config MS51_WIFI_SSID
+        string "Wi-Fi access point name"
+        default "MS51-PROGRAMMER"
+
+    config MS51_WIFI_PASSWORD
+        string "Wi-Fi access point password"
+        default "12345678"
+        help
+            WPA2 password. It must contain at least 8 characters.
+
+    config MS51_WIFI_CHANNEL
+        int "Wi-Fi channel"
+        range 1 13
+        default 1
+
+    config MS51_RST_GPIO
+        int "ESP32-C5 GPIO connected to MS51 nRESET"
+        range 0 28
+        default 2
+
+    config MS51_CLK_GPIO
+        int "ESP32-C5 GPIO connected to MS51 ICE_CLK/ICP_CLK"
+        range 0 28
+        default 3
+
+    config MS51_DAT_GPIO
+        int "ESP32-C5 GPIO connected to MS51 ICE_DAT/ICP_DAT"
+        range 0 28
+        default 4
+
+    config MS51_BIT_DELAY_US
+        int "ICP half-bit delay (microseconds)"
+        range 1 20
+        default 2
+        help
+            Delay before/after the active clock edge for normal ICP commands.
+            Increase this value when long wiring or level shifters make the
+            connection unreliable.
+
+    config MS51_AUTO_PROGRAM
+        bool "Program embedded MS51 image at ESP32 startup"
+        default n
+        help
+            If firmware/ms51_app.bin exists and differs from APROM, update only
+            the address range covered by that image and verify it. This is off
+            by default so merely rebooting the programmer cannot alter a target.
+            Locked targets are never mass-erased automatically.
+
+    config MS51_VERIFY_AFTER_PROGRAM
+        bool "Verify each changed page after programming"
+        default y
+
+    config MS51_PROGRAM_RETRIES
+        int "Retries for a page that fails verification"
+        range 0 5
+        default 2
+
+endmenu

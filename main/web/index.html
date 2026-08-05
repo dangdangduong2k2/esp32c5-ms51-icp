@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <title>MS51 Programmer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(15, 29, 48, .82);
+      --panel-2: #101f34;
+      --line: rgba(148, 171, 203, .18);
+      --text: #f3f7fc;
+      --muted: #96a9c1;
+      --primary: #34d399;
+      --primary-2: #10b981;
+      --blue: #60a5fa;
+      --danger: #fb7185;
+      --warning: #fbbf24;
+      --radius: 18px;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .34);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { min-height: 100%; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--text);
+      background:
+        radial-gradient(800px 440px at 8% -10%, rgba(16,185,129,.18), transparent 70%),
+        radial-gradient(720px 440px at 100% 8%, rgba(59,130,246,.16), transparent 64%),
+        var(--bg);
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+
+    button { -webkit-tap-highlight-color: transparent; }
+
+    .shell {
+      width: min(920px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: max(24px, env(safe-area-inset-top)) 0 max(34px, env(safe-area-inset-bottom));
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+
+    .logo {
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(52,211,153,.35);
+      border-radius: 14px;
+      color: var(--primary);
+      background: rgba(52,211,153,.1);
+      box-shadow: inset 0 0 24px rgba(52,211,153,.06);
+    }
+
+    .logo svg { width: 25px; height: 25px; }
+    h1 { margin: 0; font-size: clamp(19px, 4vw, 25px); letter-spacing: -.025em; }
+    .subtitle { margin: 1px 0 0; color: var(--muted); font-size: 12px; }
+
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(7,17,31,.55);
+      font-size: 12px;
+    }
+
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+    .connection.online .dot { background: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.12); }
+    .connection.online { color: #b8f7dc; }
+
+    .grid { display: grid; min-width: 0; grid-template-columns: 1.18fr .82fr; gap: 16px; }
+    .stack { display: grid; min-width: 0; gap: 16px; align-content: start; }
+
+    .card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .card-head { display: flex; min-width: 0; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 15px; }
+    .card-head > * { min-width: 0; }
+    h2 { margin: 0; font-size: 15px; letter-spacing: .01em; }
+    .eyebrow { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .11em; }
+
+    .dropzone {
+      position: relative;
+      min-width: 0;
+      display: grid;
+      place-items: center;
+      min-height: 190px;
+      padding: 24px;
+      border: 1.5px dashed rgba(96,165,250,.4);
+      border-radius: 15px;
+      text-align: center;
+      background: rgba(96,165,250,.045);
+      transition: border-color .18s, background .18s, transform .18s;
+      cursor: pointer;
+    }
+
+    .dropzone:hover, .dropzone.drag { border-color: var(--blue); background: rgba(96,165,250,.09); }
+    .dropzone.drag { transform: scale(.995); }
+    .dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .upload-icon { width: 42px; height: 42px; margin: 0 auto 11px; color: var(--blue); }
+    .drop-title { margin: 0 0 4px; font-weight: 700; }
+    .drop-help { margin: 0; color: var(--muted); font-size: 12px; }
+    .browse { color: #93c5fd; text-decoration: underline; text-underline-offset: 3px; }
+
+    .file {
+      display: none;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 14px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(16,31,52,.85);
+    }
+
+    .file.show { display: grid; }
+    .file-icon { display: grid; place-items: center; width: 38px; height: 42px; border-radius: 9px; color: var(--primary); background: rgba(52,211,153,.1); font-size: 11px; font-weight: 800; }
+    .file-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+    .file-meta { color: var(--muted); font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+    .icon-btn {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 9px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .icon-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
+
+    .upload-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+    .upload-row .btn { flex: 0 0 auto; }
+
+    .progress { display: none; flex: 1; min-width: 0; }
+    .progress.show { display: block; }
+    .progress-label { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+    .bar { height: 6px; overflow: hidden; border-radius: 99px; background: rgba(148,171,203,.14); }
+    .bar > span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary-2), var(--primary)); transition: width .15s; }
+
+    .btn {
+      min-height: 42px;
+      padding: 10px 15px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--text);
+      background: var(--panel-2);
+      font-weight: 650;
+      cursor: pointer;
+      transition: transform .12s, border-color .15s, background .15s, opacity .15s;
+    }
+
+    .btn:hover:not(:disabled) { border-color: rgba(148,171,203,.4); background: #162943; }
+    .btn:active:not(:disabled) { transform: translateY(1px); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn.primary { color: #03251a; border-color: transparent; background: linear-gradient(135deg, #6ee7b7, var(--primary)); }
+    .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #8af0c7, #43dda7); }
+    .btn.danger { color: #fecdd3; border-color: rgba(251,113,133,.32); background: rgba(251,113,133,.08); }
+    .btn.danger:hover:not(:disabled) { border-color: rgba(251,113,133,.7); background: rgba(251,113,133,.14); }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .actions .primary { grid-column: 1 / -1; }
+
+    .status-box {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 11px;
+      align-items: start;
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 12px;
+      color: #bfdbfe;
+      background: rgba(59,130,246,.08);
+      font-size: 12px;
+    }
+
+    .status-box.error { color: #fecdd3; background: rgba(251,113,133,.09); }
+    .status-box.success { color: #bbf7d0; background: rgba(52,211,153,.09); }
+    .status-box.busy .status-mark { animation: pulse 1s ease-in-out infinite; }
+    .status-mark { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: currentColor; }
+
+    .facts { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--line); }
+    .fact { display: grid; grid-template-columns: 95px 1fr; gap: 10px; padding: 10px 12px; background: rgba(12,25,42,.96); }
+    .fact dt { color: var(--muted); }
+    .fact dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .fact .locked { color: var(--danger); }
+    .fact .unlocked { color: var(--primary); }
+
+    .danger-card { border-color: rgba(251,113,133,.2); }
+    .danger-copy { margin: -5px 0 14px; color: var(--muted); font-size: 12px; }
+    .danger-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    dialog {
+      width: min(430px, calc(100% - 28px));
+      padding: 0;
+      border: 1px solid rgba(251,113,133,.3);
+      border-radius: 18px;
+      color: var(--text);
+      background: #0d1b2e;
+      box-shadow: 0 30px 90px rgba(0,0,0,.65);
+    }
+
+    dialog::backdrop { background: rgba(2,8,18,.78); backdrop-filter: blur(5px); }
+    .modal { padding: 22px; }
+    .modal h3 { margin: 0 0 8px; font-size: 18px; }
+    .modal p { margin: 0 0 15px; color: var(--muted); font-size: 13px; }
+    .modal label { display: block; margin-bottom: 6px; font-size: 12px; }
+    .confirm-input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: none; color: var(--text); background: #081524; }
+    .confirm-input:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(251,113,133,.1); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 17px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      z-index: 20;
+      max-width: calc(100% - 28px);
+      padding: 11px 15px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--text);
+      background: #12233a;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transform: translate(-50%, 15px);
+      pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      font-size: 13px;
+    }
+
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { border-color: rgba(251,113,133,.45); }
+    footer { padding: 20px 4px 0; color: #6f839c; text-align: center; font-size: 11px; }
+
+    @keyframes pulse { 50% { opacity: .3; transform: scale(.75); } }
+
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+      .card { padding: 17px; }
+      .connection .connection-label { display: none; }
+      .dropzone { min-height: 165px; }
+    }
+
+    @media (max-width: 480px) {
+      .shell { width: min(100% - 20px, 920px); }
+      .danger-actions, .actions { grid-template-columns: 1fr; }
+      .actions .primary { grid-column: auto; }
+      .upload-row { align-items: stretch; flex-direction: column; }
+      .fact { grid-template-columns: 78px 1fr; }
+      .card-head { align-items: flex-start; flex-wrap: wrap; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .001ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 1v4m6-4v4M9 19v4m6-4v4M1 9h4m-4 6h4m14-6h4m-4 6h4M9 9h6v6H9z"/></svg>
+        </div>
+        <div>
+          <h1>MS51 Programmer</h1>
+          <p class="subtitle">ESP32-C5 · ICP DAT / CLK</p>
+        </div>
+      </div>
+      <div class="connection" id="connection" title="Kết nối tới ESP32">
+        <span class="dot"></span>
+        <span class="connection-label" id="connectionText">Đang kết nối</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card" aria-labelledby="uploadTitle">
+        <div class="card-head">
+          <div>
+            <div class="eyebrow">Firmware</div>
+            <h2 id="uploadTitle">Tải firmware MS51</h2>
+          </div>
+          <span class="eyebrow">BIN 32 KB · HEX 96 KB</span>
+        </div>
+
+        <label class="dropzone" id="dropzone" for="fileInput">
+          <input type="file" id="fileInput" accept=".bin,.hex,.ihex,.ihx,application/octet-stream,text/plain">
+          <div>
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4"/></svg>
+            <p class="drop-title">Chọn hoặc thả file <span class="browse">.bin / .hex</span></p>
+            <p class="drop-help">BIN hoặc Intel HEX cho APROM MS51FC0AE</p>
+          </div>
+        </label>
+
+        <div class="file" id="fileCard">
+          <div class="file-icon" id="fileKind">BIN</div>
+          <div style="min-width:0">
+            <div class="file-name" id="fileName">—</div>
+            <div class="file-meta"><span id="fileSize">—</span> · CRC32 <span id="fileCrc">—</span></div>
+          </div>
+          <button class="icon-btn" id="removeFile" type="button" aria-label="Bỏ file đã chọn" title="Bỏ file">✕</button>
+        </div>
+
+        <div class="upload-row">
+          <button class="btn primary" id="uploadBtn" type="button" disabled>Tải lên ESP32</button>
+          <div class="progress" id="progress">
+            <div class="progress-label"><span id="progressText">Đang tải lên…</span><span id="progressPct">0%</span></div>
+            <div class="bar"><span id="progressBar"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="stack">
+        <section class="card" aria-labelledby="controlTitle">
+          <div class="card-head">
+            <div>
+              <div class="eyebrow">Điều khiển</div>
+              <h2 id="controlTitle">Chip đích MS51</h2>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary action" data-action="program" data-needs-image type="button">Nạp firmware</button>
+            <button class="btn action" data-action="info" type="button">Đọc thông tin</button>
+            <button class="btn action" data-action="verify" data-needs-image type="button">Kiểm tra</button>
+            <button class="btn action" data-action="reset" type="button">Reset MS51</button>
+          </div>
+          <div class="status-box" id="statusBox" role="status" aria-live="polite">
+            <span class="status-mark"></span>
+            <span id="statusText">Sẵn sàng.</span>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="deviceTitle">
+          <div class="card-head">
+            <div>
+              <div class="eyebrow">Thiết bị</div>
+              <h2 id="deviceTitle">Thông tin nhận dạng</h2>
+            </div>
+          </div>
+          <dl class="facts">
+            <div class="fact"><dt>PDID</dt><dd id="pdid">Chưa đọc</dd></div>
+            <div class="fact"><dt>CONFIG</dt><dd id="config">—</dd></div>
+            <div class="fact"><dt>Bảo vệ</dt><dd id="security">—</dd></div>
+            <div class="fact"><dt>APROM</dt><dd id="aprom">—</dd></div>
+            <div class="fact"><dt>LDROM</dt><dd id="ldrom">—</dd></div>
+          </dl>
+        </section>
+      </div>
+    </div>
+
+    <section class="card danger-card" style="margin-top:16px" aria-labelledby="dangerTitle">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow" style="color:var(--danger)">Khu vực nguy hiểm</div>
+          <h2 id="dangerTitle">Thao tác phá hủy dữ liệu</h2>
+        </div>
+      </div>
+      <p class="danger-copy">Nạp toàn bộ sẽ xóa thành 0xFF mọi byte APROM không có trong image, kể cả khoảng trống của HEX. Xóa chip sẽ xóa APROM, LDROM và cấu hình bảo vệ.</p>
+      <div class="danger-actions">
+        <button class="btn danger destructive" data-action="program-full" data-needs-image type="button">Nạp toàn bộ APROM</button>
+        <button class="btn danger destructive" data-action="erase" type="button">Xóa toàn bộ chip</button>
+      </div>
+    </section>
+
+    <footer><span id="wifiInfo">ESP32-C5 MS51 ICP Programmer</span> · GPIO2 RST · GPIO3 CLK · GPIO4 DAT</footer>
+  </main>
+
+  <dialog id="confirmDialog">
+    <form class="modal" method="dialog" id="confirmForm">
+      <h3 id="confirmTitle">Xác nhận thao tác</h3>
+      <p id="confirmMessage"></p>
+      <label for="confirmInput">Nhập chính xác <strong>CONFIRM</strong> để tiếp tục:</label>
+      <input class="confirm-input" id="confirmInput" autocomplete="off" spellcheck="false" placeholder="CONFIRM">
+      <div class="modal-actions">
+        <button class="btn" value="cancel" type="submit">Hủy</button>
+        <button class="btn danger" id="confirmBtn" value="confirm" type="submit" disabled>Xác nhận</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (selector) => document.querySelector(selector);
+      const els = {
+        connection: $('#connection'), connectionText: $('#connectionText'),
+        dropzone: $('#dropzone'), input: $('#fileInput'), fileCard: $('#fileCard'),
+        fileName: $('#fileName'), fileSize: $('#fileSize'), fileCrc: $('#fileCrc'), fileKind: $('#fileKind'),
+        remove: $('#removeFile'), upload: $('#uploadBtn'), progress: $('#progress'),
+        progressText: $('#progressText'), progressPct: $('#progressPct'), progressBar: $('#progressBar'),
+        statusBox: $('#statusBox'), statusText: $('#statusText'), toast: $('#toast'),
+        wifiInfo: $('#wifiInfo'), dialog: $('#confirmDialog'), confirmForm: $('#confirmForm'),
+        confirmTitle: $('#confirmTitle'), confirmMessage: $('#confirmMessage'),
+        confirmInput: $('#confirmInput'), confirmBtn: $('#confirmBtn')
+      };
+
+      const state = { file: null, crc32: null, selectedUploaded: false, uploadedGeneration: 0, serverImage: null, imageReady: false, busy: false, localBusy: false, pendingDanger: null };
+      let toastTimer;
+
+      const crcTable = (() => {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+          let c = n;
+          for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+          table[n] = c >>> 0;
+        }
+        return table;
+      })();
+
+      function crc32(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let crc = 0xFFFFFFFF;
+        for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+      }
+
+      function hex32(value) {
+        if (typeof value === 'string') return value.toUpperCase().startsWith('0X') ? value.toUpperCase() : value;
+        return '0x' + (Number(value) >>> 0).toString(16).padStart(8, '0').toUpperCase();
+      }
+
+      function formatBytes(bytes) {
+        const n = Number(bytes) || 0;
+        if (n < 1024) return n + ' B';
+        return (n / 1024).toFixed(n % 1024 ? 1 : 0) + ' KB';
+      }
+
+      function setOnline(online) {
+        els.connection.classList.toggle('online', online);
+        els.connectionText.textContent = online ? 'Đã kết nối' : 'Mất kết nối';
+      }
+
+      function setStatus(message, kind = '') {
+        els.statusText.textContent = message || 'Sẵn sàng.';
+        els.statusBox.className = 'status-box' + (kind ? ' ' + kind : '');
+      }
+
+      function toast(message, error = false) {
+        clearTimeout(toastTimer);
+        els.toast.textContent = message;
+        els.toast.className = 'toast show' + (error ? ' error' : '');
+        toastTimer = setTimeout(() => { els.toast.className = 'toast'; }, 3200);
+      }
+
+      function updateButtons() {
+        document.querySelectorAll('button.action, button.destructive').forEach((button) => {
+          button.disabled = state.busy || state.localBusy || (button.hasAttribute('data-needs-image') && !state.imageReady);
+        });
+        els.upload.disabled = state.busy || state.localBusy || !state.file;
+        els.remove.disabled = state.busy || state.localBusy;
+      }
+
+      function setBusy(busy, message) {
+        state.localBusy = busy;
+        updateButtons();
+        if (message) setStatus(message, busy ? 'busy' : '');
+      }
+
+      async function parseResponse(response) {
+        const text = await response.text();
+        let data = {};
+        if (text) {
+          try { data = JSON.parse(text); }
+          catch (_) { data = { message: text }; }
+        }
+        if (!response.ok || data.ok === false) throw new Error(data.message || `Lỗi HTTP ${response.status}`);
+        return data;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, { cache: 'no-store', ...options });
+        return parseResponse(response);
+      }
+
+      async function selectFile(file) {
+        if (!file) return;
+        const name = file.name.toLowerCase();
+        const isHex = name.endsWith('.hex') || name.endsWith('.ihex') || name.endsWith('.ihx');
+        const isBin = name.endsWith('.bin');
+        if (!isBin && !isHex) return toast('Chỉ chấp nhận file .bin hoặc Intel HEX (.hex)', true);
+        const maxSize = isHex ? 96 * 1024 : 32768;
+        if (file.size < 1 || file.size > maxSize) return toast(`Dung lượng phải từ 1 đến ${maxSize} byte`, true);
+        state.file = file;
+        state.crc32 = crc32(await file.arrayBuffer());
+        state.selectedUploaded = false;
+        state.uploadedGeneration = 0;
+        state.imageReady = false;
+        els.fileName.textContent = file.name;
+        els.fileSize.textContent = formatBytes(file.size);
+        els.fileCrc.textContent = hex32(state.crc32);
+        els.fileKind.textContent = isHex ? 'HEX' : 'BIN';
+        els.remove.style.visibility = 'visible';
+        els.fileCard.classList.add('show');
+        els.progress.classList.remove('show');
+        updateButtons();
+        setStatus('Đã chọn file. Nhấn “Tải lên ESP32”.');
+      }
+
+      function clearSelectedFile() {
+        state.file = null;
+        state.crc32 = null;
+        state.selectedUploaded = false;
+        state.uploadedGeneration = 0;
+        els.input.value = '';
+        els.fileCard.classList.remove('show');
+        els.progress.classList.remove('show');
+        renderImage(state.serverImage);
+      }
+
+      function uploadFile() {
+        if (!state.file || state.busy || state.localBusy) return;
+        setBusy(true, 'Đang tải firmware lên ESP32…');
+        els.progress.classList.add('show');
+        els.progressBar.style.width = '0%';
+        els.progressPct.textContent = '0%';
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.setRequestHeader('X-Filename', encodeURIComponent(state.file.name));
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          const pct = Math.round(event.loaded * 100 / event.total);
+          els.progressBar.style.width = pct + '%';
+          els.progressPct.textContent = pct + '%';
+        };
+        xhr.onerror = () => finishUpload(false, 'Không thể kết nối tới ESP32');
+        xhr.ontimeout = () => finishUpload(false, 'Tải lên quá thời gian');
+        xhr.timeout = 20000;
+        xhr.onload = () => {
+          let data = {};
+          try { data = xhr.responseText ? JSON.parse(xhr.responseText) : {}; }
+          catch (_) { data = { message: xhr.responseText }; }
+          const ok = xhr.status >= 200 && xhr.status < 300 && data.ok !== false;
+          finishUpload(ok, data.message || (ok ? 'Đã lưu firmware vào ESP32.' : `Lỗi HTTP ${xhr.status}`));
+          if (ok) {
+            state.selectedUploaded = true;
+            state.imageReady = true;
+            state.uploadedGeneration = Number(data.image?.generation || 0);
+            if (data.image) renderImage(data.image);
+            els.progressBar.style.width = '100%';
+            els.progressPct.textContent = '100%';
+            setTimeout(refreshStatus, 350);
+          }
+        };
+        xhr.send(state.file);
+      }
+
+      function finishUpload(ok, message) {
+        setBusy(false);
+        setOnline(ok || els.connection.classList.contains('online'));
+        setStatus(message, ok ? 'success' : 'error');
+        toast(message, !ok);
+        if (!ok) els.progress.classList.remove('show');
+      }
+
+      function renderImage(image) {
+        state.serverImage = image || null;
+        const remoteReady = Boolean(image && image.valid && Number(image.size) > 0);
+        const localMatches = !state.file || (state.selectedUploaded &&
+          (state.uploadedGeneration > 0
+            ? Number(image?.generation) === state.uploadedGeneration
+            : (Number(image?.size) === state.file.size &&
+               (Number(image?.crc32) >>> 0) === (Number(state.crc32) >>> 0))));
+        if (state.file && state.selectedUploaded && remoteReady && !localMatches) {
+          state.selectedUploaded = false;
+          setStatus('Firmware trên ESP32 đã được thiết bị khác thay đổi. Hãy tải lại file đã chọn.', 'error');
+          toast('Firmware trên ESP32 đã thay đổi; thao tác nạp đã bị khóa.', true);
+        }
+        state.imageReady = remoteReady && localMatches;
+        if (!state.file) {
+          els.fileCard.classList.toggle('show', remoteReady);
+          if (remoteReady) {
+            els.fileName.textContent = image.name || 'firmware.bin';
+            const covered = Number(image.covered_size || image.size);
+            els.fileSize.textContent = covered === Number(image.size)
+              ? formatBytes(image.size)
+              : `${formatBytes(covered)} / ${formatBytes(image.size)} vùng APROM`;
+            els.fileCrc.textContent = hex32(image.crc32);
+            els.fileKind.textContent = image.format === 'intel-hex' ? 'HEX' : 'BIN';
+            els.remove.style.visibility = 'hidden';
+          }
+        }
+        updateButtons();
+      }
+
+      function value(obj, ...keys) {
+        for (const key of keys) if (obj && obj[key] !== undefined && obj[key] !== null) return obj[key];
+        return null;
+      }
+
+      function renderInfo(data) {
+        const identity = data.identity || data;
+        let pdid = value(identity, 'pdid', 'part_id', 'partId');
+        const did = value(identity, 'device_id', 'deviceId');
+        const pid = value(identity, 'product_id', 'productId');
+        if (pdid === null && did !== null && pid !== null) pdid = ((Number(pid) << 16) | Number(did)) >>> 0;
+        const config = value(data, 'config');
+        const locked = value(data, 'locked', 'security_locked');
+        const aprom = value(data, 'aprom_size', 'aprom');
+        const ldrom = value(data, 'ldrom_size', 'ldrom');
+        $('#pdid').textContent = pdid === null ? '—' : hex32(pdid);
+        $('#config').textContent = Array.isArray(config) ? config.map(v => Number(v).toString(16).padStart(2, '0').toUpperCase()).join(' ') : (config ?? '—');
+        $('#security').textContent = locked === null ? '—' : (locked ? 'ĐÃ KHÓA' : 'Không khóa');
+        $('#security').className = locked === null ? '' : (locked ? 'locked' : 'unlocked');
+        $('#aprom').textContent = aprom === null ? '—' : formatBytes(aprom);
+        $('#ldrom').textContent = ldrom === null ? '—' : formatBytes(ldrom);
+      }
+
+      async function runAction(action, destructive = false) {
+        if (state.busy || state.localBusy) return;
+        const labels = { info: 'Đang đọc thông tin MS51…', program: 'Đang nạp firmware…', verify: 'Đang kiểm tra firmware…', reset: 'Đang reset MS51…', 'program-full': 'Đang nạp toàn bộ APROM…', erase: 'Đang xóa toàn bộ chip…' };
+        setBusy(true, labels[action] || 'Đang xử lý…');
+        try {
+          const options = {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ generation: Number(state.serverImage?.generation || 0) })
+          };
+          if (destructive) {
+            options.body = JSON.stringify({
+              generation: Number(state.serverImage?.generation || 0),
+              confirm: 'CONFIRM'
+            });
+          }
+          const data = await api('/api/' + action, options);
+          if (action === 'info') renderInfo(data);
+          const message = data.message || (action === 'info' ? 'Đã đọc thông tin MS51.' : 'Thao tác hoàn tất.');
+          if (data.accepted) {
+            state.busy = true;
+            setStatus(message, 'busy');
+          } else {
+            setStatus(message, 'success');
+            toast(message);
+          }
+          setOnline(true);
+        } catch (error) {
+          setStatus(error.message, 'error');
+          toast(error.message, true);
+        } finally {
+          setBusy(false);
+          setTimeout(refreshStatus, 500);
+        }
+      }
+
+      function requestDanger(action) {
+        state.pendingDanger = action;
+        const full = action === 'program-full';
+        els.confirmTitle.textContent = full ? 'Nạp toàn bộ APROM?' : 'Xóa toàn bộ chip?';
+        els.confirmMessage.textContent = full
+          ? 'Mọi byte APROM không có trong image sẽ bị xóa thành 0xFF, kể cả khoảng trống của HEX. Thao tác không thể hoàn tác.'
+          : 'APROM, LDROM và CONFIG sẽ bị xóa. Chỉ dùng để mở khóa hoặc làm sạch chip.';
+        els.confirmInput.value = '';
+        els.confirmBtn.disabled = true;
+        if (typeof els.dialog.showModal === 'function') {
+          els.dialog.showModal();
+          setTimeout(() => els.confirmInput.focus(), 50);
+        } else if (window.prompt('Nhập CONFIRM để tiếp tục:') === 'CONFIRM') {
+          runAction(action, true);
+        }
+      }
+
+      async function refreshStatus() {
+        if (state.localBusy) return;
+        try {
+          const data = await api('/api/status');
+          setOnline(true);
+          if (data.wifi) els.wifiInfo.textContent = `${data.wifi.ssid || 'ESP32-C5'} · ${data.wifi.ip || '192.168.4.1'}`;
+          renderImage(data.image);
+          if (data.busy) {
+            state.busy = true;
+            updateButtons();
+            setStatus(data.last_message || 'ESP32 đang xử lý…', 'busy');
+          } else {
+            state.busy = false;
+            updateButtons();
+            if (data.last_message) {
+              const failed = data.last_error && data.last_error !== 'ESP_OK';
+              setStatus(data.last_message, failed ? 'error' : '');
+            }
+          }
+        } catch (_) {
+          setOnline(false);
+        }
+      }
+
+      els.input.addEventListener('change', () => selectFile(els.input.files[0]));
+      els.remove.addEventListener('click', clearSelectedFile);
+      els.upload.addEventListener('click', uploadFile);
+      ['dragenter', 'dragover'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.add('drag'); }));
+      ['dragleave', 'drop'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.remove('drag'); }));
+      els.dropzone.addEventListener('drop', event => selectFile(event.dataTransfer.files[0]));
+      document.querySelectorAll('.action').forEach(button => button.addEventListener('click', () => runAction(button.dataset.action)));
+      document.querySelectorAll('.destructive').forEach(button => button.addEventListener('click', () => requestDanger(button.dataset.action)));
+      els.confirmInput.addEventListener('input', () => { els.confirmBtn.disabled = els.confirmInput.value !== 'CONFIRM'; });
+      els.confirmForm.addEventListener('submit', event => {
+        if (event.submitter && event.submitter.value === 'confirm') {
+          event.preventDefault();
+          if (els.confirmInput.value !== 'CONFIRM') return;
+          const action = state.pendingDanger;
+          els.dialog.close();
+          runAction(action, true);
+        }
+      });
+
+      updateButtons();
+      refreshStatus();
+      setInterval(refreshStatus, 3000);
+    })();
+  </script>
+</body>
+</html>

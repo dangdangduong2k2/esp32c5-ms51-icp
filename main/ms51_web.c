@@ -1,0 +1,1046 @@
+#include "ms51_web.h"
+
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "esp_check.h"
+#include "esp_err.h"
+#include "esp_event.h"
+#include "esp_heap_caps.h"
+#include "esp_http_server.h"
+#include "esp_log.h"
+#include "esp_mac.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
+#include "esp_wifi_default.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+#include "lwip/inet.h"
+#include "nvs_flash.h"
+#include "sdkconfig.h"
+
+#include "ms51_operation.h"
+#include "ms51_image.h"
+#include "ms51_programmer.h"
+#include "ms51_storage.h"
+
+static const char *TAG = "ms51_web";
+
+#define HTTP_UPLOAD_BUFFER_SIZE 2048u
+#define HTTP_JSON_BODY_SIZE 256u
+#define JOB_TASK_STACK_SIZE 6144u
+#define JOB_TASK_PRIORITY 5u
+
+extern const char web_index_start[] asm("_binary_index_html_start");
+
+typedef enum {
+    JOB_PROGRAM = 1,
+    JOB_VERIFY,
+    JOB_PROGRAM_FULL,
+    JOB_MASS_ERASE,
+} job_type_t;
+
+typedef struct {
+    job_type_t type;
+    uint32_t generation;
+    uint32_t id;
+} job_request_t;
+
+typedef struct {
+    bool busy;
+    uint32_t job_id;
+    esp_err_t last_error;
+    char operation[24];
+    char message[160];
+} web_state_t;
+
+static httpd_handle_t s_server;
+static SemaphoreHandle_t s_state_mutex;
+static QueueHandle_t s_job_queue;
+static TaskHandle_t s_job_task;
+static esp_netif_t *s_ap_netif;
+static bool s_netif_initialized;
+static bool s_event_loop_created;
+static bool s_wifi_initialized;
+static bool s_wifi_handler_registered;
+static bool s_wifi_started;
+static web_state_t s_state;
+static char s_ap_ip[16] = "192.168.4.1";
+static char s_captive_uri[32] = "http://192.168.4.1";
+
+static const char *job_name(job_type_t type)
+{
+    switch (type) {
+    case JOB_PROGRAM:
+        return "program";
+    case JOB_VERIFY:
+        return "verify";
+    case JOB_PROGRAM_FULL:
+        return "program-full";
+    case JOB_MASS_ERASE:
+        return "erase";
+    default:
+        return "unknown";
+    }
+}
+
+static const char *job_running_message(job_type_t type)
+{
+    switch (type) {
+    case JOB_PROGRAM:
+        return "Đang nạp firmware và giữ nguyên APROM phía sau...";
+    case JOB_VERIFY:
+        return "Đang kiểm tra firmware trong MS51...";
+    case JOB_PROGRAM_FULL:
+        return "Đang nạp toàn bộ APROM...";
+    case JOB_MASS_ERASE:
+        return "Đang xóa và xác minh toàn bộ chip...";
+    default:
+        return "Đang xử lý...";
+    }
+}
+
+static const char *job_success_message(job_type_t type)
+{
+    switch (type) {
+    case JOB_PROGRAM:
+        return "Nạp firmware MS51 thành công.";
+    case JOB_VERIFY:
+        return "Firmware trong MS51 khớp file đã tải lên.";
+    case JOB_PROGRAM_FULL:
+        return "Nạp toàn bộ APROM thành công.";
+    case JOB_MASS_ERASE:
+        return "Đã xóa và xác minh toàn bộ flash MS51.";
+    default:
+        return "Thao tác hoàn tất.";
+    }
+}
+
+static void state_set_message(const char *message, esp_err_t error)
+{
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    strlcpy(s_state.message, message, sizeof(s_state.message));
+    s_state.last_error = error;
+    xSemaphoreGive(s_state_mutex);
+}
+
+static bool state_is_busy(void)
+{
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    const bool busy = s_state.busy;
+    xSemaphoreGive(s_state_mutex);
+    return busy;
+}
+
+static web_state_t state_snapshot(void)
+{
+    web_state_t state;
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    state = s_state;
+    xSemaphoreGive(s_state_mutex);
+    return state;
+}
+
+static bool json_escape(const char *input, char *output, size_t output_size)
+{
+    size_t used = 0;
+    for (size_t index = 0; input[index] != '\0'; ++index) {
+        const unsigned char value = (unsigned char)input[index];
+        const char *escape = NULL;
+        if (value == '"') {
+            escape = "\\\"";
+        } else if (value == '\\') {
+            escape = "\\\\";
+        } else if (value == '\n') {
+            escape = "\\n";
+        } else if (value == '\r') {
+            escape = "\\r";
+        } else if (value == '\t') {
+            escape = "\\t";
+        }
+
+        if (escape != NULL) {
+            const size_t length = strlen(escape);
+            if (used + length + 1 > output_size) {
+                return false;
+            }
+            memcpy(output + used, escape, length);
+            used += length;
+        } else if (value >= 0x20) {
+            if (used + 2 > output_size) {
+                return false;
+            }
+            output[used++] = (char)value;
+        }
+    }
+    output[used] = '\0';
+    return true;
+}
+
+static esp_err_t send_json(httpd_req_t *request, const char *payload,
+                           const char *status)
+{
+    if (status != NULL) {
+        httpd_resp_set_status(request, status);
+    }
+    httpd_resp_set_type(request, "application/json; charset=utf-8");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(request, payload);
+}
+
+static esp_err_t send_error_json(httpd_req_t *request, const char *status,
+                                 const char *message, esp_err_t error)
+{
+    char escaped_message[384];
+    char escaped_error[96];
+    char payload[576];
+    if (!json_escape(message, escaped_message, sizeof(escaped_message)) ||
+        !json_escape(esp_err_to_name(error), escaped_error, sizeof(escaped_error))) {
+        return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "JSON response too large");
+    }
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":false,\"message\":\"%s\",\"error\":\"%s\"}",
+             escaped_message, escaped_error);
+    return send_json(request, payload, status);
+}
+
+static bool content_type_is_json(httpd_req_t *request)
+{
+    char value[64];
+    if (httpd_req_get_hdr_value_str(request, "Content-Type", value,
+                                    sizeof(value)) != ESP_OK) {
+        return false;
+    }
+    return strncmp(value, "application/json", strlen("application/json")) == 0;
+}
+
+static bool content_type_is_firmware(httpd_req_t *request)
+{
+    char value[64];
+    if (httpd_req_get_hdr_value_str(request, "Content-Type", value,
+                                    sizeof(value)) != ESP_OK) {
+        return false;
+    }
+    return strncmp(value, "application/octet-stream", strlen("application/octet-stream")) ==
+               0 ||
+           strncmp(value, "text/plain", strlen("text/plain")) == 0 ||
+           strncmp(value, "text/x-ihex", strlen("text/x-ihex")) == 0 ||
+           strncmp(value, "application/x-ihex", strlen("application/x-ihex")) == 0;
+}
+
+static esp_err_t receive_json(httpd_req_t *request, char *body, size_t body_size)
+{
+    if (!content_type_is_json(request) || request->content_len == 0 ||
+        request->content_len >= body_size) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    size_t received_total = 0;
+    unsigned timeout_count = 0;
+    while (received_total < request->content_len) {
+        const int received = httpd_req_recv(request, body + received_total,
+                                            request->content_len - received_total);
+        if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout_count++ < 3) {
+            continue;
+        }
+        if (received <= 0) {
+            return ESP_ERR_INVALID_RESPONSE;
+        }
+        received_total += (size_t)received;
+    }
+    body[received_total] = '\0';
+
+    const char *start = body;
+    while (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n') {
+        ++start;
+    }
+    const char *end = body + received_total;
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t' ||
+                           end[-1] == '\r' || end[-1] == '\n')) {
+        --end;
+    }
+    if (end - start < 2 || *start != '{' || end[-1] != '}') {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return ESP_OK;
+}
+
+static const char *json_value(const char *json, const char *key)
+{
+    char pattern[48];
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    const char *position = strstr(json, pattern);
+    if (position == NULL) {
+        return NULL;
+    }
+    position += strlen(pattern);
+    while (*position == ' ' || *position == '\t' || *position == '\r' ||
+           *position == '\n') {
+        ++position;
+    }
+    if (*position++ != ':') {
+        return NULL;
+    }
+    while (*position == ' ' || *position == '\t' || *position == '\r' ||
+           *position == '\n') {
+        ++position;
+    }
+    return position;
+}
+
+static uint32_t json_generation(const char *json)
+{
+    const char *value = json_value(json, "generation");
+    if (value == NULL) {
+        return 0;
+    }
+    char *end = NULL;
+    const unsigned long parsed = strtoul(value, &end, 10);
+    if (end == value || parsed == 0 || parsed > UINT32_MAX) {
+        return 0;
+    }
+    return (uint32_t)parsed;
+}
+
+static bool json_confirmed(const char *json)
+{
+    const char *value = json_value(json, "confirm");
+    if (value == NULL || *value++ != '"') {
+        return false;
+    }
+    static const char confirmation[] = "CONFIRM";
+    return strncmp(value, confirmation, sizeof(confirmation) - 1) == 0 &&
+           value[sizeof(confirmation) - 1] == '"';
+}
+
+static esp_err_t root_handler(httpd_req_t *request)
+{
+    httpd_resp_set_type(request, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(request, web_index_start);
+}
+
+static esp_err_t status_handler(httpd_req_t *request)
+{
+    ms51_storage_info_t image;
+    ms51_storage_get_info(&image);
+    const web_state_t state = state_snapshot();
+
+    char message[384];
+    char operation[64];
+    char last_error[96];
+    char ssid[96];
+    char filename[160];
+    char format[32];
+    if (!json_escape(state.message, message, sizeof(message)) ||
+        !json_escape(state.operation, operation, sizeof(operation)) ||
+        !json_escape(esp_err_to_name(state.last_error), last_error,
+                     sizeof(last_error)) ||
+        !json_escape(CONFIG_MS51_WIFI_SSID, ssid, sizeof(ssid)) ||
+        !json_escape(image.filename, filename, sizeof(filename)) ||
+        !json_escape(ms51_image_format_name(image.format), format, sizeof(format))) {
+        return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
+                                   "JSON response too large");
+    }
+
+    // JSON-escaped status text can be substantially larger than its source
+    // buffers.  Keep this response comfortably above the compiler-calculated
+    // maximum as the image metadata adds format and coverage fields.
+    char payload[1280];
+    if (image.valid) {
+        snprintf(payload, sizeof(payload),
+                 "{\"ok\":true,\"busy\":%s,\"job_id\":%" PRIu32
+                 ",\"operation\":\"%s\",\"last_message\":\"%s\""
+                 ",\"last_error\":\"%s\",\"wifi\":{\"ssid\":\"%s\""
+                 ",\"ip\":\"%s\"},\"image\":{\"valid\":true,\"name\":\"%s\""
+                 ",\"size\":%u,\"covered_size\":%u,\"format\":\"%s\""
+                 ",\"crc32\":%" PRIu32 ",\"generation\":%" PRIu32 "}}",
+                 state.busy ? "true" : "false", state.job_id, operation, message,
+                 last_error, ssid, s_ap_ip, filename, (unsigned)image.size,
+                 (unsigned)image.covered_size, format, image.crc32, image.generation);
+    } else {
+        snprintf(payload, sizeof(payload),
+                 "{\"ok\":true,\"busy\":%s,\"job_id\":%" PRIu32
+                 ",\"operation\":\"%s\",\"last_message\":\"%s\""
+                 ",\"last_error\":\"%s\",\"wifi\":{\"ssid\":\"%s\""
+                 ",\"ip\":\"%s\"},\"image\":{\"valid\":false}}",
+                 state.busy ? "true" : "false", state.job_id, operation, message,
+                 last_error, ssid, s_ap_ip);
+    }
+    return send_json(request, payload, NULL);
+}
+
+static esp_err_t info_handler(httpd_req_t *request)
+{
+    char body[HTTP_JSON_BODY_SIZE];
+    if (receive_json(request, body, sizeof(body)) != ESP_OK) {
+        return send_error_json(request, "400 Bad Request",
+                               "Yêu cầu phải là JSON hợp lệ.", ESP_ERR_INVALID_ARG);
+    }
+    if (state_is_busy()) {
+        return send_error_json(request, "409 Conflict",
+                               "ESP32 đang thực hiện một thao tác khác.",
+                               ESP_ERR_INVALID_STATE);
+    }
+
+    ms51_device_info_t info;
+    const esp_err_t error = ms51_programmer_try_get_info(&info);
+    if (error == ESP_ERR_TIMEOUT) {
+        return send_error_json(request, "409 Conflict",
+                               "ESP32 đang thực hiện một thao tác khác.", error);
+    }
+    if (error != ESP_OK) {
+        char message[128];
+        snprintf(message, sizeof(message), "Không đọc được MS51: %s",
+                 esp_err_to_name(error));
+        state_set_message(message, error);
+        return send_error_json(request, "422 Unprocessable Entity", message, error);
+    }
+
+    const uint32_t part_id = ((uint32_t)info.identity.product_id << 16) |
+                             info.identity.device_id;
+    char payload[640];
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":true,\"message\":\"Đã đọc thông tin MS51.\""
+             ",\"pdid\":%" PRIu32 ",\"device_id\":%u,\"product_id\":%u"
+             ",\"company_id\":%u,\"locked\":%s,\"aprom_size\":%u"
+             ",\"ldrom_size\":%u,\"config\":[%u,%u,%u,%u,%u]}",
+             part_id, info.identity.device_id, info.identity.product_id,
+             info.identity.company_id, info.locked ? "true" : "false",
+             (unsigned)info.aprom_size, (unsigned)info.ldrom_size,
+             info.config[0], info.config[1], info.config[2], info.config[3],
+             info.config[4]);
+    state_set_message("Đã đọc thông tin MS51.", ESP_OK);
+    return send_json(request, payload, NULL);
+}
+
+static esp_err_t reset_handler(httpd_req_t *request)
+{
+    char body[HTTP_JSON_BODY_SIZE];
+    if (receive_json(request, body, sizeof(body)) != ESP_OK) {
+        return send_error_json(request, "400 Bad Request",
+                               "Yêu cầu phải là JSON hợp lệ.", ESP_ERR_INVALID_ARG);
+    }
+    if (state_is_busy()) {
+        return send_error_json(request, "409 Conflict",
+                               "ESP32 đang thực hiện một thao tác khác.",
+                               ESP_ERR_INVALID_STATE);
+    }
+
+    const esp_err_t error = ms51_programmer_try_reset();
+    if (error == ESP_ERR_TIMEOUT) {
+        return send_error_json(request, "409 Conflict",
+                               "ESP32 đang thực hiện một thao tác khác.", error);
+    }
+    if (error != ESP_OK) {
+        return send_error_json(request, "422 Unprocessable Entity",
+                               "Không reset được MS51.", error);
+    }
+    state_set_message("Đã reset MS51.", ESP_OK);
+    return send_json(request,
+                     "{\"ok\":true,\"message\":\"Đã reset MS51.\"}", NULL);
+}
+
+static esp_err_t queue_job(job_type_t type, uint32_t requested_generation,
+                           uint32_t *job_id_out)
+{
+    ms51_storage_info_t image;
+    if (type != JOB_MASS_ERASE) {
+        if (ms51_storage_get_info(&image) != ESP_OK || !image.valid ||
+            requested_generation == 0 || requested_generation != image.generation) {
+            return ESP_ERR_INVALID_STATE;
+        }
+    }
+
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    if (s_state.busy) {
+        xSemaphoreGive(s_state_mutex);
+        return ESP_ERR_TIMEOUT;
+    }
+
+    job_request_t job = {
+        .type = type,
+        .generation = requested_generation,
+        .id = s_state.job_id + 1,
+    };
+    s_state.busy = true;
+    s_state.job_id = job.id;
+    s_state.last_error = ESP_OK;
+    strlcpy(s_state.operation, job_name(type), sizeof(s_state.operation));
+    strlcpy(s_state.message, job_running_message(type), sizeof(s_state.message));
+    xSemaphoreGive(s_state_mutex);
+
+    if (xQueueSend(s_job_queue, &job, 0) != pdTRUE) {
+        xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+        s_state.busy = false;
+        s_state.last_error = ESP_ERR_NO_MEM;
+        strlcpy(s_state.message, "Không tạo được tác vụ nạp.",
+                sizeof(s_state.message));
+        xSemaphoreGive(s_state_mutex);
+        return ESP_ERR_NO_MEM;
+    }
+    *job_id_out = job.id;
+    return ESP_OK;
+}
+
+static esp_err_t job_handler(httpd_req_t *request)
+{
+    const job_type_t type = (job_type_t)(intptr_t)request->user_ctx;
+    char body[HTTP_JSON_BODY_SIZE];
+    if (receive_json(request, body, sizeof(body)) != ESP_OK) {
+        return send_error_json(request, "400 Bad Request",
+                               "Yêu cầu phải là JSON hợp lệ.", ESP_ERR_INVALID_ARG);
+    }
+
+    if ((type == JOB_PROGRAM_FULL || type == JOB_MASS_ERASE) &&
+        !json_confirmed(body)) {
+        return send_error_json(request, "400 Bad Request",
+                               "Thiếu xác nhận CONFIRM.", ESP_ERR_INVALID_ARG);
+    }
+    const uint32_t generation = json_generation(body);
+
+    uint32_t job_id = 0;
+    const esp_err_t error = queue_job(type, generation, &job_id);
+    if (error == ESP_ERR_TIMEOUT) {
+        return send_error_json(request, "409 Conflict",
+                               "ESP32 đang thực hiện một thao tác khác.", error);
+    }
+    if (error != ESP_OK) {
+        return send_error_json(request, "409 Conflict",
+                               "Firmware đã thay đổi hoặc chưa được tải lên.", error);
+    }
+
+    char escaped_message[256];
+    char payload[384];
+    json_escape(job_running_message(type), escaped_message, sizeof(escaped_message));
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":true,\"accepted\":true,\"job_id\":%" PRIu32
+             ",\"message\":\"%s\"}",
+             job_id, escaped_message);
+    return send_json(request, payload, "202 Accepted");
+}
+
+static int hex_value(char value)
+{
+    if (value >= '0' && value <= '9') {
+        return value - '0';
+    }
+    if (value >= 'A' && value <= 'F') {
+        return value - 'A' + 10;
+    }
+    if (value >= 'a' && value <= 'f') {
+        return value - 'a' + 10;
+    }
+    return -1;
+}
+
+static void decode_filename(const char *encoded, char *decoded, size_t decoded_size)
+{
+    size_t output = 0;
+    for (size_t input = 0; encoded[input] != '\0' && output + 1 < decoded_size;) {
+        if (encoded[input] == '%' && encoded[input + 1] != '\0' &&
+            encoded[input + 2] != '\0') {
+            const int high = hex_value(encoded[input + 1]);
+            const int low = hex_value(encoded[input + 2]);
+            if (high >= 0 && low >= 0) {
+                decoded[output++] = (char)((high << 4) | low);
+                input += 3;
+                continue;
+            }
+        }
+        const char value = encoded[input++];
+        decoded[output++] = value == '+' ? ' ' : value;
+    }
+    decoded[output] = '\0';
+}
+
+#if 0
+static esp_err_t upload_handler_legacy(httpd_req_t *request)
+{
+    if (!content_type_is_binary(request)) {
+        return send_error_json(request, "415 Unsupported Media Type",
+                               "Upload phải dùng application/octet-stream.",
+                               ESP_ERR_INVALID_ARG);
+    }
+    if (request->content_len == 0 ||
+        request->content_len > MS51_STORAGE_MAX_IMAGE_SIZE) {
+        return send_error_json(request, "413 Content Too Large",
+                               "File BIN phải từ 1 đến 32768 byte.",
+                               ESP_ERR_INVALID_SIZE);
+    }
+    if (state_is_busy()) {
+        return send_error_json(request, "409 Conflict",
+                               "ESP32 đang thực hiện một thao tác khác.",
+                               ESP_ERR_INVALID_STATE);
+    }
+
+    char encoded_name[192] = "ms51_app.bin";
+    const size_t header_length = httpd_req_get_hdr_value_len(request, "X-Filename");
+    if (header_length > 0 && header_length < sizeof(encoded_name)) {
+        httpd_req_get_hdr_value_str(request, "X-Filename", encoded_name,
+                                    sizeof(encoded_name));
+    }
+    char filename[MS51_STORAGE_FILENAME_SIZE];
+    decode_filename(encoded_name, filename, sizeof(filename));
+
+    esp_err_t error = ms51_operation_lock(0);
+    if (error != ESP_OK) {
+        return send_error_json(request, "409 Conflict",
+                               "Bộ nạp đang bận.", error);
+    }
+
+    error = ms51_storage_begin_upload(request->content_len);
+    if (error != ESP_OK) {
+        ms51_operation_unlock();
+        return send_error_json(request, "409 Conflict",
+                               "Không thể bắt đầu lưu firmware.", error);
+    }
+
+    uint8_t buffer[HTTP_UPLOAD_BUFFER_SIZE];
+    size_t received_total = 0;
+    unsigned timeout_count = 0;
+    while (received_total < request->content_len) {
+        size_t wanted = request->content_len - received_total;
+        if (wanted > sizeof(buffer)) {
+            wanted = sizeof(buffer);
+        }
+        const int received = httpd_req_recv(request, (char *)buffer, wanted);
+        if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout_count++ < 3) {
+            continue;
+        }
+        if (received <= 0) {
+            error = ESP_ERR_INVALID_RESPONSE;
+            break;
+        }
+        timeout_count = 0;
+        error = ms51_storage_write_upload(received_total, buffer, (size_t)received);
+        if (error != ESP_OK) {
+            break;
+        }
+        received_total += (size_t)received;
+    }
+
+    ms51_storage_info_t info;
+    if (error == ESP_OK) {
+        error = ms51_storage_finish_upload(filename, &info);
+    }
+    if (error != ESP_OK) {
+        ms51_storage_abort_upload();
+        ms51_operation_unlock();
+        state_set_message("Tải/lưu firmware thất bại; hãy tải lại trạng thái trước khi nạp.", error);
+        return send_error_json(request, "500 Internal Server Error",
+                               "Tải/lưu firmware thất bại; hãy tải lại trạng thái trước khi nạp.",
+                               error);
+    }
+    ms51_operation_unlock();
+
+    char message[160];
+    snprintf(message, sizeof(message), "Đã lưu %s (%u byte, CRC32 %08" PRIX32 ").",
+             info.filename, (unsigned)info.size, info.crc32);
+    state_set_message(message, ESP_OK);
+
+    char escaped_message[384];
+    char escaped_filename[160];
+    char payload[768];
+    json_escape(message, escaped_message, sizeof(escaped_message));
+    json_escape(info.filename, escaped_filename, sizeof(escaped_filename));
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":true,\"message\":\"%s\",\"image\":{\"valid\":true"
+             ",\"name\":\"%s\",\"size\":%u,\"crc32\":%" PRIu32
+             ",\"generation\":%" PRIu32 "}}",
+             escaped_message, escaped_filename, (unsigned)info.size, info.crc32,
+             info.generation);
+    return send_json(request, payload, "201 Created");
+}
+
+#endif
+
+static esp_err_t upload_handler(httpd_req_t *request)
+{
+    if (!content_type_is_firmware(request)) {
+        return send_error_json(request, "415 Unsupported Media Type",
+                               "Upload must contain BIN or Intel HEX firmware.",
+                               ESP_ERR_INVALID_ARG);
+    }
+    if (request->content_len == 0 || request->content_len > MS51_IMAGE_MAX_UPLOAD_SIZE) {
+        return send_error_json(request, "413 Content Too Large",
+                               "BIN is limited to 32 KB; Intel HEX is limited to 96 KB.",
+                               ESP_ERR_INVALID_SIZE);
+    }
+    if (state_is_busy()) {
+        return send_error_json(request, "409 Conflict", "ESP32 is busy with another job.",
+                               ESP_ERR_INVALID_STATE);
+    }
+
+    char encoded_name[192] = "ms51_app.bin";
+    const size_t header_length = httpd_req_get_hdr_value_len(request, "X-Filename");
+    if (header_length > 0 && header_length < sizeof(encoded_name)) {
+        httpd_req_get_hdr_value_str(request, "X-Filename", encoded_name, sizeof(encoded_name));
+    }
+    char filename[MS51_STORAGE_FILENAME_SIZE];
+    decode_filename(encoded_name, filename, sizeof(filename));
+    const bool is_hex = ms51_image_filename_is_intel_hex(filename);
+    if (!is_hex && request->content_len > MS51_IMAGE_MAX_SIZE) {
+        return send_error_json(request, "413 Content Too Large", "BIN is limited to 32768 bytes.",
+                               ESP_ERR_INVALID_SIZE);
+    }
+
+    esp_err_t error = ms51_operation_lock(0);
+    if (error != ESP_OK) {
+        return send_error_json(request, "409 Conflict", "Programmer is busy.", error);
+    }
+
+    uint8_t *source = heap_caps_malloc(request->content_len, MALLOC_CAP_8BIT);
+    if (source == NULL) {
+        ms51_operation_unlock();
+        return send_error_json(request, "503 Service Unavailable",
+                               "ESP32 does not have enough memory for this upload.",
+                               ESP_ERR_NO_MEM);
+    }
+
+    size_t received_total = 0;
+    unsigned timeout_count = 0;
+    while (received_total < request->content_len) {
+        size_t wanted = request->content_len - received_total;
+        if (wanted > HTTP_UPLOAD_BUFFER_SIZE) {
+            wanted = HTTP_UPLOAD_BUFFER_SIZE;
+        }
+        const int received = httpd_req_recv(request, (char *)source + received_total, wanted);
+        if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout_count++ < 3) {
+            continue;
+        }
+        if (received <= 0) {
+            error = ESP_ERR_INVALID_RESPONSE;
+            break;
+        }
+        timeout_count = 0;
+        received_total += (size_t)received;
+    }
+
+    ms51_image_t image;
+    memset(&image, 0, sizeof(image));
+    if (error == ESP_OK) {
+        error = ms51_image_parse_upload(source, received_total, filename, &image);
+    }
+    heap_caps_free(source);
+
+    ms51_storage_info_t info;
+    if (error == ESP_OK) {
+        error = ms51_storage_commit_image(filename, &image, &info);
+    }
+    ms51_image_free(&image);
+    ms51_operation_unlock();
+
+    if (error != ESP_OK) {
+        const char *message = is_hex
+                                  ? "Invalid Intel HEX: check checksum, EOF, and APROM addresses."
+                                  : "Could not store BIN firmware; upload it again.";
+        state_set_message(message, error);
+        return send_error_json(request, error == ESP_ERR_NO_MEM ? "503 Service Unavailable"
+                                                                : "422 Unprocessable Entity",
+                               message, error);
+    }
+
+    char message[160];
+    snprintf(message, sizeof(message), "Stored %s: %u covered byte(s), %s.", info.filename,
+             (unsigned)info.covered_size, ms51_image_format_name(info.format));
+    state_set_message(message, ESP_OK);
+
+    char escaped_message[384];
+    char escaped_filename[160];
+    char payload[768];
+    json_escape(message, escaped_message, sizeof(escaped_message));
+    json_escape(info.filename, escaped_filename, sizeof(escaped_filename));
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":true,\"message\":\"%s\",\"image\":{\"valid\":true"
+             ",\"name\":\"%s\",\"size\":%u,\"covered_size\":%u,\"format\":\"%s\""
+             ",\"crc32\":%" PRIu32 ",\"generation\":%" PRIu32 "}}",
+             escaped_message, escaped_filename, (unsigned)info.size,
+             (unsigned)info.covered_size, ms51_image_format_name(info.format), info.crc32,
+             info.generation);
+    return send_json(request, payload, "201 Created");
+}
+
+static void job_worker(void *argument)
+{
+    (void)argument;
+    job_request_t job;
+    while (xQueueReceive(s_job_queue, &job, portMAX_DELAY) == pdTRUE) {
+        esp_err_t error = ESP_OK;
+        ms51_storage_image_t image;
+        memset(&image, 0, sizeof(image));
+
+        if (job.type != JOB_MASS_ERASE) {
+            error = ms51_storage_acquire_image(job.generation, &image);
+        }
+        if (error == ESP_OK) {
+            const ms51_image_t image_view = {
+                .data = (uint8_t *)image.data,
+                .coverage = (uint8_t *)image.coverage,
+                .size = image.size,
+                .covered_size = image.covered_size,
+                .format = image.format,
+            };
+            switch (job.type) {
+            case JOB_PROGRAM:
+                error = ms51_programmer_program_image(&image_view,
+                                                      CONFIG_MS51_VERIFY_AFTER_PROGRAM);
+                break;
+            case JOB_VERIFY:
+                error = ms51_programmer_verify_image(&image_view);
+                break;
+            case JOB_PROGRAM_FULL:
+                error = ms51_programmer_program_image_full(
+                    &image_view, CONFIG_MS51_VERIFY_AFTER_PROGRAM);
+                break;
+            case JOB_MASS_ERASE:
+                error = ms51_programmer_mass_erase();
+                break;
+            default:
+                error = ESP_ERR_INVALID_ARG;
+                break;
+            }
+        }
+        ms51_storage_release_image(&image);
+
+        char message[160];
+        if (error == ESP_OK) {
+            strlcpy(message, job_success_message(job.type), sizeof(message));
+        } else {
+            snprintf(message, sizeof(message), "%s thất bại: %s.",
+                     job_name(job.type), esp_err_to_name(error));
+        }
+
+        xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+        s_state.busy = false;
+        s_state.last_error = error;
+        strlcpy(s_state.message, message, sizeof(s_state.message));
+        xSemaphoreGive(s_state_mutex);
+        ESP_LOGI(TAG, "job %" PRIu32 " (%s): %s", job.id, job_name(job.type),
+                 message);
+    }
+    vTaskDelete(NULL);
+}
+
+static void wifi_event_handler(void *argument, esp_event_base_t event_base,
+                               int32_t event_id, void *event_data)
+{
+    (void)argument;
+    (void)event_base;
+    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        const wifi_event_ap_staconnected_t *event = event_data;
+        ESP_LOGI(TAG, "Wi-Fi client " MACSTR " connected (AID=%d)",
+                 MAC2STR(event->mac), event->aid);
+    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        const wifi_event_ap_stadisconnected_t *event = event_data;
+        ESP_LOGI(TAG, "Wi-Fi client " MACSTR " disconnected (AID=%d)",
+                 MAC2STR(event->mac), event->aid);
+    }
+}
+
+static esp_err_t start_wifi_ap(void)
+{
+    const size_t ssid_length = strlen(CONFIG_MS51_WIFI_SSID);
+    const size_t password_length = strlen(CONFIG_MS51_WIFI_PASSWORD);
+    if (ssid_length == 0 || ssid_length > 32 ||
+        password_length < 8 || password_length > 63) {
+        ESP_LOGE(TAG, "Wi-Fi SSID/password length is invalid");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t error = nvs_flash_init();
+    if (error == ESP_ERR_NVS_NO_FREE_PAGES || error == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_RETURN_ON_ERROR(nvs_flash_erase(), TAG, "could not recover NVS");
+        error = nvs_flash_init();
+    }
+    ESP_RETURN_ON_ERROR(error, TAG, "NVS initialization failed");
+    ESP_RETURN_ON_ERROR(esp_netif_init(), TAG, "network stack initialization failed");
+    s_netif_initialized = true;
+    ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG,
+                        "event loop initialization failed");
+    s_event_loop_created = true;
+
+    s_ap_netif = esp_netif_create_default_wifi_ap();
+    if (s_ap_netif == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    const wifi_init_config_t init_config = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_RETURN_ON_ERROR(esp_wifi_init(&init_config), TAG, "Wi-Fi init failed");
+    s_wifi_initialized = true;
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                                    wifi_event_handler, NULL),
+                        TAG, "Wi-Fi event handler registration failed");
+    s_wifi_handler_registered = true;
+    ESP_RETURN_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_RAM), TAG,
+                        "Wi-Fi storage setup failed");
+
+    wifi_config_t wifi_config;
+    memset(&wifi_config, 0, sizeof(wifi_config));
+    memcpy(wifi_config.ap.ssid, CONFIG_MS51_WIFI_SSID, ssid_length);
+    memcpy(wifi_config.ap.password, CONFIG_MS51_WIFI_PASSWORD, password_length);
+    wifi_config.ap.ssid_len = ssid_length;
+    wifi_config.ap.channel = CONFIG_MS51_WIFI_CHANNEL;
+    wifi_config.ap.max_connection = 4;
+    wifi_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    wifi_config.ap.pmf_cfg.capable = true;
+    wifi_config.ap.pmf_cfg.required = false;
+
+    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_AP), TAG,
+                        "could not select AP mode");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &wifi_config), TAG,
+                        "could not configure AP");
+    ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "could not start AP");
+    s_wifi_started = true;
+
+    esp_netif_ip_info_t ip_info;
+    ESP_RETURN_ON_ERROR(esp_netif_get_ip_info(s_ap_netif, &ip_info), TAG,
+                        "could not read AP address");
+    inet_ntoa_r(ip_info.ip.addr, s_ap_ip, sizeof(s_ap_ip));
+    snprintf(s_captive_uri, sizeof(s_captive_uri), "http://%s", s_ap_ip);
+
+    /* Advertise the captive-portal URL through DHCP option 114 when supported. */
+    esp_netif_dhcps_stop(s_ap_netif);
+    error = esp_netif_dhcps_option(s_ap_netif, ESP_NETIF_OP_SET,
+                                   ESP_NETIF_CAPTIVEPORTAL_URI, s_captive_uri,
+                                   strlen(s_captive_uri));
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "DHCP captive-portal option unavailable: %s",
+                 esp_err_to_name(error));
+    }
+    ESP_RETURN_ON_ERROR(esp_netif_dhcps_start(s_ap_netif), TAG,
+                        "could not restart DHCP server");
+
+    ESP_LOGI(TAG, "Wi-Fi AP ready: SSID=%s, URL=http://%s",
+             CONFIG_MS51_WIFI_SSID, s_ap_ip);
+    return ESP_OK;
+}
+
+static void stop_wifi_ap(void)
+{
+    if (s_wifi_started) {
+        esp_wifi_stop();
+        s_wifi_started = false;
+    }
+    if (s_wifi_handler_registered) {
+        esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                     wifi_event_handler);
+        s_wifi_handler_registered = false;
+    }
+    if (s_ap_netif != NULL) {
+        esp_netif_destroy_default_wifi(s_ap_netif);
+        s_ap_netif = NULL;
+    }
+    if (s_wifi_initialized) {
+        esp_wifi_deinit();
+        s_wifi_initialized = false;
+    }
+    if (s_event_loop_created) {
+        esp_event_loop_delete_default();
+        s_event_loop_created = false;
+    }
+    if (s_netif_initialized) {
+        esp_netif_deinit();
+        s_netif_initialized = false;
+    }
+}
+
+static void release_web_resources(void)
+{
+    if (s_job_task != NULL) {
+        vTaskDelete(s_job_task);
+        s_job_task = NULL;
+    }
+    if (s_job_queue != NULL) {
+        vQueueDelete(s_job_queue);
+        s_job_queue = NULL;
+    }
+    if (s_state_mutex != NULL) {
+        vSemaphoreDelete(s_state_mutex);
+        s_state_mutex = NULL;
+    }
+    stop_wifi_ap();
+}
+
+static esp_err_t start_http_server(void)
+{
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 8192;
+    config.max_uri_handlers = 12;
+    config.max_open_sockets = 4;
+    config.lru_purge_enable = true;
+    config.recv_wait_timeout = 10;
+    config.send_wait_timeout = 10;
+    config.uri_match_fn = httpd_uri_match_wildcard;
+
+    ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG,
+                        "HTTP server start failed");
+
+    const httpd_uri_t handlers[] = {
+        {.uri = "/api/status", .method = HTTP_GET, .handler = status_handler},
+        {.uri = "/api/upload", .method = HTTP_POST, .handler = upload_handler},
+        {.uri = "/api/info", .method = HTTP_POST, .handler = info_handler},
+        {.uri = "/api/reset", .method = HTTP_POST, .handler = reset_handler},
+        {.uri = "/api/program", .method = HTTP_POST, .handler = job_handler,
+         .user_ctx = (void *)(intptr_t)JOB_PROGRAM},
+        {.uri = "/api/verify", .method = HTTP_POST, .handler = job_handler,
+         .user_ctx = (void *)(intptr_t)JOB_VERIFY},
+        {.uri = "/api/program-full", .method = HTTP_POST, .handler = job_handler,
+         .user_ctx = (void *)(intptr_t)JOB_PROGRAM_FULL},
+        {.uri = "/api/erase", .method = HTTP_POST, .handler = job_handler,
+         .user_ctx = (void *)(intptr_t)JOB_MASS_ERASE},
+        {.uri = "/*", .method = HTTP_GET, .handler = root_handler},
+    };
+
+    for (size_t index = 0; index < sizeof(handlers) / sizeof(handlers[0]); ++index) {
+        const esp_err_t error = httpd_register_uri_handler(s_server, &handlers[index]);
+        if (error != ESP_OK) {
+            httpd_stop(s_server);
+            s_server = NULL;
+            return error;
+        }
+    }
+    return ESP_OK;
+}
+
+esp_err_t ms51_web_start(void)
+{
+    if (s_server != NULL) {
+        return ESP_OK;
+    }
+
+    s_state_mutex = xSemaphoreCreateMutex();
+    s_job_queue = xQueueCreate(1, sizeof(job_request_t));
+    if (s_state_mutex == NULL || s_job_queue == NULL) {
+        release_web_resources();
+        return ESP_ERR_NO_MEM;
+    }
+    memset(&s_state, 0, sizeof(s_state));
+    s_state.last_error = ESP_OK;
+    strlcpy(s_state.message, "Sẵn sàng. Hãy chọn một file BIN.",
+            sizeof(s_state.message));
+
+    esp_err_t error = start_wifi_ap();
+    if (error != ESP_OK) {
+        release_web_resources();
+        return error;
+    }
+    if (xTaskCreate(job_worker, "ms51-web-worker", JOB_TASK_STACK_SIZE, NULL,
+                    JOB_TASK_PRIORITY, &s_job_task) != pdPASS) {
+        release_web_resources();
+        return ESP_ERR_NO_MEM;
+    }
+    error = start_http_server();
+    if (error != ESP_OK) {
+        release_web_resources();
+        return error;
+    }
+    return ESP_OK;
+}
