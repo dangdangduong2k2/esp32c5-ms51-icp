@@ -1,0 +1,17 @@
+Code thêm tính năng mới mạch MiNi:
+
+👉Nhấn giữ 3 nút để bật tắt hdF
+
+👉Cài đặt St theo riêng từng mode SL LEd hoặc SL Lcd 
+
+👉Phần mềm thêm 2 mode
+¹Pin mặc định 
+²Thời gian hỏi lại pin 
+
+Giữ UP 9s vào chức năng mới mặc định PIN tối thiểu 3 số từ 000-999
+PIN
+---
+Sau đó nhấn SET sẽ qua chức năng chọn PIN
+Tăng giảm để chọn đúng PIN mặc định khi nạp code
+Nhấn SET nếu ok sẽ hiện lại --- và tăng giảm tạo mk mới sau đó nhấn SET để qua chức năng chọn Thời gian hỏi lại PIN 
+Nhấn nhả UP và DOWN để chọn Thời gian hỏi lại pin 0-365 ngày xong nhấn SET để kết thúc ( 0 là không hỏi lại PIN ).
