@@ -45,8 +45,12 @@ the operation. Upload a newly built MS51 BIN or HEX after adding the helper.
   `PASSWORD_CONFIG`. All password screens are grouped as `PASSWORD_CONFIG`.
 - `green_min` and `red_min`: the numeric minute values currently displayed on
   the green and red TM1650 displays. A non-time screen is reported as `N/A`.
-- `relay1`, `relay2`, and `relay3`: the active-low relay outputs reported as
-  `ON` or `OFF`.
+- `relay1`, `relay2`, and `relay3`: the logical relay state reported as `ON`
+  or `OFF`. Each value is set by its `RLx_ON()` / `RLx_OFF()` macro, so it
+  represents the command issued by the application rather than an electrical
+  pin readback. Their electrical polarity is set by `RL1_ACTIVE_LEVEL`,
+  `RL2_ACTIVE_LEVEL`, and `RL3_ACTIVE_LEVEL` in `gpio_manager.c` (`1` means
+  active-high; `0` means active-low).
 
 The application reserves P1.6 for UART1 TX, so its former `SIG` input is mapped
 to P0.1. P0.2 / ICE_CLK is now dedicated to ICP: the former `STT_PIN` output

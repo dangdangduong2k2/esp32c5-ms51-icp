@@ -3177,11 +3177,11 @@ void main()
 			DBG_MSG(" | ");
 			DBG_NUM(countdown / 10);
 			DBG_MSG(" | ");
-			DBG_NUM(!PIN_read(RL1_PIN));
+			DBG_NUM(RL1_output_is_on);
 			DBG_MSG(" | ");
-			DBG_NUM(!PIN_read(RL2_PIN));
+			DBG_NUM(RL2_output_is_on);
 			DBG_MSG(" | ");
-			DBG_NUM(!PIN_read(RL3_PIN));
+			DBG_NUM(RL3_output_is_on);
 			DBG_MSG("\r\n");
 		}
 #endif

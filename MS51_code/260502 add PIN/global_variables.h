@@ -55,6 +55,10 @@ uint8_t            RL2_is_on = 0;
 uint8_t            RL2_LED_skip_on = 0;
 uint8_t            RL2_LED_had_on = 0;
 uint8_t            RL3_sig_is_on = 0;
+/* Logical output states for UART telemetry; updated by RLx_ON/RLx_OFF. */
+uint8_t            RL1_output_is_on = 0;
+uint8_t            RL2_output_is_on = 0;
+uint8_t            RL3_output_is_on = 0;
 uint8_t            mode_END_disable = 0;
 uint8_t 					 test;
 uint8_t HCF_temp;

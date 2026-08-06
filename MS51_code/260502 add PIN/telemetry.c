@@ -255,18 +255,15 @@ static void telemetry_build_snapshot(void)
 	uint8_t relay2_on;
 	uint8_t relay3_on;
 	uint8_t saved_ea;
-	uint8_t saved_sfrs;
 
 	telemetry_tx_length = 0;
 	telemetry_buffer_overflow = 0;
 	saved_ea = EA;
 	EA = 0;
-	saved_sfrs = SFRS;
-	SFRS = 0;
-	relay1_on = !PIN_read(RL1_PIN);
-	relay2_on = !PIN_read(RL2_PIN);
-	relay3_on = !PIN_read(RL3_PIN);
-	SFRS = saved_sfrs;
+	/* ON/OFF macros update these logical states, independent of relay polarity. */
+	relay1_on = RL1_output_is_on;
+	relay2_on = RL2_output_is_on;
+	relay3_on = RL3_output_is_on;
 	EA = saved_ea;
 
 	telemetry_append_var_text("mode", telemetry_mode_text());
