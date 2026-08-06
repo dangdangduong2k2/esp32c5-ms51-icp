@@ -1,13 +1,18 @@
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "esp_console.h"
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
 
 #include "ms51_firmware.h"
+#include "ms51_debug_uart.h"
+#include "ms51_operation.h"
 #include "ms51_programmer.h"
 #include "ms51_storage.h"
 #include "ms51_web.h"
@@ -41,9 +46,58 @@ static esp_err_t acquire_selected_image(selected_image_t *selected)
     return error;
 }
 
+/* The normal commands prioritize a web-uploaded image.  This explicit path
+ * is useful for a field-programming build that embeds a known-good project
+ * image while preserving any uploaded image stored in ESP flash. */
+static esp_err_t acquire_embedded_image(selected_image_t *selected)
+{
+    memset(selected, 0, sizeof(*selected));
+    if (g_ms51_firmware_size == 0) {
+        return ESP_ERR_NOT_FOUND;
+    }
+    selected->image.data = (uint8_t *)g_ms51_firmware;
+    selected->image.size = g_ms51_firmware_size;
+    selected->image.covered_size = g_ms51_firmware_size;
+    selected->image.format = MS51_IMAGE_FORMAT_BINARY;
+    return ESP_OK;
+}
+
 static void release_selected_image(selected_image_t *selected)
 {
     ms51_storage_release_image(&selected->stored);
+}
+
+static esp_err_t commit_embedded_image(ms51_storage_info_t *info)
+{
+    if (g_ms51_firmware_size == 0 || g_ms51_firmware_size > MS51_IMAGE_MAX_SIZE) {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    uint8_t *coverage = heap_caps_calloc(1, MS51_IMAGE_COVERAGE_SIZE, MALLOC_CAP_8BIT);
+    if (coverage == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    const size_t complete_bytes = g_ms51_firmware_size / 8u;
+    memset(coverage, 0xFF, complete_bytes);
+    const unsigned remaining_bits = (unsigned)(g_ms51_firmware_size & 7u);
+    if (remaining_bits != 0) {
+        coverage[complete_bytes] = (uint8_t)((1u << remaining_bits) - 1u);
+    }
+
+    const ms51_image_t image = {
+        .data = (uint8_t *)g_ms51_firmware,
+        .coverage = coverage,
+        .size = g_ms51_firmware_size,
+        .covered_size = g_ms51_firmware_size,
+        .format = MS51_IMAGE_FORMAT_BINARY,
+    };
+    esp_err_t error = ms51_operation_lock(portMAX_DELAY);
+    if (error == ESP_OK) {
+        error = ms51_storage_commit_image("ms51_runtime_uart.bin", &image, info);
+        ms51_operation_unlock();
+    }
+    heap_caps_free(coverage);
+    return error;
 }
 
 static void log_result(const char *operation, esp_err_t error)
@@ -91,6 +145,65 @@ static int command_info(int argc, char **argv)
     return error == ESP_OK ? 0 : 1;
 }
 
+static int command_debug(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+
+    ms51_debug_uart_snapshot_t snapshot;
+    const esp_err_t error = ms51_debug_uart_get_snapshot(&snapshot);
+    if (error != ESP_OK) {
+        log_result("runtime UART debug", error);
+        return 1;
+    }
+
+    printf("MS51 runtime UART\n");
+    printf("  State      : %s%s\n", snapshot.enabled ? "enabled" : "disabled",
+           snapshot.paused_for_icp ? " (paused for ICP)" :
+           snapshot.receiver_attached ? " (listening)" : " (detached)");
+    printf("  Baud       : %" PRIu32 "\n", snapshot.baud_rate);
+    printf("  RX / lines : %" PRIu32 " / %" PRIu32 "\n", snapshot.bytes_received,
+           snapshot.lines_received);
+    printf("  Dropped    : %" PRIu32 "\n", snapshot.dropped_lines);
+    for (size_t index = 0; index < snapshot.variable_count; ++index) {
+        printf("  %s = %s\n", snapshot.variables[index].name,
+               snapshot.variables[index].value);
+    }
+    for (size_t index = 0; index < snapshot.log_count; ++index) {
+        printf("  log: %s\n", snapshot.logs[index].text);
+    }
+    fflush(stdout);
+    return 0;
+}
+
+static int command_dump(int argc, char **argv)
+{
+    if (argc != 2) {
+        printf("Usage: dump <APROM address, for example 0x80>\n");
+        return 1;
+    }
+    char *end = NULL;
+    const unsigned long parsed = strtoul(argv[1], &end, 0);
+    if (end == argv[1] || *end != '\0' || parsed > UINT32_MAX) {
+        printf("Invalid APROM address: %s\n", argv[1]);
+        return 1;
+    }
+
+    uint8_t data[16];
+    const esp_err_t error = ms51_programmer_read_aprom((uint32_t)parsed, data, sizeof(data));
+    if (error != ESP_OK) {
+        log_result("APROM dump", error);
+        return 1;
+    }
+    printf("APROM 0x%04lX:", parsed);
+    for (size_t index = 0; index < sizeof(data); ++index) {
+        printf(" %02X", data[index]);
+    }
+    printf("\n");
+    fflush(stdout);
+    return 0;
+}
+
 static int command_image(int argc, char **argv)
 {
     (void)argc;
@@ -128,6 +241,35 @@ static int command_program(int argc, char **argv)
     return error == ESP_OK ? 0 : 1;
 }
 
+static int command_program_embedded(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    selected_image_t image;
+    esp_err_t error = acquire_embedded_image(&image);
+    if (error == ESP_OK) {
+        printf("Programming embedded image: %s (%u bytes)\n", g_ms51_firmware_source,
+               (unsigned)g_ms51_firmware_size);
+        error = ms51_programmer_program_image(&image.image, CONFIG_MS51_VERIFY_AFTER_PROGRAM);
+    }
+    log_result("program embedded", error);
+    return error == ESP_OK ? 0 : 1;
+}
+
+static int command_activate_embedded(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    ms51_storage_info_t info;
+    const esp_err_t error = commit_embedded_image(&info);
+    if (error == ESP_OK) {
+        printf("Web image is now %s (%u bytes, generation %" PRIu32 ")\n", info.filename,
+               (unsigned)info.size, info.generation);
+    }
+    log_result("activate embedded image", error);
+    return error == ESP_OK ? 0 : 1;
+}
+
 static int command_program_full(int argc, char **argv)
 {
     if (argc != 2 || strcmp(argv[1], "CONFIRM") != 0) {
@@ -156,6 +298,21 @@ static int command_verify(int argc, char **argv)
     }
     release_selected_image(&image);
     log_result("verify", error);
+    return error == ESP_OK ? 0 : 1;
+}
+
+static int command_verify_embedded(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    selected_image_t image;
+    esp_err_t error = acquire_embedded_image(&image);
+    if (error == ESP_OK) {
+        printf("Verifying embedded image: %s (%u bytes)\n", g_ms51_firmware_source,
+               (unsigned)g_ms51_firmware_size);
+        error = ms51_programmer_verify_image(&image.image);
+    }
+    log_result("verify embedded", error);
     return error == ESP_OK ? 0 : 1;
 }
 
@@ -190,6 +347,20 @@ static esp_err_t register_commands(void)
             .argtable = NULL,
         },
         {
+            .command = "debug",
+            .help = "Show runtime UART telemetry received from the MS51",
+            .hint = NULL,
+            .func = command_debug,
+            .argtable = NULL,
+        },
+        {
+            .command = "dump",
+            .help = "Read 16 bytes from an APROM address through ICP",
+            .hint = "<address>",
+            .func = command_dump,
+            .argtable = NULL,
+        },
+        {
             .command = "image",
             .help = "Show the MS51 image embedded in this ESP32 build",
             .hint = NULL,
@@ -204,6 +375,20 @@ static esp_err_t register_commands(void)
             .argtable = NULL,
         },
         {
+            .command = "program-embedded",
+            .help = "Program the image embedded in this ESP32 build (ignores web upload)",
+            .hint = NULL,
+            .func = command_program_embedded,
+            .argtable = NULL,
+        },
+        {
+            .command = "activate-embedded",
+            .help = "Make the embedded image the default image used by the web UI",
+            .hint = NULL,
+            .func = command_activate_embedded,
+            .argtable = NULL,
+        },
+        {
             .command = "program-full",
             .help = "Replace all APROM and erase bytes after the image; requires CONFIRM",
             .hint = "<CONFIRM>",
@@ -215,6 +400,13 @@ static esp_err_t register_commands(void)
             .help = "Compare the image-covered APROM bytes",
             .hint = NULL,
             .func = command_verify,
+            .argtable = NULL,
+        },
+        {
+            .command = "verify-embedded",
+            .help = "Verify the image embedded in this ESP32 build",
+            .hint = NULL,
+            .func = command_verify_embedded,
             .argtable = NULL,
         },
         {
@@ -270,11 +462,16 @@ void app_main(void)
 {
     ESP_ERROR_CHECK(ms51_programmer_init());
     ESP_ERROR_CHECK(ms51_storage_init());
+    ESP_ERROR_CHECK(ms51_debug_uart_init());
 
-    ESP_LOGI(TAG, "ESP32-C5 -> MS51FC0AE ICP programmer");
+    ESP_LOGI(TAG, "ESP32-S3 -> MS51FC0AE ICP programmer");
     ESP_LOGI(TAG, "Pins: GPIO%d=nRESET, GPIO%d=ICP_CLK, GPIO%d=ICP_DAT",
              CONFIG_MS51_RST_GPIO, CONFIG_MS51_CLK_GPIO, CONFIG_MS51_DAT_GPIO);
     ESP_LOGW(TAG, "ICP_DAT/ICP_CLK are not an I2C bus; target and ESP32 must use safe 3.3 V levels");
+    ESP_LOGI(TAG,
+             "MS51 runtime UART: GPIO%d TX -> P0.2 RXD1, GPIO%d RX <- P1.6 TXD1; "
+             "both pins are released during ICP",
+             CONFIG_MS51_CLK_GPIO, CONFIG_MS51_DAT_GPIO);
 
 #if CONFIG_MS51_AUTO_PROGRAM
     if (g_ms51_firmware_size > 0) {

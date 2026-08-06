@@ -32,6 +32,7 @@ endif()
 idf_component_register(
     SRCS
         "app_main.c"
+        "ms51_debug_uart.c"
         "ms51_image.c"
         "ms51_icp.c"
         "ms51_operation.c"
@@ -44,11 +45,13 @@ idf_component_register(
     PRIV_REQUIRES
         console
         esp_driver_gpio
+        esp_driver_uart
         esp_event
         esp_http_server
         esp_netif
         esp_partition
         esp_rom
+        esp_timer
         esp_wifi
         freertos
         nvs_flash

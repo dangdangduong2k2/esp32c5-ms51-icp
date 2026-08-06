@@ -15,20 +15,45 @@ menu "MS51FC0AE ICP programmer"
         range 1 13
         default 1
 
+    config MS51_WIFI_TX_POWER_QDBM
+        int "Wi-Fi AP maximum TX power (0.25 dBm units)"
+        range 8 84
+        default 8
+        help
+            The ESP-IDF minimum is 8, which corresponds to 2 dBm. Lower
+            transmit power reduces RF output and power consumption, but also
+            reduces Wi-Fi range.
+
     config MS51_RST_GPIO
-        int "ESP32-C5 GPIO connected to MS51 nRESET"
-        range 0 28
-        default 2
+        int "ESP32-S3 GPIO connected to MS51 nRESET"
+        range 0 48
+        default 4
 
     config MS51_CLK_GPIO
-        int "ESP32-C5 GPIO connected to MS51 ICE_CLK/ICP_CLK"
-        range 0 28
-        default 3
+        int "ESP32-S3 GPIO connected to MS51 ICE_CLK/ICP_CLK"
+        range 0 48
+        default 5
 
     config MS51_DAT_GPIO
-        int "ESP32-C5 GPIO connected to MS51 ICE_DAT/ICP_DAT"
-        range 0 28
-        default 4
+        int "ESP32-S3 GPIO connected to MS51 ICE_DAT/ICP_DAT"
+        range 0 48
+        default 6
+
+    config MS51_DEBUG_UART_ENABLE
+        bool "Enable MS51 runtime UART/debug over shared ICP wires"
+        default y
+        help
+            While MS51 runs normally, P1.6 / ICE_DAT is UART1 TXD to ESP32
+            GPIO6 and P0.2 / ICE_CLK is UART1 RXD from ESP32 GPIO5. This
+            supports telemetry plus runtime EEPROM configuration. Before every
+            ICP session the UART driver is removed and both GPIO5/GPIO6 are
+            reset to floating inputs; ICP then owns CLK and DAT exclusively.
+
+    config MS51_DEBUG_UART_BAUD
+        int "MS51 runtime debug UART baud rate"
+        depends on MS51_DEBUG_UART_ENABLE
+        range 1200 1000000
+        default 115200
 
     config MS51_BIT_DELAY_US
         int "ICP half-bit delay (microseconds)"

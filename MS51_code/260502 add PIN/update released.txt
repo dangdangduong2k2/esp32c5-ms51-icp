@@ -1,0 +1,47 @@
+250211: (Xong)
+- Ở mode led, nếu ST cài < 3s thì sự kiện vẫn tính là 3s. Xong.
+
+250104: (Xong)
+- Độ sáng Led đỏ =1 led xanh =0. Xong
+- Sắp xếp lại thứ tự mode mở rộng ON-dF-End-St-SL. Xong
+
+241228. Xong
+1. Fix lỗi không lưu cài đặt nâng cao
+2. Nhấn SET 2 lần, cài đặt vòng lặp CL, OP, tự động lưu.
+3. Tắt xoay vòng cài đặt giá trị thời gian.
+4. Giới hạn cài đặt: gạt lên (CL: 1-999, OP: 1-999); gạt xuông (CL: 1-200, OP: 1-60).
+5. Thông số mặc định. Gạt lên (CL = 5, OP = 6); gạt xuống (CL = 60, OP = 6).
+6. Cài đặt thông số DF 0.0-30.0 phút (có phút lẻ).
+7. Ẩn bớt menu cài đặt khi gạt xuống.
+8. Thêm cài đặt mode END.
+Xong
+
+250327. Dương: thay đổi của bản cũ(xong)
+1.thêm OP CL riêng cho từng mode (ok)
+2.chạy RL3 theo OP của mode chạy lạnh (ok)
+3.Rl3 on 15 giây trước khi OP mode chạy lạnh kết thúc nếu mode END on (ok)
+
+250329. Dương: thay đổi của bản cũ 
+1.thêm phần nhấn set 1 lần hoặc 2 lần (ok)
+2.thêm thời gian thử (ok)
+3.ẩn hiện mục DF,SL,END (ok)
+4.xa da theo phút hoặc giây (ok)
+
+250404. Dương: thay đổi của bản mới (xong)
+1.HCF OP time (ok)
+2.HCF CL time (ok)
+
+2504019. Dương: thay đổi của bản mới (xong)
+1.run OP2 theo CL sig (ok)
+2.run OP2 theo OP sig (ok)
+3.open 30s end OP sig (ok)
+4.open 15s end Cl sig (ok)
+5.log time double UP (ok)
+6.log DF status, mode LED LCD double DOWN (ok)
+7.giữ down bật tắt nhanh DF (ok)
+8.tùy chỉnh số lần onoff relay 2 relay 1 mode LED (ok)
+*khách chốt chu trình, thay chân sig + thay switch
+
+
+
+

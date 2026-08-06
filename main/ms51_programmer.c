@@ -4,14 +4,26 @@
 #include <string.h>
 
 #include "esp_check.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "sdkconfig.h"
 
 #include "ms51_operation.h"
+#include "ms51_debug_uart.h"
 
 static const char *TAG = "ms51_programmer";
+static bool s_uart_handoff_active;
+
+static esp_err_t reset_runtime_uart_pins(void)
+{
+    esp_err_t error = gpio_reset_pin((gpio_num_t)CONFIG_MS51_CLK_GPIO);
+    if (error != ESP_OK) {
+        return error;
+    }
+    return gpio_reset_pin((gpio_num_t)CONFIG_MS51_DAT_GPIO);
+}
 
 static size_t ldrom_size_from_config(uint8_t config1)
 {
@@ -47,6 +59,46 @@ static void unlock_programmer(void)
     ms51_operation_unlock();
 }
 
+/* The existing hardware multiplexes the two ICP wires as UART1 while MS51
+ * runs: GPIO5/P0.2 is RXD and GPIO6/P1.6 is TXD.  There is never a
+ * simultaneous owner: before ICP both GPIO matrix routes are detached and the
+ * MS51 is held in reset before ESP32 drives CLK or DAT. */
+static esp_err_t open_icp_session(ms51_icp_identity_t *identity)
+{
+    ESP_RETURN_ON_FALSE(!s_uart_handoff_active, ESP_ERR_INVALID_STATE, TAG,
+                        "UART handoff is already active");
+
+    esp_err_t error = ms51_debug_uart_pause_for_icp();
+    if (error != ESP_OK) {
+        return error;
+    }
+    s_uart_handoff_active = true;
+
+    /* The UART module resets both pins to floating inputs.  Do it once more at
+     * the programmer boundary so a future change cannot leave a GPIO matrix
+     * route behind when ICP takes ownership. */
+    error = reset_runtime_uart_pins();
+    if (error == ESP_OK) {
+        error = ms51_icp_open(identity);
+    }
+    if (error == ESP_OK) {
+        return ESP_OK;
+    }
+
+    const esp_err_t reset_error = reset_runtime_uart_pins();
+    if (reset_error != ESP_OK) {
+        ESP_LOGW(TAG, "could not reset runtime UART pins after failed ICP handoff: %s",
+                 esp_err_to_name(reset_error));
+    }
+    const esp_err_t resume_error = ms51_debug_uart_resume_after_icp();
+    if (resume_error != ESP_OK) {
+        ESP_LOGE(TAG, "could not restore UART RX after failed ICP handoff: %s",
+                 esp_err_to_name(resume_error));
+    }
+    s_uart_handoff_active = false;
+    return error;
+}
+
 static esp_err_t read_info_in_session(ms51_device_info_t *info)
 {
     ESP_RETURN_ON_ERROR(ms51_icp_read_flash(MS51_CONFIG_ADDRESS, info->config,
@@ -64,7 +116,7 @@ static esp_err_t read_info_in_session(ms51_device_info_t *info)
 static esp_err_t open_checked_session(ms51_device_info_t *info)
 {
     memset(info, 0, sizeof(*info));
-    ESP_RETURN_ON_ERROR(ms51_icp_open(&info->identity), TAG, "could not enter ICP mode");
+    ESP_RETURN_ON_ERROR(open_icp_session(&info->identity), TAG, "could not enter ICP mode");
 
     /* The three-wire entry is timing-sensitive. Re-enter a couple of times
      * before rejecting the target, and preserve a masked CID as a possible
@@ -101,8 +153,23 @@ static esp_err_t open_checked_session(ms51_device_info_t *info)
     esp_err_t error = read_info_in_session(info);
     if (error != ESP_OK) {
         ms51_icp_close();
+        return error;
     }
-    return error;
+
+    /* The MS51FC0AE responds to READ_FLASH reliably after the initial
+     * configuration read and one standard ICP re-entry pulse.  Keep the
+     * re-entry inside every complete programmer session so UART handoff and
+     * all subsequent APROM reads/writes use the same proven state. */
+    error = ms51_icp_reenter(&info->identity);
+    if (error != ESP_OK) {
+        ms51_icp_close();
+        return error;
+    }
+    if (!has_expected_identity(&info->identity)) {
+        ms51_icp_close();
+        return ESP_ERR_NOT_FOUND;
+    }
+    return ESP_OK;
 }
 
 static void close_session(void)
@@ -110,6 +177,21 @@ static void close_session(void)
     if (ms51_icp_is_open()) {
         ms51_icp_close();
     }
+    if (!s_uart_handoff_active) {
+        return;
+    }
+
+    const esp_err_t reset_error = reset_runtime_uart_pins();
+    if (reset_error != ESP_OK) {
+        ESP_LOGW(TAG, "could not release runtime UART pins from ICP: %s",
+                 esp_err_to_name(reset_error));
+    }
+    const esp_err_t resume_error = ms51_debug_uart_resume_after_icp();
+    if (resume_error != ESP_OK) {
+        ESP_LOGE(TAG, "could not restore UART RX after ICP: %s",
+                 esp_err_to_name(resume_error));
+    }
+    s_uart_handoff_active = false;
 }
 
 static bool page_has_covered_data(const ms51_image_t *image, size_t address)
@@ -161,6 +243,23 @@ static size_t programmed_prefix_length(const uint8_t page[MS51_FLASH_PAGE_SIZE])
     return length;
 }
 
+static void log_page_verify_mismatch(size_t page_address,
+                                     const uint8_t expected[MS51_FLASH_PAGE_SIZE],
+                                     const uint8_t actual[MS51_FLASH_PAGE_SIZE],
+                                     unsigned attempt)
+{
+    for (size_t index = 0; index < MS51_FLASH_PAGE_SIZE; ++index) {
+        if (expected[index] != actual[index]) {
+            ESP_LOGW(TAG,
+                     "Verify mismatch at APROM 0x%04X: expected 0x%02X, got 0x%02X "
+                     "(attempt %u/%u)",
+                     (unsigned)(page_address + index), expected[index], actual[index], attempt + 1,
+                     CONFIG_MS51_PROGRAM_RETRIES + 1);
+            return;
+        }
+    }
+}
+
 static esp_err_t validate_image(const ms51_image_t *image)
 {
     ESP_RETURN_ON_FALSE(image != NULL && image->data != NULL, ESP_ERR_INVALID_ARG, TAG,
@@ -209,6 +308,34 @@ esp_err_t ms51_programmer_try_get_info(ms51_device_info_t *info)
     ESP_RETURN_ON_ERROR(ms51_operation_lock(0), TAG, "programmer is busy");
 
     esp_err_t error = open_checked_session(info);
+    close_session();
+    unlock_programmer();
+    return error;
+}
+
+esp_err_t ms51_programmer_read_aprom(uint32_t address, uint8_t *data, size_t length)
+{
+    ESP_RETURN_ON_FALSE(data != NULL && length > 0, ESP_ERR_INVALID_ARG, TAG,
+                        "read buffer is invalid");
+    ESP_RETURN_ON_ERROR(lock_programmer(), TAG, "lock failed");
+
+    esp_err_t error = ESP_OK;
+    ms51_device_info_t info;
+    error = open_checked_session(&info);
+    if (error != ESP_OK) {
+        goto done;
+    }
+    if (info.locked) {
+        error = ESP_ERR_INVALID_STATE;
+        goto done;
+    }
+    if (address >= info.aprom_size || length > info.aprom_size - address) {
+        error = ESP_ERR_INVALID_SIZE;
+        goto done;
+    }
+    error = ms51_icp_read_flash(address, data, length);
+
+done:
     close_session();
     unlock_programmer();
     return error;
@@ -267,7 +394,7 @@ static esp_err_t program_image(const ms51_image_t *image, bool verify, bool eras
         expected_page(image, address, erase_trailing, actual, wanted);
         if (memcmp(wanted, actual, sizeof(wanted)) == 0) {
             ++skipped_pages;
-            vTaskDelay(pdMS_TO_TICKS(1));
+            vTaskDelay(1);
             continue;
         }
 
@@ -297,8 +424,7 @@ static esp_err_t program_image(const ms51_image_t *image, bool verify, bool eras
                 page_ok = true;
                 break;
             }
-            ESP_LOGW(TAG, "Verify failed at APROM 0x%04X (attempt %u/%u)",
-                     (unsigned)address, attempt + 1, CONFIG_MS51_PROGRAM_RETRIES + 1);
+            log_page_verify_mismatch(address, wanted, actual, attempt);
         }
         if (!page_ok) {
             ESP_LOGE(TAG, "Could not program APROM page at 0x%04X", (unsigned)address);
@@ -311,7 +437,7 @@ static esp_err_t program_image(const ms51_image_t *image, bool verify, bool eras
             ESP_LOGI(TAG, "Progress: %u/%u pages", (unsigned)(page_index + 1),
                      (unsigned)page_count);
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(1);
     }
 
     ESP_LOGI(TAG, "MS51 programming complete: %u page(s) changed, %u already matched",
@@ -379,7 +505,7 @@ esp_err_t ms51_programmer_verify_image(const ms51_image_t *image)
                 goto done;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(1);
     }
     ESP_LOGI(TAG, "Image verification passed (%u covered byte(s))",
              (unsigned)image->covered_size);
@@ -456,7 +582,7 @@ esp_err_t ms51_programmer_mass_erase(void)
                 goto done;
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(1);
     }
     ESP_LOGI(TAG, "Whole-chip erase verified");
 

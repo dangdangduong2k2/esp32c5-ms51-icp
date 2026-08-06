@@ -25,6 +25,8 @@ esp_err_t ms51_programmer_init(void);
 esp_err_t ms51_programmer_get_info(ms51_device_info_t *info);
 /** Non-blocking web variant; returns ESP_ERR_TIMEOUT if the target is busy. */
 esp_err_t ms51_programmer_try_get_info(ms51_device_info_t *info);
+/** Read an unlocked APROM range through an exclusive ICP session. */
+esp_err_t ms51_programmer_read_aprom(uint32_t address, uint8_t *data, size_t length);
 /** Update only APROM bytes explicitly covered by an image. */
 esp_err_t ms51_programmer_program_image(const ms51_image_t *image, bool verify);
 /** Replace all APROM; uncovered bytes become erased (0xFF). */

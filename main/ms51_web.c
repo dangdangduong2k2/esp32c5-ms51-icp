@@ -15,6 +15,7 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "esp_wifi_default.h"
 #include "freertos/FreeRTOS.h"
@@ -26,6 +27,7 @@
 #include "sdkconfig.h"
 
 #include "ms51_operation.h"
+#include "ms51_debug_uart.h"
 #include "ms51_image.h"
 #include "ms51_programmer.h"
 #include "ms51_storage.h"
@@ -33,7 +35,7 @@
 static const char *TAG = "ms51_web";
 
 #define HTTP_UPLOAD_BUFFER_SIZE 2048u
-#define HTTP_JSON_BODY_SIZE 256u
+#define HTTP_JSON_BODY_SIZE 1024u
 #define JOB_TASK_STACK_SIZE 6144u
 #define JOB_TASK_PRIORITY 5u
 
@@ -320,6 +322,31 @@ static bool json_confirmed(const char *json)
            value[sizeof(confirmation) - 1] == '"';
 }
 
+static bool state_begin_runtime_operation(const char *operation, const char *message)
+{
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    if (s_state.busy) {
+        xSemaphoreGive(s_state_mutex);
+        return false;
+    }
+    s_state.busy = true;
+    s_state.last_error = ESP_OK;
+    strlcpy(s_state.operation, operation, sizeof(s_state.operation));
+    strlcpy(s_state.message, message, sizeof(s_state.message));
+    xSemaphoreGive(s_state_mutex);
+    return true;
+}
+
+static void state_finish_runtime_operation(const char *message, esp_err_t error)
+{
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    s_state.busy = false;
+    s_state.last_error = error;
+    s_state.operation[0] = '\0';
+    strlcpy(s_state.message, message, sizeof(s_state.message));
+    xSemaphoreGive(s_state_mutex);
+}
+
 static esp_err_t root_handler(httpd_req_t *request)
 {
     httpd_resp_set_type(request, "text/html; charset=utf-8");
@@ -375,6 +402,89 @@ static esp_err_t status_handler(httpd_req_t *request)
                  last_error, ssid, s_ap_ip);
     }
     return send_json(request, payload, NULL);
+}
+
+static void timestamp_age_json(uint64_t timestamp, char output[16])
+{
+    if (timestamp == 0) {
+        strlcpy(output, "null", 16);
+        return;
+    }
+    const int64_t now = esp_timer_get_time();
+    const uint64_t age_us = now > (int64_t)timestamp ? (uint64_t)now - timestamp : 0;
+    const uint64_t age_ms = age_us / 1000u;
+    snprintf(output, 16, "%" PRIu32,
+             age_ms > UINT32_MAX ? UINT32_MAX : (uint32_t)age_ms);
+}
+
+static esp_err_t debug_handler(httpd_req_t *request)
+{
+    ms51_debug_uart_snapshot_t snapshot;
+    const esp_err_t snapshot_error = ms51_debug_uart_get_snapshot(&snapshot);
+    if (snapshot_error != ESP_OK) {
+        return send_error_json(request, "503 Service Unavailable",
+                               "Runtime debug receiver is unavailable.", snapshot_error);
+    }
+
+    httpd_resp_set_type(request, "application/json; charset=utf-8");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+
+    char last_age[16];
+    timestamp_age_json(snapshot.last_rx_us, last_age);
+    char chunk[256];
+    const int header_length = snprintf(
+        chunk, sizeof(chunk),
+        "{\"ok\":true,\"enabled\":%s,\"receiver_attached\":%s,\"paused_for_icp\":%s"
+        ",\"baud\":%" PRIu32 ",\"bytes\":%" PRIu32 ",\"lines\":%" PRIu32
+        ",\"dropped_lines\":%" PRIu32 ",\"last_rx_age_ms\":%s,\"variables\":[",
+        snapshot.enabled ? "true" : "false", snapshot.receiver_attached ? "true" : "false",
+        snapshot.paused_for_icp ? "true" : "false", snapshot.baud_rate,
+        snapshot.bytes_received, snapshot.lines_received, snapshot.dropped_lines, last_age);
+    if (header_length < 0 || (size_t)header_length >= sizeof(chunk) ||
+        httpd_resp_send_chunk(request, chunk, (size_t)header_length) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    for (size_t index = 0; index < snapshot.variable_count; ++index) {
+        char name[MS51_DEBUG_VARIABLE_NAME_SIZE * 2u + 1u];
+        char value[MS51_DEBUG_VARIABLE_VALUE_SIZE * 2u + 1u];
+        char age[16];
+        if (!json_escape(snapshot.variables[index].name, name, sizeof(name)) ||
+            !json_escape(snapshot.variables[index].value, value, sizeof(value))) {
+            return ESP_FAIL;
+        }
+        timestamp_age_json(snapshot.variables[index].updated_us, age);
+        const int length = snprintf(chunk, sizeof(chunk),
+                                    "%s{\"name\":\"%s\",\"value\":\"%s\",\"age_ms\":%s}",
+                                    index == 0 ? "" : ",", name, value, age);
+        if (length < 0 || (size_t)length >= sizeof(chunk) ||
+            httpd_resp_send_chunk(request, chunk, (size_t)length) != ESP_OK) {
+            return ESP_FAIL;
+        }
+    }
+
+    if (httpd_resp_send_chunk(request, "],\"logs\":[", strlen("],\"logs\":[")) != ESP_OK) {
+        return ESP_FAIL;
+    }
+    for (size_t index = 0; index < snapshot.log_count; ++index) {
+        char text[MS51_DEBUG_LOG_TEXT_SIZE * 2u + 1u];
+        char age[16];
+        if (!json_escape(snapshot.logs[index].text, text, sizeof(text))) {
+            return ESP_FAIL;
+        }
+        timestamp_age_json(snapshot.logs[index].received_us, age);
+        const int length = snprintf(chunk, sizeof(chunk),
+                                    "%s{\"text\":\"%s\",\"age_ms\":%s}",
+                                    index == 0 ? "" : ",", text, age);
+        if (length < 0 || (size_t)length >= sizeof(chunk) ||
+            httpd_resp_send_chunk(request, chunk, (size_t)length) != ESP_OK) {
+            return ESP_FAIL;
+        }
+    }
+    if (httpd_resp_send_chunk(request, "]}", strlen("]}")) != ESP_OK) {
+        return ESP_FAIL;
+    }
+    return httpd_resp_send_chunk(request, NULL, 0);
 }
 
 static esp_err_t info_handler(httpd_req_t *request)
@@ -541,6 +651,157 @@ static int hex_value(char value)
     return -1;
 }
 
+static bool runtime_config_hex_decode(const char *text,
+                                      uint8_t config[MS51_RUNTIME_CONFIG_SIZE])
+{
+    if (text == NULL || *text++ != '"') {
+        return false;
+    }
+    const char *closing_quote = strchr(text, '"');
+    const size_t expected_length = MS51_RUNTIME_CONFIG_SIZE * 2u;
+    if (closing_quote == NULL || (size_t)(closing_quote - text) != expected_length) {
+        return false;
+    }
+    for (size_t index = 0; index < MS51_RUNTIME_CONFIG_SIZE; ++index) {
+        const int high = hex_value(text[index * 2u]);
+        const int low = hex_value(text[index * 2u + 1u]);
+        if (high < 0 || low < 0) {
+            return false;
+        }
+        config[index] = (uint8_t)((high << 4) | low);
+    }
+    return true;
+}
+
+static bool runtime_config_hex_encode(const uint8_t config[MS51_RUNTIME_CONFIG_SIZE],
+                                      char *output, size_t output_size)
+{
+    static const char digits[] = "0123456789ABCDEF";
+    const size_t length = MS51_RUNTIME_CONFIG_SIZE * 2u;
+    if (output == NULL || output_size <= length) {
+        return false;
+    }
+    for (size_t index = 0; index < MS51_RUNTIME_CONFIG_SIZE; ++index) {
+        output[index * 2u] = digits[config[index] >> 4];
+        output[index * 2u + 1u] = digits[config[index] & 0x0Fu];
+    }
+    output[length] = '\0';
+    return true;
+}
+
+static const char *runtime_config_status_message(uint8_t status)
+{
+    switch (status) {
+    case MS51_RUNTIME_CONFIG_STATUS_OK:
+        return "MS51 đã xác nhận cấu hình.";
+    case MS51_RUNTIME_CONFIG_STATUS_BAD_FRAME:
+        return "MS51 từ chối gói UART do CRC hoặc khung không hợp lệ.";
+    case MS51_RUNTIME_CONFIG_STATUS_BAD_CONFIG:
+        return "MS51 từ chối cấu hình vì có giá trị ngoài giới hạn.";
+    default:
+        return "MS51 trả về trạng thái cấu hình không xác định.";
+    }
+}
+
+static esp_err_t runtime_config_get_handler(httpd_req_t *request)
+{
+    if (state_is_busy()) {
+        return send_error_json(request, "409 Conflict", "ESP32 đang bận với thao tác khác.",
+                               ESP_ERR_INVALID_STATE);
+    }
+
+    esp_err_t error = ms51_operation_lock(0);
+    if (error != ESP_OK || !state_begin_runtime_operation("runtime-read",
+                                                            "Đang đọc cấu hình MS51 qua UART...")) {
+        if (error == ESP_OK) {
+            ms51_operation_unlock();
+        }
+        return send_error_json(request, "409 Conflict", "ESP32 đang bận với thao tác khác.",
+                               error == ESP_OK ? ESP_ERR_TIMEOUT : error);
+    }
+
+    uint8_t config[MS51_RUNTIME_CONFIG_SIZE];
+    uint8_t target_status = 0xFFu;
+    error = ms51_debug_uart_get_runtime_config(config, &target_status);
+    const char *message = error == ESP_OK ? runtime_config_status_message(target_status)
+                                          : "Không nhận được phản hồi cấu hình từ MS51.";
+    const esp_err_t result_error = error != ESP_OK ? error :
+                                   (target_status == MS51_RUNTIME_CONFIG_STATUS_OK ? ESP_OK :
+                                                                                       ESP_ERR_INVALID_RESPONSE);
+    state_finish_runtime_operation(message, result_error);
+    ms51_operation_unlock();
+
+    if (error != ESP_OK) {
+        return send_error_json(request, "422 Unprocessable Entity", message, error);
+    }
+    if (target_status != MS51_RUNTIME_CONFIG_STATUS_OK) {
+        return send_error_json(request, "422 Unprocessable Entity", message,
+                               ESP_ERR_INVALID_RESPONSE);
+    }
+
+    char encoded[MS51_RUNTIME_CONFIG_SIZE * 2u + 1u];
+    char payload[640];
+    if (!runtime_config_hex_encode(config, encoded, sizeof(encoded))) {
+        return send_error_json(request, "500 Internal Server Error",
+                               "Không thể mã hóa cấu hình MS51.", ESP_FAIL);
+    }
+    snprintf(payload, sizeof(payload),
+             "{\"ok\":true,\"message\":\"Đã đọc cấu hình MS51 qua UART.\",\"data\":\"%s\"}",
+             encoded);
+    return send_json(request, payload, NULL);
+}
+
+static esp_err_t runtime_config_set_handler(httpd_req_t *request)
+{
+    char body[HTTP_JSON_BODY_SIZE];
+    if (receive_json(request, body, sizeof(body)) != ESP_OK) {
+        return send_error_json(request, "400 Bad Request", "Yêu cầu phải là JSON hợp lệ.",
+                               ESP_ERR_INVALID_ARG);
+    }
+
+    uint8_t config[MS51_RUNTIME_CONFIG_SIZE];
+    if (!runtime_config_hex_decode(json_value(body, "data"), config)) {
+        return send_error_json(request, "400 Bad Request",
+                               "Dữ liệu cấu hình phải có đúng 217 byte dạng HEX.",
+                               ESP_ERR_INVALID_ARG);
+    }
+    if (state_is_busy()) {
+        return send_error_json(request, "409 Conflict", "ESP32 đang bận với thao tác khác.",
+                               ESP_ERR_INVALID_STATE);
+    }
+
+    esp_err_t error = ms51_operation_lock(0);
+    if (error != ESP_OK || !state_begin_runtime_operation("runtime-write",
+                                                            "Đang lưu cấu hình MS51 qua UART...")) {
+        if (error == ESP_OK) {
+            ms51_operation_unlock();
+        }
+        return send_error_json(request, "409 Conflict", "ESP32 đang bận với thao tác khác.",
+                               error == ESP_OK ? ESP_ERR_TIMEOUT : error);
+    }
+
+    uint8_t target_status = 0xFFu;
+    error = ms51_debug_uart_set_runtime_config(config, &target_status);
+    const char *message = error == ESP_OK ? runtime_config_status_message(target_status)
+                                          : "Không nhận được ACK lưu cấu hình từ MS51.";
+    const esp_err_t result_error = error != ESP_OK ? error :
+                                   (target_status == MS51_RUNTIME_CONFIG_STATUS_OK ? ESP_OK :
+                                                                                       ESP_ERR_INVALID_RESPONSE);
+    state_finish_runtime_operation(message, result_error);
+    ms51_operation_unlock();
+
+    if (error != ESP_OK) {
+        return send_error_json(request, "422 Unprocessable Entity", message, error);
+    }
+    if (target_status != MS51_RUNTIME_CONFIG_STATUS_OK) {
+        return send_error_json(request, "422 Unprocessable Entity", message,
+                               ESP_ERR_INVALID_RESPONSE);
+    }
+    return send_json(request,
+                     "{\"ok\":true,\"message\":\"Đã lưu EEPROM và MS51 đang khởi động lại để áp dụng cấu hình.\"}",
+                     NULL);
+}
+
 static void decode_filename(const char *encoded, char *decoded, size_t decoded_size)
 {
     size_t output = 0;
@@ -612,10 +873,16 @@ static esp_err_t upload_handler_legacy(httpd_req_t *request)
             wanted = sizeof(buffer);
         }
         const int received = httpd_req_recv(request, (char *)buffer, wanted);
-        if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout_count++ < 3) {
-            continue;
+        if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (++timeout_count <= 3) {
+                continue;
+            }
+            error = ESP_ERR_TIMEOUT;
+            break;
         }
         if (received <= 0) {
+            ESP_LOGW(TAG, "firmware upload connection ended after %u/%u byte(s)",
+                     (unsigned)received_total, (unsigned)request->content_len);
             error = ESP_ERR_INVALID_RESPONSE;
             break;
         }
@@ -713,10 +980,16 @@ static esp_err_t upload_handler(httpd_req_t *request)
             wanted = HTTP_UPLOAD_BUFFER_SIZE;
         }
         const int received = httpd_req_recv(request, (char *)source + received_total, wanted);
-        if (received == HTTPD_SOCK_ERR_TIMEOUT && timeout_count++ < 3) {
-            continue;
+        if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+            if (++timeout_count <= 3) {
+                continue;
+            }
+            error = ESP_ERR_TIMEOUT;
+            break;
         }
         if (received <= 0) {
+            ESP_LOGW(TAG, "firmware upload connection ended after %u/%u byte(s)",
+                     (unsigned)received_total, (unsigned)request->content_len);
             error = ESP_ERR_INVALID_RESPONSE;
             break;
         }
@@ -739,9 +1012,13 @@ static esp_err_t upload_handler(httpd_req_t *request)
     ms51_operation_unlock();
 
     if (error != ESP_OK) {
-        const char *message = is_hex
-                                  ? "Invalid Intel HEX: check checksum, EOF, and APROM addresses."
-                                  : "Could not store BIN firmware; upload it again.";
+        const char *message = NULL;
+        if (error == ESP_ERR_INVALID_RESPONSE || error == ESP_ERR_TIMEOUT) {
+            message = "Firmware upload was interrupted. Reconnect to the ESP32 Wi-Fi and upload again.";
+        } else {
+            message = is_hex ? "Invalid Intel HEX: check checksum, EOF, and APROM addresses."
+                             : "Could not store BIN firmware; upload it again.";
+        }
         state_set_message(message, error);
         return send_error_json(request, error == ESP_ERR_NO_MEM ? "503 Service Unavailable"
                                                                 : "422 Unprocessable Entity",
@@ -898,6 +1175,8 @@ static esp_err_t start_wifi_ap(void)
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &wifi_config), TAG,
                         "could not configure AP");
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "could not start AP");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_max_tx_power(CONFIG_MS51_WIFI_TX_POWER_QDBM), TAG,
+                        "could not limit AP transmit power");
     s_wifi_started = true;
 
     esp_netif_ip_info_t ip_info;
@@ -918,8 +1197,8 @@ static esp_err_t start_wifi_ap(void)
     ESP_RETURN_ON_ERROR(esp_netif_dhcps_start(s_ap_netif), TAG,
                         "could not restart DHCP server");
 
-    ESP_LOGI(TAG, "Wi-Fi AP ready: SSID=%s, URL=http://%s",
-             CONFIG_MS51_WIFI_SSID, s_ap_ip);
+    ESP_LOGI(TAG, "Wi-Fi AP ready: SSID=%s, URL=http://%s, TX=%d qdBm",
+             CONFIG_MS51_WIFI_SSID, s_ap_ip, CONFIG_MS51_WIFI_TX_POWER_QDBM);
     return ESP_OK;
 }
 
@@ -976,7 +1255,7 @@ static esp_err_t start_http_server(void)
     config.max_uri_handlers = 12;
     config.max_open_sockets = 4;
     config.lru_purge_enable = true;
-    config.recv_wait_timeout = 10;
+    config.recv_wait_timeout = 20;
     config.send_wait_timeout = 10;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
@@ -985,6 +1264,11 @@ static esp_err_t start_http_server(void)
 
     const httpd_uri_t handlers[] = {
         {.uri = "/api/status", .method = HTTP_GET, .handler = status_handler},
+        {.uri = "/api/debug", .method = HTTP_GET, .handler = debug_handler},
+        {.uri = "/api/runtime-config", .method = HTTP_GET,
+         .handler = runtime_config_get_handler},
+        {.uri = "/api/runtime-config", .method = HTTP_POST,
+         .handler = runtime_config_set_handler},
         {.uri = "/api/upload", .method = HTTP_POST, .handler = upload_handler},
         {.uri = "/api/info", .method = HTTP_POST, .handler = info_handler},
         {.uri = "/api/reset", .method = HTTP_POST, .handler = reset_handler},

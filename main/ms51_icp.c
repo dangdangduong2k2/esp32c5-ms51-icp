@@ -1,5 +1,5 @@
 /*
- * MS51 1T-8051 ICP transport for ESP32-C5.
+ * MS51 1T-8051 ICP transport for ESP32-S3.
  *
  * The wire protocol in this file is not I2C. It is based on the MIT-licensed
  * NuMicro-8051-prog implementation by Steve Markgraf and Nikita Lita, which

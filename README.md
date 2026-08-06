@@ -1,13 +1,13 @@
-# ESP32-C5 programmer for MS51FC0AE
+# ESP32-S3 programmer for MS51FC0AE
 
-Project ESP-IDF này dùng ESP32-C5 để nhận dạng, xóa, ghi và kiểm tra APROM của
+Project ESP-IDF này dùng ESP32-S3 để nhận dạng, xóa, ghi và kiểm tra APROM của
 MS51FC0AE qua ba chân nạp ICP:
 
-| ESP32-C5 | MS51FC0AE TSSOP20 | Chức năng |
+| ESP32-S3 | MS51FC0AE TSSOP20 | Chức năng |
 |---|---|---|
-| GPIO2 | pin 4, `P2.0/nRESET` | reset/đi vào ICP |
-| GPIO3 | pin 18, `P0.2/ICE_CLK` | clock ICP |
-| GPIO4 | pin 8, `P1.6/ICE_DAT` | data ICP hai chiều |
+| GPIO4 | pin 4, `P2.0/nRESET` | reset/đi vào ICP |
+| GPIO5 | pin 18, `P0.2/ICE_CLK` | clock ICP |
+| GPIO6 | pin 8, `P1.6/ICE_DAT` | data ICP hai chiều |
 | GND | pin 7, `VSS` | mass chung |
 
 ## Điều phải lưu ý trước khi đấu dây
@@ -16,20 +16,19 @@ MS51FC0AE qua ba chân nạp ICP:
 của Nuvoton, chỉ có hình thức clock/data hai dây giống I²C. Vì vậy project dùng
 GPIO bit-bang và không dùng peripheral I²C của ESP32.
 
-- Nên cấp MS51 bằng **3,3 V** khi nối trực tiếp. GPIO ESP32-C5 không chịu được
+- Nên cấp MS51 bằng **3,3 V** khi nối trực tiếp. GPIO ESP32-S3 không chịu được
   tín hiệu 5 V. Nếu MS51 chạy 5 V, phải dùng mạch chuyển mức phù hợp cho DAT hai
   chiều và cho cả CLK/RST; không nối thẳng.
 - Nối GND của hai mạch với nhau.
 - Theo datasheet Nuvoton, có thể dùng pull-up 100 kΩ tại ICE_DAT/ICE_CLK và điện
   trở nối tiếp 100 Ω để lọc nhiễu. nRESET nên có pull-up ngoài; tải hoặc tụ quá
   lớn trên ba đường ICP có thể làm chuỗi vào chế độ nạp thất bại.
-- GPIO2 và GPIO3 là strapping pins của ESP32-C5; GPIO2/3/4 cũng là pad JTAG.
-  Mạch ngoài không được ép sai mức lúc ESP32 reset. USB Serial/JTAG vẫn dùng
-  GPIO13/14 và được chọn làm console mặc định.
+- GPIO4/GPIO5/GPIO6 là GPIO thông dụng của ESP32-S3. Kiểm tra board S3 không
+  dùng ba chân này cho thiết bị khác; không được ép sai mức lúc ESP32 reset.
 
 ## Dùng trang web để nạp MS51
 
-Sau khi ESP32-C5 khởi động, kết nối điện thoại hoặc máy tính vào:
+Sau khi ESP32-S3 khởi động, kết nối điện thoại hoặc máy tính vào:
 
 - Wi-Fi: `MS51-PROGRAMMER`
 - Mật khẩu: `12345678`
@@ -66,9 +65,9 @@ giá trị `0xFF`. Không đưa file Intel HEX dạng text trực tiếp vào đ
 đang dành 4/3/2/1 KB cho LDROM thì kích thước APROM khả dụng tương ứng là
 28/29/30/31 KB; project đọc CONFIG thực tế và từ chối image quá lớn.
 
-## Build và nạp ESP32-C5
+## Build và nạp ESP32-S3
 
-Project cần ESP-IDF 6.0 hoặc mới hơn có target `esp32c5`:
+Project cần ESP-IDF 6.0 hoặc mới hơn có target `esp32s3`:
 
 ```powershell
 $env:IDF_TOOLS_PATH='C:\Espressif'
@@ -124,7 +123,7 @@ sản xuất được Nuvoton hỗ trợ chính thức, dùng Nu-Link; hoặc pr
 ISP-I²C vào LDROM một lần rồi dùng giao thức ISP công khai.
 
 Với phương án ISP-I²C chính thức, bootloader MS51 phải bật `I2CPX=1` để remap
-I²C sang chính `P0.2=SCL` và `P1.6=SDA`; ESP vẫn có thể giữ sơ đồ IO3/IO4 ở
+I²C sang chính `P0.2=SCL` và `P1.6=SDA`; ESP vẫn có thể giữ sơ đồ GPIO5/GPIO6 ở
 trên và giao tiếp địa chỉ 7-bit `0x60`. Tuy nhiên chip xuất xưởng mặc định không
 có bootloader/LDROM hoạt động, nên vẫn cần Nu-Link nạp và cấu hình lần đầu.
 
@@ -133,4 +132,4 @@ Nguồn tham khảo:
 - [MS51 32K Technical Reference Manual](https://www.nuvoton.com/resource-files/TRM_MS51_32KBFlash_Series_EN_Rev1.00.pdf)
 - [MS51FC0AE product page](https://www.nuvoton.com/products/microcontrollers/8bit-8051-mcus/industrial-8051-series/ms51fc0ae/)
 - [NuMicro-8051-prog](https://github.com/nikitalita/NuMicro-8051-prog)
-- [ESP32-C5 datasheet](https://documentation.espressif.com/esp32-c5_datasheet_en.html)
+- [ESP32-S3 datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf)
