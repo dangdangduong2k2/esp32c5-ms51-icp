@@ -1,4 +1,7 @@
 /build/
+/.tools/
+/managed_components/
+/.tools/
 /sdkconfig
 /sdkconfig.old
 /firmware/ms51_debug_app/build/

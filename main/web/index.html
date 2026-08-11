@@ -364,6 +364,62 @@
       overflow-wrap: anywhere;
     }
 
+    .uplink-card { margin-top: 16px; }
+    .uplink-copy { margin: -5px 0 14px; color: var(--muted); font-size: 12px; }
+    .uplink-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 13px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(8,21,36,.52);
+    }
+    .uplink-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #64748b; }
+    .uplink-status strong { display: block; color: #dce9f8; font-size: 13px; }
+    .uplink-status span:last-child { display: block; margin-top: 1px; font-size: 11px; }
+    .uplink-status[data-state="connecting"] .uplink-dot { background: var(--warning); box-shadow: 0 0 0 4px rgba(251,191,36,.12); }
+    .uplink-status[data-state="connected"] .uplink-dot { background: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.12); }
+    .uplink-status[data-state="failed"] .uplink-dot { background: var(--danger); box-shadow: 0 0 0 4px rgba(251,113,133,.12); }
+    .uplink-status[data-state="connected"] strong { color: #b8f7dc; }
+    .uplink-status[data-state="failed"] strong { color: #fecdd3; }
+    .uplink-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .uplink-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+    .uplink-picker .btn { min-height: 39px; padding: 8px 11px; white-space: nowrap; }
+    .uplink-actions { justify-content: flex-start; }
+    .lan-access {
+      margin: 0 0 13px;
+      padding: 12px;
+      border: 1px solid rgba(52,211,153,.35);
+      border-radius: 12px;
+      color: #cce8dd;
+      background: rgba(6,78,59,.17);
+    }
+    .lan-access[hidden] { display: none; }
+    .lan-access strong { display: block; color: #b8f7dc; font-size: 13px; }
+    .lan-access > span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .lan-addresses { display: grid; gap: 7px; margin-top: 10px; }
+    .lan-address {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 11px;
+    }
+    .lan-address > span { color: var(--muted); }
+    .lan-address a, .lan-address code {
+      min-width: 0;
+      overflow: hidden;
+      color: #dce9f8;
+      font: 12px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+    .lan-address a { color: #8be7bf; }
+    .copy-address { min-height: 29px; padding: 5px 8px; font-size: 11px; }
+
     .config-card { margin-top: 16px; }
     .config-copy { margin: -5px 0 15px; color: var(--muted); font-size: 12px; }
     .config-copy code { color: #c7d7ec; }
@@ -677,6 +733,50 @@
       </details>
     </section>
 
+    <section class="card uplink-card" id="uplinkCard" aria-labelledby="uplinkTitle">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Internet</div>
+          <h2 id="uplinkTitle">Kết nối Wi-Fi có Internet</h2>
+        </div>
+      </div>
+      <p class="uplink-copy">Thiết bị sẽ vào Wi-Fi bên dưới. Khi đã có IP, điện thoại cũng chuyển sang chính Wi-Fi đó để điều khiển như bình thường.</p>
+      <div class="uplink-status" id="uplinkStatus" data-state="not_configured" role="status" aria-live="polite">
+        <span class="uplink-dot" aria-hidden="true"></span>
+        <div><strong id="uplinkState">Chưa thiết lập Wi-Fi Internet</strong><span id="uplinkDetails">Nhập tên và mật khẩu Wi-Fi 2.4 GHz.</span></div>
+      </div>
+      <div class="lan-access" id="lanAccess" hidden>
+        <strong>Địa chỉ điều khiển sau khi điện thoại đổi sang Wi-Fi này</strong>
+        <span>Sao chép một địa chỉ bên dưới, chuyển điện thoại sang cùng Wi-Fi, rồi mở địa chỉ đó.</span>
+        <div class="lan-addresses">
+          <div class="lan-address">
+            <span>Tên dễ nhớ</span>
+            <a id="lanHostname" href="http://ms51.local" target="_blank" rel="noopener">http://ms51.local</a>
+            <button class="btn copy-address" id="copyLanHostname" type="button">Sao chép</button>
+          </div>
+          <div class="lan-address">
+            <span>IP của thiết bị</span>
+            <code id="lanIp">Đang chờ IP…</code>
+            <button class="btn copy-address" id="copyLanIp" type="button">Sao chép</button>
+          </div>
+        </div>
+      </div>
+      <form id="uplinkForm" autocomplete="off">
+        <div class="field-grid uplink-fields">
+          <div class="uplink-picker">
+            <label class="field">Chọn Wi-Fi có Internet<select id="uplinkSsid" required><option value="">Bấm “Quét Wi-Fi” để tìm mạng</option></select></label>
+            <button class="btn" id="uplinkScan" type="button">Quét Wi-Fi</button>
+          </div>
+          <label class="field">Mật khẩu Wi-Fi<input id="uplinkPassword" type="password" maxlength="63" autocapitalize="none" autocomplete="new-password" spellcheck="false" placeholder="Để trống nếu Wi-Fi không có mật khẩu"></label>
+        </div>
+        <div class="config-actions uplink-actions">
+          <button class="btn primary" id="uplinkConnect" type="submit">Lưu và kết nối Internet</button>
+          <button class="btn danger" id="uplinkForget" type="button">Quên Wi-Fi này</button>
+        </div>
+      </form>
+      <p class="field-note">Chỉ hỗ trợ Wi-Fi 2.4 GHz. Nếu muốn đổi mạng đang dùng, bấm “Quên Wi-Fi này” rồi quét lại. Nếu tên <code>ms51.local</code> không mở được, dùng IP đang hiện ở trên. Wi-Fi <code>MS51-PROGRAMMER</code> và <code>192.168.4.1</code> vẫn là đường dự phòng.</p>
+    </section>
+
     <section class="card config-card" id="runtimeConfigCard" aria-labelledby="runtimeConfigTitle">
       <div class="card-head">
         <div>
@@ -831,7 +931,13 @@
         remove: $('#removeFile'), upload: $('#uploadBtn'), progress: $('#progress'),
         progressText: $('#progressText'), progressPct: $('#progressPct'), progressBar: $('#progressBar'),
         statusBox: $('#statusBox'), statusText: $('#statusText'), toast: $('#toast'),
-        wifiInfo: $('#wifiInfo'), dialog: $('#confirmDialog'), confirmForm: $('#confirmForm'),
+        wifiInfo: $('#wifiInfo'), uplinkForm: $('#uplinkForm'), uplinkSsid: $('#uplinkSsid'),
+        uplinkPassword: $('#uplinkPassword'), uplinkConnect: $('#uplinkConnect'),
+        uplinkScan: $('#uplinkScan'), uplinkForget: $('#uplinkForget'), uplinkStatus: $('#uplinkStatus'),
+        uplinkState: $('#uplinkState'), uplinkDetails: $('#uplinkDetails'),
+        lanAccess: $('#lanAccess'), lanHostname: $('#lanHostname'), lanIp: $('#lanIp'),
+        copyLanHostname: $('#copyLanHostname'), copyLanIp: $('#copyLanIp'),
+        dialog: $('#confirmDialog'), confirmForm: $('#confirmForm'),
         confirmTitle: $('#confirmTitle'), confirmMessage: $('#confirmMessage'),
         confirmInput: $('#confirmInput'), confirmBtn: $('#confirmBtn'),
         debugState: $('#debugState'), debugVars: $('#debugVars'), debugLog: $('#debugLog'),
@@ -844,7 +950,7 @@
         runtimeConfigSave: $('#runtimeConfigSave'), cfgPinEnable: $('#cfgPinEnable')
       };
 
-      const state = { file: null, crc32: null, selectedUploaded: false, uploadedGeneration: 0, serverImage: null, imageReady: false, busy: false, localBusy: false, pendingDanger: null };
+      const state = { file: null, crc32: null, selectedUploaded: false, uploadedGeneration: 0, serverImage: null, imageReady: false, busy: false, localBusy: false, uplinkBusy: false, uplinkScanBusy: false, uplinkKnownSsid: '', pendingDanger: null };
       let toastTimer;
 
       const crcTable = (() => {
@@ -906,6 +1012,11 @@
           els.runtimeConfigRead.disabled = controlsLocked;
           els.runtimeConfigSave.disabled = controlsLocked;
           syncPinControls();
+        }
+        if (els.uplinkForm) {
+          els.uplinkForm.querySelectorAll('input, select, button').forEach((control) => {
+            control.disabled = controlsLocked || state.uplinkBusy || state.uplinkScanBusy;
+          });
         }
       }
 
@@ -1507,12 +1618,205 @@
         }
       }
 
+      function findUplinkOption(ssid) {
+        return Array.from(els.uplinkSsid.options).find((option) => option.value === ssid) || null;
+      }
+
+      function ensureUplinkOption(ssid, label = ssid) {
+        if (!ssid) return null;
+        let option = findUplinkOption(ssid);
+        if (!option) {
+          option = document.createElement('option');
+          option.value = ssid;
+          option.textContent = label;
+          els.uplinkSsid.append(option);
+        }
+        return option;
+      }
+
+      function renderScanResults(networks) {
+        const previous = els.uplinkSsid.value || state.uplinkKnownSsid;
+        const fragment = document.createDocumentFragment();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = networks.length ? 'Chọn Wi-Fi có Internet' : 'Không tìm thấy Wi-Fi gần đây';
+        fragment.append(placeholder);
+        for (const network of networks) {
+          if (!network || !network.ssid) continue;
+          const option = document.createElement('option');
+          option.value = String(network.ssid);
+          const rssi = Number(network.rssi);
+          const signal = Number.isFinite(rssi) ? `${rssi} dBm` : 'Sóng không rõ';
+          option.textContent = `${network.ssid} · ${signal} · ${network.auth || 'Bảo mật'}`;
+          fragment.append(option);
+        }
+        els.uplinkSsid.replaceChildren(fragment);
+        if (previous && findUplinkOption(previous)) els.uplinkSsid.value = previous;
+      }
+
+      function renderUplink(uplink) {
+        const info = uplink || {};
+        const stateName = String(info.state || (info.configured ? 'connecting' : 'not_configured'));
+        const ssid = String(info.ssid || '');
+        const lanIp = String(info.ip || '');
+        const hostname = String(info.hostname || 'ms51.local');
+        const hostnameUrl = `http://${hostname}`;
+        const lanIpUrl = lanIp ? `http://${lanIp}` : '';
+        const hasInternet = Boolean(info.nat_enabled && info.dns_ready);
+        let title = 'Chưa thiết lập Wi-Fi Internet';
+        let details = 'Nhập tên và mật khẩu Wi-Fi 2.4 GHz.';
+
+        if (stateName === 'connecting') {
+          title = 'Đang kết nối Wi-Fi Internet';
+          details = ssid ? `Đang tìm ${ssid}…` : 'Đang chuẩn bị kết nối…';
+        } else if (stateName === 'connected') {
+          title = hasInternet ? 'Đã có Internet' : 'Đã kết nối Wi-Fi, đang chuẩn bị Internet';
+          const parts = [];
+          if (ssid) parts.push(ssid);
+          if (info.ip) parts.push(`IP ${info.ip}`);
+          if (Number.isFinite(Number(info.rssi)) && Number(info.rssi) !== 0) parts.push(`${info.rssi} dBm`);
+          details = parts.join(' · ') || 'Đang nhận thông tin mạng…';
+        } else if (stateName === 'failed') {
+          title = 'Không thể kết nối Wi-Fi Internet';
+          details = ssid ? `Kiểm tra lại ${ssid}, mật khẩu và sóng Wi-Fi.` : 'Kiểm tra tên Wi-Fi và mật khẩu.';
+        }
+
+        els.uplinkStatus.dataset.state = stateName;
+        els.uplinkState.textContent = title;
+        els.uplinkDetails.textContent = details;
+
+        const canUseLan = stateName === 'connected' && Boolean(lanIpUrl);
+        els.lanAccess.hidden = !canUseLan;
+        if (canUseLan) {
+          els.lanHostname.href = hostnameUrl;
+          els.lanHostname.textContent = hostnameUrl;
+          els.lanIp.textContent = lanIpUrl;
+          els.copyLanHostname.dataset.address = hostnameUrl;
+          els.copyLanIp.dataset.address = lanIpUrl;
+        }
+
+        if (ssid && document.activeElement !== els.uplinkSsid) {
+          ensureUplinkOption(ssid, `${ssid} · Wi-Fi đang lưu`);
+          if (!els.uplinkSsid.value) els.uplinkSsid.value = ssid;
+        } else if (!info.configured && state.uplinkKnownSsid &&
+                   els.uplinkSsid.value === state.uplinkKnownSsid &&
+                   document.activeElement !== els.uplinkSsid) {
+          els.uplinkSsid.value = '';
+        }
+        state.uplinkKnownSsid = ssid;
+      }
+
+      function copyAddress(value) {
+        if (!value) return;
+        const copied = () => toast(`Đã sao chép ${value}`);
+        const fallback = () => {
+          const input = document.createElement('textarea');
+          input.value = value;
+          input.setAttribute('readonly', '');
+          input.style.position = 'fixed';
+          input.style.opacity = '0';
+          document.body.append(input);
+          input.select();
+          try {
+            if (document.execCommand('copy')) copied();
+            else toast('Không thể sao chép tự động. Hãy ghi lại địa chỉ trên màn hình.', true);
+          } catch (_) {
+            toast('Không thể sao chép tự động. Hãy ghi lại địa chỉ trên màn hình.', true);
+          }
+          input.remove();
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(value).then(copied, fallback);
+        } else {
+          fallback();
+        }
+      }
+
+      async function scanUplinkNetworks() {
+        if (state.uplinkScanBusy || state.uplinkBusy || state.busy || state.localBusy) return;
+        state.uplinkScanBusy = true;
+        els.uplinkScan.textContent = 'Đang quét…';
+        updateButtons();
+        try {
+          const data = await api('/api/uplink/scan');
+          const networks = Array.isArray(data.networks) ? data.networks : [];
+          renderScanResults(networks);
+          toast(networks.length ? `Đã tìm thấy ${networks.length} Wi-Fi.` : 'Không tìm thấy Wi-Fi gần đây.', !networks.length);
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          state.uplinkScanBusy = false;
+          els.uplinkScan.textContent = 'Quét Wi-Fi';
+          updateButtons();
+        }
+      }
+
+      async function saveUplink(event) {
+        event.preventDefault();
+        if (state.uplinkBusy || state.busy || state.localBusy) return;
+        const ssid = els.uplinkSsid.value;
+        const password = els.uplinkPassword.value;
+        if (!ssid || ssid.length > 32) return toast('Tên Wi-Fi phải có từ 1 đến 32 ký tự.', true);
+        if (password && (password.length < 8 || password.length > 63)) {
+          return toast('Mật khẩu Wi-Fi để trống hoặc dài từ 8 đến 63 ký tự.', true);
+        }
+
+        state.uplinkBusy = true;
+        updateButtons();
+        try {
+          const data = await api('/api/uplink', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'connect', ssid, password })
+          });
+          els.uplinkPassword.value = '';
+          toast(data.message || 'Đang kết nối Wi-Fi Internet.');
+          els.uplinkStatus.dataset.state = 'connecting';
+          els.uplinkState.textContent = 'Đang kết nối Wi-Fi Internet';
+          els.uplinkDetails.textContent = `Đang tìm ${ssid}…`;
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          state.uplinkBusy = false;
+          updateButtons();
+          setTimeout(refreshStatus, 250);
+        }
+      }
+
+      async function forgetUplink() {
+        if (state.uplinkBusy || state.busy || state.localBusy) return;
+        state.uplinkBusy = true;
+        updateButtons();
+        try {
+          const data = await api('/api/uplink', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'forget' })
+          });
+          els.uplinkPassword.value = '';
+          els.uplinkSsid.value = '';
+          toast(data.message || 'Đã quên Wi-Fi Internet.');
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          state.uplinkBusy = false;
+          updateButtons();
+          setTimeout(refreshStatus, 250);
+        }
+      }
+
       async function refreshStatus() {
         if (state.localBusy) return;
         try {
           const data = await api('/api/status');
           setOnline(true);
-          if (data.wifi) els.wifiInfo.textContent = data.wifi.ip ? `Kết nối Wi-Fi sẵn sàng · ${data.wifi.ip}` : 'Kết nối Wi-Fi sẵn sàng';
+          if (data.wifi) {
+            const uplink = data.wifi.uplink;
+            const sharing = uplink && uplink.state === 'connected' &&
+              uplink.nat_enabled && uplink.dns_ready;
+            els.wifiInfo.textContent = sharing && uplink.ip
+              ? `Wi-Fi ngoài · ${uplink.ip} · Wi-Fi dự phòng ${data.wifi.ip}`
+              : (data.wifi.ip ? `Wi-Fi dự phòng · ${data.wifi.ip}` : 'Kết nối Wi-Fi sẵn sàng');
+            renderUplink(uplink);
+          }
           renderImage(data.image);
           if (data.busy) {
             state.busy = true;
@@ -1537,6 +1841,11 @@
       els.runtimeConfigRead.addEventListener('click', loadRuntimeConfig);
       els.runtimeConfigSave.addEventListener('click', saveRuntimeConfig);
       els.cfgPinEnable.addEventListener('change', syncPinControls);
+      els.uplinkScan.addEventListener('click', scanUplinkNetworks);
+      els.uplinkForm.addEventListener('submit', saveUplink);
+      els.uplinkForget.addEventListener('click', forgetUplink);
+      els.copyLanHostname.addEventListener('click', () => copyAddress(els.copyLanHostname.dataset.address));
+      els.copyLanIp.addEventListener('click', () => copyAddress(els.copyLanIp.dataset.address));
       ['dragenter', 'dragover'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.add('drag'); }));
       ['dragleave', 'drop'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.remove('drag'); }));
       els.dropzone.addEventListener('drop', event => selectFile(event.dataTransfer.files[0]));

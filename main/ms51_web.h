@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 
-/** Start the password-protected SoftAP and the firmware web interface. */
+/** Start the password-protected SoftAP, Internet sharing, and firmware web interface. */
 esp_err_t ms51_web_start(void);
 
 #ifdef __cplusplus

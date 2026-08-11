@@ -23,6 +23,8 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "lwip/inet.h"
+#include "mdns.h"
+#include "nvs.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
@@ -38,6 +40,19 @@ static const char *TAG = "ms51_web";
 #define HTTP_JSON_BODY_SIZE 1024u
 #define JOB_TASK_STACK_SIZE 6144u
 #define JOB_TASK_PRIORITY 5u
+#define UPLINK_SSID_MAX_LENGTH 32u
+#define UPLINK_PASSWORD_MAX_LENGTH 63u
+#define UPLINK_MAX_RETRIES 5u
+#define WIFI_SCAN_MAX_NETWORKS 20u
+#define WIFI_SCAN_START_RETRIES 10u
+#define WIFI_SCAN_RETRY_DELAY_MS 150u
+#define DHCPS_OFFER_DNS 0x02u
+#define UPLINK_NVS_NAMESPACE "uplink"
+#define UPLINK_NVS_SSID_KEY "ssid"
+#define UPLINK_NVS_PASSWORD_KEY "password"
+#define MDNS_HOSTNAME "ms51"
+#define MDNS_HOSTNAME_FQDN MDNS_HOSTNAME ".local"
+#define MDNS_INSTANCE_NAME "MS51 Controller"
 
 extern const char web_index_start[] asm("_binary_index_html_start");
 
@@ -62,19 +77,44 @@ typedef struct {
     char message[160];
 } web_state_t;
 
+typedef enum {
+    UPLINK_NOT_CONFIGURED = 0,
+    UPLINK_CONNECTING,
+    UPLINK_CONNECTED,
+    UPLINK_FAILED,
+} uplink_connection_state_t;
+
+typedef struct {
+    bool configured;
+    bool nat_enabled;
+    bool dns_ready;
+    uint8_t retries;
+    uint8_t last_reason;
+    int8_t rssi;
+    uplink_connection_state_t connection_state;
+    char ssid[UPLINK_SSID_MAX_LENGTH + 1u];
+    char ip[16];
+    char gateway[16];
+} uplink_state_t;
+
 static httpd_handle_t s_server;
 static SemaphoreHandle_t s_state_mutex;
+static SemaphoreHandle_t s_uplink_mutex;
+static SemaphoreHandle_t s_wifi_operation_mutex;
 static QueueHandle_t s_job_queue;
 static TaskHandle_t s_job_task;
 static esp_netif_t *s_ap_netif;
+static esp_netif_t *s_sta_netif;
 static bool s_netif_initialized;
 static bool s_event_loop_created;
 static bool s_wifi_initialized;
 static bool s_wifi_handler_registered;
+static bool s_ip_handler_registered;
 static bool s_wifi_started;
+static bool s_mdns_started;
 static web_state_t s_state;
+static uplink_state_t s_uplink;
 static char s_ap_ip[16] = "192.168.4.1";
-static char s_captive_uri[32] = "http://192.168.4.1";
 
 static const char *job_name(job_type_t type)
 {
@@ -147,6 +187,166 @@ static web_state_t state_snapshot(void)
     state = s_state;
     xSemaphoreGive(s_state_mutex);
     return state;
+}
+
+static const char *uplink_connection_state_name(uplink_connection_state_t state)
+{
+    switch (state) {
+    case UPLINK_CONNECTING:
+        return "connecting";
+    case UPLINK_CONNECTED:
+        return "connected";
+    case UPLINK_FAILED:
+        return "failed";
+    case UPLINK_NOT_CONFIGURED:
+    default:
+        return "not_configured";
+    }
+}
+
+static uplink_state_t uplink_snapshot(void)
+{
+    uplink_state_t uplink;
+    memset(&uplink, 0, sizeof(uplink));
+    if (s_uplink_mutex == NULL) {
+        return uplink;
+    }
+    xSemaphoreTake(s_uplink_mutex, portMAX_DELAY);
+    uplink = s_uplink;
+    xSemaphoreGive(s_uplink_mutex);
+    return uplink;
+}
+
+static void uplink_set_not_configured(void)
+{
+    if (s_uplink_mutex == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_uplink_mutex, portMAX_DELAY);
+    memset(&s_uplink, 0, sizeof(s_uplink));
+    s_uplink.connection_state = UPLINK_NOT_CONFIGURED;
+    xSemaphoreGive(s_uplink_mutex);
+}
+
+static void uplink_set_connecting(const char *ssid)
+{
+    if (s_uplink_mutex == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_uplink_mutex, portMAX_DELAY);
+    s_uplink.configured = true;
+    s_uplink.nat_enabled = false;
+    s_uplink.dns_ready = false;
+    s_uplink.retries = 0;
+    s_uplink.last_reason = 0;
+    s_uplink.rssi = 0;
+    s_uplink.connection_state = UPLINK_CONNECTING;
+    strlcpy(s_uplink.ssid, ssid, sizeof(s_uplink.ssid));
+    s_uplink.ip[0] = '\0';
+    s_uplink.gateway[0] = '\0';
+    xSemaphoreGive(s_uplink_mutex);
+}
+
+static bool uplink_retry_after_disconnect(uint8_t reason)
+{
+    bool retry = false;
+    if (s_uplink_mutex == NULL) {
+        return false;
+    }
+    xSemaphoreTake(s_uplink_mutex, portMAX_DELAY);
+    s_uplink.nat_enabled = false;
+    s_uplink.dns_ready = false;
+    s_uplink.ip[0] = '\0';
+    s_uplink.gateway[0] = '\0';
+    s_uplink.rssi = 0;
+    s_uplink.last_reason = reason;
+    if (s_uplink.configured && s_uplink.retries < UPLINK_MAX_RETRIES) {
+        ++s_uplink.retries;
+        s_uplink.connection_state = UPLINK_CONNECTING;
+        retry = true;
+    } else if (s_uplink.configured) {
+        s_uplink.connection_state = UPLINK_FAILED;
+    } else {
+        s_uplink.connection_state = UPLINK_NOT_CONFIGURED;
+    }
+    xSemaphoreGive(s_uplink_mutex);
+    return retry;
+}
+
+static void uplink_set_failed(uint8_t reason)
+{
+    if (s_uplink_mutex == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_uplink_mutex, portMAX_DELAY);
+    s_uplink.nat_enabled = false;
+    s_uplink.dns_ready = false;
+    s_uplink.last_reason = reason;
+    s_uplink.connection_state = s_uplink.configured ? UPLINK_FAILED :
+                                                     UPLINK_NOT_CONFIGURED;
+    xSemaphoreGive(s_uplink_mutex);
+}
+
+static void uplink_set_connected(const esp_netif_ip_info_t *ip_info, int8_t rssi,
+                                 bool dns_ready, bool nat_enabled)
+{
+    if (s_uplink_mutex == NULL) {
+        return;
+    }
+    xSemaphoreTake(s_uplink_mutex, portMAX_DELAY);
+    s_uplink.connection_state = UPLINK_CONNECTED;
+    s_uplink.retries = 0;
+    s_uplink.last_reason = 0;
+    s_uplink.rssi = rssi;
+    s_uplink.dns_ready = dns_ready;
+    s_uplink.nat_enabled = nat_enabled;
+    inet_ntoa_r(ip_info->ip.addr, s_uplink.ip, sizeof(s_uplink.ip));
+    inet_ntoa_r(ip_info->gw.addr, s_uplink.gateway, sizeof(s_uplink.gateway));
+    xSemaphoreGive(s_uplink_mutex);
+}
+
+/* The built-in AP remains a recovery path, but mDNS gives users a stable URL
+ * after both the phone and ESP have moved to the same external Wi-Fi. */
+static esp_err_t start_mdns(void)
+{
+    if (s_mdns_started) {
+        return ESP_OK;
+    }
+
+    esp_err_t error = mdns_init();
+    if (error != ESP_OK) {
+        return error;
+    }
+    error = mdns_hostname_set(MDNS_HOSTNAME);
+    if (error != ESP_OK) {
+        mdns_free();
+        return error;
+    }
+    error = mdns_instance_name_set(MDNS_INSTANCE_NAME);
+    if (error != ESP_OK) {
+        mdns_free();
+        return error;
+    }
+
+    mdns_txt_item_t service_txt[] = {
+        {"path", "/"},
+    };
+    error = mdns_service_add(MDNS_INSTANCE_NAME, "_http", "_tcp", 80,
+                             service_txt, sizeof(service_txt) / sizeof(service_txt[0]));
+    if (error != ESP_OK) {
+        mdns_free();
+        return error;
+    }
+    s_mdns_started = true;
+    return ESP_OK;
+}
+
+static void stop_mdns(void)
+{
+    if (s_mdns_started) {
+        mdns_free();
+        s_mdns_started = false;
+    }
 }
 
 static bool json_escape(const char *input, char *output, size_t output_size)
@@ -297,6 +497,64 @@ static const char *json_value(const char *json, const char *key)
     return position;
 }
 
+/* Copy one JSON string without accepting a pointer into the request body.  The
+ * regular endpoint parser only needs numbers and fixed text, but Wi-Fi names
+ * and passwords can legitimately contain spaces, quotes and backslashes. */
+static bool json_string_copy(const char *json, const char *key, char *output,
+                             size_t output_size)
+{
+    const char *input = json_value(json, key);
+    if (input == NULL || output_size == 0 || *input++ != '"') {
+        return false;
+    }
+
+    size_t used = 0;
+    while (*input != '\0') {
+        unsigned char value = (unsigned char)*input++;
+        if (value == '"') {
+            output[used] = '\0';
+            return true;
+        }
+        if (value < 0x20u) {
+            return false;
+        }
+        if (value == '\\') {
+            const char escaped = *input++;
+            switch (escaped) {
+            case '"':
+            case '\\':
+            case '/':
+                value = (unsigned char)escaped;
+                break;
+            case 'b':
+                value = '\b';
+                break;
+            case 'f':
+                value = '\f';
+                break;
+            case 'n':
+                value = '\n';
+                break;
+            case 'r':
+                value = '\r';
+                break;
+            case 't':
+                value = '\t';
+                break;
+            default:
+                /* Browsers normally send UTF-8 directly.  Reject unsupported
+                 * unicode escapes rather than storing a different password. */
+                return false;
+            }
+        }
+        if (used + 1u >= output_size) {
+            return false;
+        }
+        output[used++] = (char)value;
+    }
+    return false;
+}
+
 static uint32_t json_generation(const char *json)
 {
     const char *value = json_value(json, "generation");
@@ -359,11 +617,15 @@ static esp_err_t status_handler(httpd_req_t *request)
     ms51_storage_info_t image;
     ms51_storage_get_info(&image);
     const web_state_t state = state_snapshot();
+    const uplink_state_t uplink = uplink_snapshot();
 
     char message[384];
     char operation[64];
     char last_error[96];
     char ssid[96];
+    char uplink_ssid[96];
+    char uplink_ip[32];
+    char uplink_gateway[32];
     char filename[160];
     char format[32];
     if (!json_escape(state.message, message, sizeof(message)) ||
@@ -371,6 +633,9 @@ static esp_err_t status_handler(httpd_req_t *request)
         !json_escape(esp_err_to_name(state.last_error), last_error,
                      sizeof(last_error)) ||
         !json_escape(CONFIG_MS51_WIFI_SSID, ssid, sizeof(ssid)) ||
+        !json_escape(uplink.ssid, uplink_ssid, sizeof(uplink_ssid)) ||
+        !json_escape(uplink.ip, uplink_ip, sizeof(uplink_ip)) ||
+        !json_escape(uplink.gateway, uplink_gateway, sizeof(uplink_gateway)) ||
         !json_escape(image.filename, filename, sizeof(filename)) ||
         !json_escape(ms51_image_format_name(image.format), format, sizeof(format))) {
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR,
@@ -380,26 +645,44 @@ static esp_err_t status_handler(httpd_req_t *request)
     // JSON-escaped status text can be substantially larger than its source
     // buffers.  Keep this response comfortably above the compiler-calculated
     // maximum as the image metadata adds format and coverage fields.
-    char payload[1280];
+    char payload[2048];
     if (image.valid) {
         snprintf(payload, sizeof(payload),
                  "{\"ok\":true,\"busy\":%s,\"job_id\":%" PRIu32
                  ",\"operation\":\"%s\",\"last_message\":\"%s\""
                  ",\"last_error\":\"%s\",\"wifi\":{\"ssid\":\"%s\""
-                 ",\"ip\":\"%s\"},\"image\":{\"valid\":true,\"name\":\"%s\""
+                 ",\"ip\":\"%s\",\"uplink\":{\"configured\":%s,\"state\":\"%s\""
+                 ",\"ssid\":\"%s\",\"ip\":\"%s\",\"gateway\":\"%s\""
+                 ",\"rssi\":%d,\"dns_ready\":%s,\"nat_enabled\":%s"
+                 ",\"hostname\":\"%s\",\"mdns_ready\":%s}}"
+                 ",\"image\":{\"valid\":true,\"name\":\"%s\""
                  ",\"size\":%u,\"covered_size\":%u,\"format\":\"%s\""
                  ",\"crc32\":%" PRIu32 ",\"generation\":%" PRIu32 "}}",
                  state.busy ? "true" : "false", state.job_id, operation, message,
-                 last_error, ssid, s_ap_ip, filename, (unsigned)image.size,
+                 last_error, ssid, s_ap_ip, uplink.configured ? "true" : "false",
+                 uplink_connection_state_name(uplink.connection_state), uplink_ssid,
+                 uplink_ip, uplink_gateway, (int)uplink.rssi,
+                 uplink.dns_ready ? "true" : "false",
+                 uplink.nat_enabled ? "true" : "false", MDNS_HOSTNAME_FQDN,
+                 s_mdns_started ? "true" : "false", filename, (unsigned)image.size,
                  (unsigned)image.covered_size, format, image.crc32, image.generation);
     } else {
         snprintf(payload, sizeof(payload),
                  "{\"ok\":true,\"busy\":%s,\"job_id\":%" PRIu32
                  ",\"operation\":\"%s\",\"last_message\":\"%s\""
                  ",\"last_error\":\"%s\",\"wifi\":{\"ssid\":\"%s\""
-                 ",\"ip\":\"%s\"},\"image\":{\"valid\":false}}",
+                 ",\"ip\":\"%s\",\"uplink\":{\"configured\":%s,\"state\":\"%s\""
+                 ",\"ssid\":\"%s\",\"ip\":\"%s\",\"gateway\":\"%s\""
+                 ",\"rssi\":%d,\"dns_ready\":%s,\"nat_enabled\":%s"
+                 ",\"hostname\":\"%s\",\"mdns_ready\":%s}}"
+                 ",\"image\":{\"valid\":false}}",
                  state.busy ? "true" : "false", state.job_id, operation, message,
-                 last_error, ssid, s_ap_ip);
+                 last_error, ssid, s_ap_ip, uplink.configured ? "true" : "false",
+                 uplink_connection_state_name(uplink.connection_state), uplink_ssid,
+                 uplink_ip, uplink_gateway, (int)uplink.rssi,
+                 uplink.dns_ready ? "true" : "false",
+                 uplink.nat_enabled ? "true" : "false", MDNS_HOSTNAME_FQDN,
+                 s_mdns_started ? "true" : "false");
     }
     return send_json(request, payload, NULL);
 }
@@ -1045,6 +1328,451 @@ static esp_err_t upload_handler(httpd_req_t *request)
     return send_json(request, payload, "201 Created");
 }
 
+static bool uplink_credentials_are_valid(const char *ssid, const char *password)
+{
+    const size_t ssid_length = strlen(ssid);
+    const size_t password_length = strlen(password);
+    return ssid_length > 0 && ssid_length <= UPLINK_SSID_MAX_LENGTH &&
+           password_length <= UPLINK_PASSWORD_MAX_LENGTH &&
+           (password_length == 0 || password_length >= 8);
+}
+
+static void uplink_make_station_config(const char *ssid, const char *password,
+                                       wifi_config_t *config)
+{
+    memset(config, 0, sizeof(*config));
+    memcpy(config->sta.ssid, ssid, strlen(ssid));
+    strlcpy((char *)config->sta.password, password, sizeof(config->sta.password));
+    config->sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    config->sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    config->sta.failure_retry_cnt = 0;
+    config->sta.threshold.authmode = WIFI_AUTH_OPEN;
+    config->sta.pmf_cfg.capable = true;
+    config->sta.pmf_cfg.required = false;
+}
+
+static esp_err_t uplink_save_credentials(const char *ssid, const char *password)
+{
+    nvs_handle_t handle;
+    esp_err_t error = nvs_open(UPLINK_NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (error != ESP_OK) {
+        return error;
+    }
+    error = nvs_set_str(handle, UPLINK_NVS_SSID_KEY, ssid);
+    if (error == ESP_OK) {
+        error = nvs_set_str(handle, UPLINK_NVS_PASSWORD_KEY, password);
+    }
+    if (error == ESP_OK) {
+        error = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return error;
+}
+
+static esp_err_t uplink_clear_credentials(void)
+{
+    nvs_handle_t handle;
+    esp_err_t error = nvs_open(UPLINK_NVS_NAMESPACE, NVS_READWRITE, &handle);
+    if (error == ESP_ERR_NVS_NOT_FOUND) {
+        return ESP_OK;
+    }
+    if (error != ESP_OK) {
+        return error;
+    }
+
+    error = nvs_erase_key(handle, UPLINK_NVS_SSID_KEY);
+    if (error == ESP_ERR_NVS_NOT_FOUND) {
+        error = ESP_OK;
+    }
+    if (error == ESP_OK) {
+        error = nvs_erase_key(handle, UPLINK_NVS_PASSWORD_KEY);
+        if (error == ESP_ERR_NVS_NOT_FOUND) {
+            error = ESP_OK;
+        }
+    }
+    if (error == ESP_OK) {
+        error = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    return error;
+}
+
+/* A malformed remembered network must not prevent the local programming AP
+ * from starting.  It is intentionally ignored and can be replaced in the UI. */
+static void uplink_load_credentials(wifi_config_t *station_config)
+{
+    memset(station_config, 0, sizeof(*station_config));
+    nvs_handle_t handle;
+    esp_err_t error = nvs_open(UPLINK_NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (error == ESP_ERR_NVS_NOT_FOUND) {
+        uplink_set_not_configured();
+        return;
+    }
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not open saved Internet Wi-Fi: %s", esp_err_to_name(error));
+        uplink_set_not_configured();
+        return;
+    }
+
+    char ssid[UPLINK_SSID_MAX_LENGTH + 1u];
+    char password[UPLINK_PASSWORD_MAX_LENGTH + 1u];
+    size_t ssid_size = sizeof(ssid);
+    size_t password_size = sizeof(password);
+    error = nvs_get_str(handle, UPLINK_NVS_SSID_KEY, ssid, &ssid_size);
+    if (error == ESP_OK) {
+        error = nvs_get_str(handle, UPLINK_NVS_PASSWORD_KEY, password, &password_size);
+    }
+    nvs_close(handle);
+    if (error != ESP_OK || !uplink_credentials_are_valid(ssid, password)) {
+        ESP_LOGW(TAG, "Saved Internet Wi-Fi is incomplete or invalid");
+        uplink_set_not_configured();
+        return;
+    }
+
+    uplink_make_station_config(ssid, password, station_config);
+    uplink_set_connecting(ssid);
+}
+
+static esp_err_t configure_ap_dhcp_dns(const esp_netif_dns_info_t *dns)
+{
+    if (s_ap_netif == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    esp_err_t error = esp_netif_dhcps_stop(s_ap_netif);
+    if (error != ESP_OK && error != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) {
+        return error;
+    }
+
+    const uint8_t offer_dns = dns != NULL ? DHCPS_OFFER_DNS : 0;
+    error = esp_netif_dhcps_option(s_ap_netif, ESP_NETIF_OP_SET,
+                                   ESP_NETIF_DOMAIN_NAME_SERVER, (void *)&offer_dns,
+                                   sizeof(offer_dns));
+    if (error == ESP_OK && dns != NULL) {
+        error = esp_netif_set_dns_info(s_ap_netif, ESP_NETIF_DNS_MAIN,
+                                       (esp_netif_dns_info_t *)dns);
+    }
+    const esp_err_t restart_error = esp_netif_dhcps_start(s_ap_netif);
+    if (error == ESP_OK) {
+        error = restart_error;
+    }
+    return error;
+}
+
+static void uplink_disable_sharing(void)
+{
+    if (s_ap_netif == NULL) {
+        return;
+    }
+    const esp_err_t napt_error = esp_netif_napt_disable(s_ap_netif);
+    if (napt_error != ESP_OK && napt_error != ESP_ERR_NOT_SUPPORTED) {
+        ESP_LOGW(TAG, "Could not disable Internet sharing: %s", esp_err_to_name(napt_error));
+    }
+    const esp_err_t default_error = esp_netif_set_default_netif(s_ap_netif);
+    if (default_error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not select local Wi-Fi as default: %s",
+                 esp_err_to_name(default_error));
+    }
+    const esp_err_t dns_error = configure_ap_dhcp_dns(NULL);
+    if (dns_error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not clear DHCP Internet DNS: %s", esp_err_to_name(dns_error));
+    }
+}
+
+static esp_err_t uplink_connect(const char *ssid, const char *password)
+{
+    esp_err_t error = uplink_save_credentials(ssid, password);
+    if (error != ESP_OK) {
+        return error;
+    }
+
+    wifi_config_t station_config;
+    uplink_make_station_config(ssid, password, &station_config);
+    error = esp_wifi_set_config(WIFI_IF_STA, &station_config);
+    if (error != ESP_OK) {
+        return error;
+    }
+
+    uplink_set_connecting(ssid);
+    uplink_disable_sharing();
+    const esp_err_t disconnect_error = esp_wifi_disconnect();
+    if (disconnect_error == ESP_OK) {
+        /* WIFI_EVENT_STA_DISCONNECTED starts the new connection. */
+        return ESP_OK;
+    }
+    if (disconnect_error != ESP_ERR_WIFI_NOT_CONNECT) {
+        uplink_set_failed(0);
+        return disconnect_error;
+    }
+
+    error = esp_wifi_connect();
+    if (error != ESP_OK && error != ESP_ERR_WIFI_STATE) {
+        uplink_set_failed(0);
+        return error;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t uplink_forget(void)
+{
+    const esp_err_t error = uplink_clear_credentials();
+    if (error != ESP_OK) {
+        return error;
+    }
+    uplink_set_not_configured();
+    uplink_disable_sharing();
+    const esp_err_t disconnect_error = esp_wifi_disconnect();
+    if (disconnect_error != ESP_OK && disconnect_error != ESP_ERR_WIFI_NOT_CONNECT) {
+        return disconnect_error;
+    }
+    return ESP_OK;
+}
+
+static bool uplink_scan_is_allowed(void)
+{
+    const uplink_state_t uplink = uplink_snapshot();
+    return uplink.connection_state == UPLINK_NOT_CONFIGURED ||
+           uplink.connection_state == UPLINK_FAILED;
+}
+
+static const char *wifi_auth_name(wifi_auth_mode_t authmode)
+{
+    switch (authmode) {
+    case WIFI_AUTH_OPEN:
+        return "Mo";
+    case WIFI_AUTH_WEP:
+        return "WEP";
+    case WIFI_AUTH_WPA_PSK:
+        return "WPA";
+    case WIFI_AUTH_WPA2_PSK:
+        return "WPA2";
+    case WIFI_AUTH_WPA_WPA2_PSK:
+        return "WPA/WPA2";
+    case WIFI_AUTH_ENTERPRISE:
+        return "Enterprise";
+    case WIFI_AUTH_WPA3_PSK:
+        return "WPA3";
+    case WIFI_AUTH_WPA2_WPA3_PSK:
+        return "WPA2/WPA3";
+    case WIFI_AUTH_WAPI_PSK:
+        return "WAPI";
+    case WIFI_AUTH_OWE:
+        return "OWE";
+    case WIFI_AUTH_WPA3_ENT_192:
+    case WIFI_AUTH_WPA3_ENTERPRISE:
+    case WIFI_AUTH_WPA2_WPA3_ENTERPRISE:
+    case WIFI_AUTH_WPA_ENTERPRISE:
+        return "Enterprise";
+    case WIFI_AUTH_DPP:
+        return "DPP";
+    default:
+        return "Bao mat";
+    }
+}
+
+static bool wifi_scan_has_ssid(const wifi_ap_record_t *records,
+                               const uint16_t *selected, size_t selected_count,
+                               const char *ssid)
+{
+    for (size_t index = 0; index < selected_count; ++index) {
+        if (strcmp((const char *)records[selected[index]].ssid, ssid) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* esp_wifi_disconnect() completes asynchronously.  Directly after a user
+ * forgets an uplink, the public state is already "not configured" while the
+ * Wi-Fi driver can still be leaving STA_CONNECTING.  ESP-IDF rejects a scan in
+ * that short window with ESP_ERR_WIFI_STATE.  Keep the HTTP request bounded,
+ * but retry long enough for the radio to settle instead of making the mobile
+ * app guess a delay.  The caller holds s_wifi_operation_mutex, so a connect or
+ * a second scan cannot race this sequence. */
+static esp_err_t wifi_scan_start_when_ready(const wifi_scan_config_t *config)
+{
+    esp_err_t error = ESP_ERR_WIFI_STATE;
+    for (uint8_t attempt = 0; attempt < WIFI_SCAN_START_RETRIES; ++attempt) {
+        error = esp_wifi_scan_start(config, true);
+        if (error != ESP_ERR_WIFI_STATE) {
+            return error;
+        }
+        if (attempt + 1u < WIFI_SCAN_START_RETRIES) {
+            vTaskDelay(pdMS_TO_TICKS(WIFI_SCAN_RETRY_DELAY_MS));
+        }
+    }
+    return error;
+}
+
+static esp_err_t wifi_scan_handler(httpd_req_t *request)
+{
+    if (!s_wifi_started) {
+        return send_error_json(request, "503 Service Unavailable",
+                               "Wi-Fi chua san sang de quet.", ESP_ERR_INVALID_STATE);
+    }
+    if (state_is_busy()) {
+        return send_error_json(request, "409 Conflict",
+                               "Khong the quet Wi-Fi trong khi dang nap MS51.",
+                               ESP_ERR_INVALID_STATE);
+    }
+    if (!uplink_scan_is_allowed()) {
+        return send_error_json(request, "409 Conflict",
+                               "Hay quen Wi-Fi Internet hien tai truoc khi quet mang khac.",
+                               ESP_ERR_INVALID_STATE);
+    }
+    if (s_wifi_operation_mutex == NULL ||
+        xSemaphoreTake(s_wifi_operation_mutex, 0) != pdTRUE) {
+        return send_error_json(request, "409 Conflict", "Dang quet Wi-Fi, vui long cho.",
+                               ESP_ERR_TIMEOUT);
+    }
+
+    wifi_scan_config_t scan_config = {
+        .show_hidden = false,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time = {.active = {.min = 30, .max = 70}},
+        .home_chan_dwell_time = 30,
+    };
+    esp_err_t error = wifi_scan_start_when_ready(&scan_config);
+    if (error != ESP_OK) {
+        xSemaphoreGive(s_wifi_operation_mutex);
+        return send_error_json(request, error == ESP_ERR_WIFI_STATE ? "409 Conflict"
+                                                                     : "503 Service Unavailable",
+                               error == ESP_ERR_WIFI_STATE
+                                   ? "Wi-Fi Internet dang ket noi; vui long thu lai sau."
+                                   : "Khong the quet Wi-Fi luc nay.",
+                               error);
+    }
+
+    uint16_t total = 0;
+    error = esp_wifi_scan_get_ap_num(&total);
+    if (error != ESP_OK) {
+        esp_wifi_clear_ap_list();
+        xSemaphoreGive(s_wifi_operation_mutex);
+        return send_error_json(request, "503 Service Unavailable",
+                               "Khong doc duoc ket qua quet Wi-Fi.", error);
+    }
+
+    uint16_t record_count = total > WIFI_SCAN_MAX_NETWORKS ? WIFI_SCAN_MAX_NETWORKS : total;
+    wifi_ap_record_t *records = NULL;
+    if (record_count > 0) {
+        records = heap_caps_calloc(record_count, sizeof(*records), MALLOC_CAP_8BIT);
+        if (records == NULL) {
+            esp_wifi_clear_ap_list();
+            xSemaphoreGive(s_wifi_operation_mutex);
+            return send_error_json(request, "503 Service Unavailable",
+                                   "Khong du bo nho de hien thi danh sach Wi-Fi.", ESP_ERR_NO_MEM);
+        }
+        error = esp_wifi_scan_get_ap_records(&record_count, records);
+        if (error != ESP_OK) {
+            esp_wifi_clear_ap_list();
+            heap_caps_free(records);
+            xSemaphoreGive(s_wifi_operation_mutex);
+            return send_error_json(request, "503 Service Unavailable",
+                                   "Khong doc duoc ket qua quet Wi-Fi.", error);
+        }
+    } else {
+        esp_wifi_clear_ap_list();
+    }
+    xSemaphoreGive(s_wifi_operation_mutex);
+
+    httpd_resp_set_type(request, "application/json; charset=utf-8");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-store");
+    error = httpd_resp_send_chunk(request, "{\"ok\":true,\"networks\":[",
+                                  strlen("{\"ok\":true,\"networks\":["));
+    bool first = true;
+    uint16_t selected[WIFI_SCAN_MAX_NETWORKS];
+    size_t selected_count = 0;
+    for (uint16_t index = 0; error == ESP_OK && index < record_count; ++index) {
+        const char *ssid = (const char *)records[index].ssid;
+        if (*ssid == '\0' || wifi_scan_has_ssid(records, selected, selected_count, ssid)) {
+            continue;
+        }
+        char escaped_ssid[UPLINK_SSID_MAX_LENGTH * 2u + 1u];
+        if (!json_escape(ssid, escaped_ssid, sizeof(escaped_ssid))) {
+            continue;
+        }
+        char item[192];
+        const int length = snprintf(item, sizeof(item),
+                                    "%s{\"ssid\":\"%s\",\"rssi\":%d,\"channel\":%u,\"auth\":\"%s\"}",
+                                    first ? "" : ",", escaped_ssid, (int)records[index].rssi,
+                                    (unsigned)records[index].primary,
+                                    wifi_auth_name(records[index].authmode));
+        if (length < 0 || (size_t)length >= sizeof(item)) {
+            continue;
+        }
+        error = httpd_resp_send_chunk(request, item, (size_t)length);
+        if (error == ESP_OK) {
+            selected[selected_count++] = index;
+            first = false;
+        }
+    }
+    if (error == ESP_OK) {
+        error = httpd_resp_send_chunk(request, "]}", strlen("]}"));
+    }
+    if (error == ESP_OK) {
+        error = httpd_resp_send_chunk(request, NULL, 0);
+    }
+    heap_caps_free(records);
+    return error;
+}
+
+static esp_err_t uplink_handler(httpd_req_t *request)
+{
+    char body[HTTP_JSON_BODY_SIZE];
+    if (receive_json(request, body, sizeof(body)) != ESP_OK) {
+        return send_error_json(request, "400 Bad Request", "Yeu cau phai la JSON hop le.",
+                               ESP_ERR_INVALID_ARG);
+    }
+
+    char action[16];
+    if (!json_string_copy(body, "action", action, sizeof(action))) {
+        return send_error_json(request, "400 Bad Request", "Thieu hanh dong Wi-Fi.",
+                               ESP_ERR_INVALID_ARG);
+    }
+    if (strcmp(action, "connect") == 0) {
+        char ssid[UPLINK_SSID_MAX_LENGTH + 1u];
+        char password[UPLINK_PASSWORD_MAX_LENGTH + 1u];
+        if (!json_string_copy(body, "ssid", ssid, sizeof(ssid)) ||
+            !json_string_copy(body, "password", password, sizeof(password)) ||
+            !uplink_credentials_are_valid(ssid, password)) {
+            return send_error_json(request, "400 Bad Request",
+                                   "Ten Wi-Fi phai co 1-32 ky tu; mat khau de trong hoac 8-63 ky tu.",
+                                   ESP_ERR_INVALID_ARG);
+        }
+        if (s_wifi_operation_mutex == NULL ||
+            xSemaphoreTake(s_wifi_operation_mutex, 0) != pdTRUE) {
+            return send_error_json(request, "409 Conflict", "Dang quet Wi-Fi, vui long cho.",
+                                   ESP_ERR_TIMEOUT);
+        }
+        const esp_err_t error = uplink_connect(ssid, password);
+        xSemaphoreGive(s_wifi_operation_mutex);
+        if (error != ESP_OK) {
+            return send_error_json(request, "503 Service Unavailable",
+                                   "Khong the bat dau ket noi Wi-Fi Internet.", error);
+        }
+        return send_json(request,
+                         "{\"ok\":true,\"accepted\":true,\"message\":\"Da luu Wi-Fi va dang ket noi Internet.\"}",
+                         "202 Accepted");
+    }
+    if (strcmp(action, "forget") == 0) {
+        if (s_wifi_operation_mutex == NULL ||
+            xSemaphoreTake(s_wifi_operation_mutex, 0) != pdTRUE) {
+            return send_error_json(request, "409 Conflict", "Dang quet Wi-Fi, vui long cho.",
+                                   ESP_ERR_TIMEOUT);
+        }
+        const esp_err_t error = uplink_forget();
+        xSemaphoreGive(s_wifi_operation_mutex);
+        if (error != ESP_OK) {
+            return send_error_json(request, "503 Service Unavailable",
+                                   "Khong the xoa Wi-Fi Internet da luu.", error);
+        }
+        return send_json(request,
+                         "{\"ok\":true,\"message\":\"Da xoa Wi-Fi Internet da luu.\"}", NULL);
+    }
+    return send_error_json(request, "400 Bad Request", "Hanh dong Wi-Fi khong hop le.",
+                           ESP_ERR_INVALID_ARG);
+}
+
 static void job_worker(void *argument)
 {
     (void)argument;
@@ -1110,7 +1838,9 @@ static void wifi_event_handler(void *argument, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
 {
     (void)argument;
-    (void)event_base;
+    if (event_base != WIFI_EVENT) {
+        return;
+    }
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
         const wifi_event_ap_staconnected_t *event = event_data;
         ESP_LOGI(TAG, "Wi-Fi client " MACSTR " connected (AID=%d)",
@@ -1119,7 +1849,75 @@ static void wifi_event_handler(void *argument, esp_event_base_t event_base,
         const wifi_event_ap_stadisconnected_t *event = event_data;
         ESP_LOGI(TAG, "Wi-Fi client " MACSTR " disconnected (AID=%d)",
                  MAC2STR(event->mac), event->aid);
+    } else if (event_id == WIFI_EVENT_STA_START) {
+        const uplink_state_t uplink = uplink_snapshot();
+        if (uplink.configured) {
+            const esp_err_t error = esp_wifi_connect();
+            if (error != ESP_OK && error != ESP_ERR_WIFI_STATE) {
+                ESP_LOGW(TAG, "Could not start saved Internet Wi-Fi: %s",
+                         esp_err_to_name(error));
+                uplink_set_failed(0);
+            }
+        }
+    } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        const wifi_event_sta_disconnected_t *event = event_data;
+        if (!s_wifi_started) {
+            return;
+        }
+        uplink_disable_sharing();
+        const bool retry = uplink_retry_after_disconnect(event->reason);
+        ESP_LOGW(TAG, "Internet Wi-Fi disconnected (reason=%u, retry=%s)",
+                 (unsigned)event->reason, retry ? "yes" : "no");
+        if (retry) {
+            const esp_err_t error = esp_wifi_connect();
+            if (error != ESP_OK && error != ESP_ERR_WIFI_STATE) {
+                ESP_LOGW(TAG, "Could not retry Internet Wi-Fi: %s", esp_err_to_name(error));
+                uplink_set_failed(event->reason);
+            }
+        }
     }
+}
+
+static void ip_event_handler(void *argument, esp_event_base_t event_base,
+                             int32_t event_id, void *event_data)
+{
+    (void)argument;
+    if (event_base != IP_EVENT || event_id != IP_EVENT_STA_GOT_IP ||
+        !s_wifi_started || s_sta_netif == NULL || s_ap_netif == NULL) {
+        return;
+    }
+    if (!uplink_snapshot().configured) {
+        return;
+    }
+
+    const ip_event_got_ip_t *event = event_data;
+    esp_netif_dns_info_t dns;
+    const esp_err_t get_dns_error = esp_netif_get_dns_info(s_sta_netif,
+                                                            ESP_NETIF_DNS_MAIN, &dns);
+    const esp_err_t dns_error = get_dns_error == ESP_OK ? configure_ap_dhcp_dns(&dns)
+                                                         : get_dns_error;
+    if (dns_error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not give upstream DNS to AP clients: %s",
+                 esp_err_to_name(dns_error));
+    }
+
+    const esp_err_t default_error = esp_netif_set_default_netif(s_sta_netif);
+    if (default_error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not select Internet Wi-Fi as default: %s",
+                 esp_err_to_name(default_error));
+    }
+    const esp_err_t napt_error = esp_netif_napt_enable(s_ap_netif);
+    if (napt_error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not enable Internet sharing: %s", esp_err_to_name(napt_error));
+    }
+
+    wifi_ap_record_t ap_record;
+    memset(&ap_record, 0, sizeof(ap_record));
+    const int8_t rssi = esp_wifi_sta_get_ap_info(&ap_record) == ESP_OK ? ap_record.rssi : 0;
+    uplink_set_connected(&event->ip_info, rssi, dns_error == ESP_OK,
+                         napt_error == ESP_OK);
+    ESP_LOGI(TAG, "Internet Wi-Fi connected: " IPSTR ", sharing=%s",
+             IP2STR(&event->ip_info.ip), napt_error == ESP_OK ? "on" : "off");
 }
 
 static esp_err_t start_wifi_ap(void)
@@ -1148,6 +1946,14 @@ static esp_err_t start_wifi_ap(void)
     if (s_ap_netif == NULL) {
         return ESP_ERR_NO_MEM;
     }
+    s_sta_netif = esp_netif_create_default_wifi_sta();
+    if (s_sta_netif == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+    error = esp_netif_set_hostname(s_sta_netif, MDNS_HOSTNAME);
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "Could not set station hostname: %s", esp_err_to_name(error));
+    }
 
     const wifi_init_config_t init_config = WIFI_INIT_CONFIG_DEFAULT();
     ESP_RETURN_ON_ERROR(esp_wifi_init(&init_config), TAG, "Wi-Fi init failed");
@@ -1156,6 +1962,10 @@ static esp_err_t start_wifi_ap(void)
                                                     wifi_event_handler, NULL),
                         TAG, "Wi-Fi event handler registration failed");
     s_wifi_handler_registered = true;
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+                                                    ip_event_handler, NULL),
+                        TAG, "IP event handler registration failed");
+    s_ip_handler_registered = true;
     ESP_RETURN_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_RAM), TAG,
                         "Wi-Fi storage setup failed");
 
@@ -1170,48 +1980,65 @@ static esp_err_t start_wifi_ap(void)
     wifi_config.ap.pmf_cfg.capable = true;
     wifi_config.ap.pmf_cfg.required = false;
 
-    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_AP), TAG,
-                        "could not select AP mode");
+    wifi_config_t station_config;
+    uplink_load_credentials(&station_config);
+    const bool has_uplink = uplink_snapshot().configured;
+
+    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_APSTA), TAG,
+                        "could not select AP+STA mode");
     ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_AP, &wifi_config), TAG,
                         "could not configure AP");
+    if (has_uplink) {
+        ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &station_config), TAG,
+                            "could not configure saved Internet Wi-Fi");
+    }
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "could not start AP");
+    s_wifi_started = true;
     ESP_RETURN_ON_ERROR(esp_wifi_set_max_tx_power(CONFIG_MS51_WIFI_TX_POWER_QDBM), TAG,
                         "could not limit AP transmit power");
-    s_wifi_started = true;
+
+    error = start_mdns();
+    if (error != ESP_OK) {
+        ESP_LOGW(TAG, "mDNS is unavailable; use the displayed LAN IP: %s",
+                 esp_err_to_name(error));
+    }
 
     esp_netif_ip_info_t ip_info;
     ESP_RETURN_ON_ERROR(esp_netif_get_ip_info(s_ap_netif, &ip_info), TAG,
                         "could not read AP address");
     inet_ntoa_r(ip_info.ip.addr, s_ap_ip, sizeof(s_ap_ip));
-    snprintf(s_captive_uri, sizeof(s_captive_uri), "http://%s", s_ap_ip);
 
-    /* Advertise the captive-portal URL through DHCP option 114 when supported. */
-    esp_netif_dhcps_stop(s_ap_netif);
-    error = esp_netif_dhcps_option(s_ap_netif, ESP_NETIF_OP_SET,
-                                   ESP_NETIF_CAPTIVEPORTAL_URI, s_captive_uri,
-                                   strlen(s_captive_uri));
+    /* Do not advertise a captive portal while this AP is used as an Internet
+     * router.  DNS is enabled only after the upstream Wi-Fi has an address. */
+    error = configure_ap_dhcp_dns(NULL);
     if (error != ESP_OK) {
-        ESP_LOGW(TAG, "DHCP captive-portal option unavailable: %s",
-                 esp_err_to_name(error));
+        ESP_LOGW(TAG, "Could not prepare DHCP DNS: %s", esp_err_to_name(error));
     }
-    ESP_RETURN_ON_ERROR(esp_netif_dhcps_start(s_ap_netif), TAG,
-                        "could not restart DHCP server");
-
-    ESP_LOGI(TAG, "Wi-Fi AP ready: SSID=%s, URL=http://%s, TX=%d qdBm",
-             CONFIG_MS51_WIFI_SSID, s_ap_ip, CONFIG_MS51_WIFI_TX_POWER_QDBM);
+    ESP_LOGI(TAG, "Wi-Fi AP+STA ready: fallback=http://%s, LAN=http://%s, TX=%d qdBm",
+             s_ap_ip, MDNS_HOSTNAME_FQDN, CONFIG_MS51_WIFI_TX_POWER_QDBM);
     return ESP_OK;
 }
 
 static void stop_wifi_ap(void)
 {
+    stop_mdns();
     if (s_wifi_started) {
-        esp_wifi_stop();
         s_wifi_started = false;
+        uplink_disable_sharing();
+        esp_wifi_stop();
+    }
+    if (s_ip_handler_registered) {
+        esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, ip_event_handler);
+        s_ip_handler_registered = false;
     }
     if (s_wifi_handler_registered) {
         esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                      wifi_event_handler);
         s_wifi_handler_registered = false;
+    }
+    if (s_sta_netif != NULL) {
+        esp_netif_destroy_default_wifi(s_sta_netif);
+        s_sta_netif = NULL;
     }
     if (s_ap_netif != NULL) {
         esp_netif_destroy_default_wifi(s_ap_netif);
@@ -1241,18 +2068,26 @@ static void release_web_resources(void)
         vQueueDelete(s_job_queue);
         s_job_queue = NULL;
     }
+    stop_wifi_ap();
     if (s_state_mutex != NULL) {
         vSemaphoreDelete(s_state_mutex);
         s_state_mutex = NULL;
     }
-    stop_wifi_ap();
+    if (s_uplink_mutex != NULL) {
+        vSemaphoreDelete(s_uplink_mutex);
+        s_uplink_mutex = NULL;
+    }
+    if (s_wifi_operation_mutex != NULL) {
+        vSemaphoreDelete(s_wifi_operation_mutex);
+        s_wifi_operation_mutex = NULL;
+    }
 }
 
 static esp_err_t start_http_server(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 14;
     config.max_open_sockets = 4;
     config.lru_purge_enable = true;
     config.recv_wait_timeout = 20;
@@ -1269,6 +2104,8 @@ static esp_err_t start_http_server(void)
          .handler = runtime_config_get_handler},
         {.uri = "/api/runtime-config", .method = HTTP_POST,
          .handler = runtime_config_set_handler},
+        {.uri = "/api/uplink/scan", .method = HTTP_GET, .handler = wifi_scan_handler},
+        {.uri = "/api/uplink", .method = HTTP_POST, .handler = uplink_handler},
         {.uri = "/api/upload", .method = HTTP_POST, .handler = upload_handler},
         {.uri = "/api/info", .method = HTTP_POST, .handler = info_handler},
         {.uri = "/api/reset", .method = HTTP_POST, .handler = reset_handler},
@@ -1301,12 +2138,16 @@ esp_err_t ms51_web_start(void)
     }
 
     s_state_mutex = xSemaphoreCreateMutex();
+    s_uplink_mutex = xSemaphoreCreateMutex();
+    s_wifi_operation_mutex = xSemaphoreCreateMutex();
     s_job_queue = xQueueCreate(1, sizeof(job_request_t));
-    if (s_state_mutex == NULL || s_job_queue == NULL) {
+    if (s_state_mutex == NULL || s_uplink_mutex == NULL ||
+        s_wifi_operation_mutex == NULL || s_job_queue == NULL) {
         release_web_resources();
         return ESP_ERR_NO_MEM;
     }
     memset(&s_state, 0, sizeof(s_state));
+    uplink_set_not_configured();
     s_state.last_error = ESP_OK;
     strlcpy(s_state.message, "Sẵn sàng. Hãy chọn một file BIN.",
             sizeof(s_state.message));

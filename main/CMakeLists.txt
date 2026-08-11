@@ -54,5 +54,6 @@ idf_component_register(
         esp_timer
         esp_wifi
         freertos
+        mdns
         nvs_flash
 )

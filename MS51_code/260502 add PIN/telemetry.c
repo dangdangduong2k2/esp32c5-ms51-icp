@@ -643,11 +643,14 @@ void telemetry_init(void)
 	P0M1 |= SET_BIT2;
 	P0M2 &= CLR_BIT2;
 
-	/* UART1 TXD=P1.6 and RXD=P0.2: AUXR2[3:0] = 0101b. */
+	/* UART1 TXD=P1.6 and RXD=P0.2: AUXR2[3:0] = 0101b.
+	 * This is the same routing as ENABLE_UART1_TXD_P16 and
+	 * ENABLE_UART1_RXD_P02 in the MS51 BSP. */
 	SFRS = 2;
 	AUXR2 = (AUXR2 & 0xF0) | 0x05;
 
-	/* 115200 8N1 at HIRC 16.6 MHz; actual baud ~115278. */
+	/* UART1 uses Timer3 directly; BRCK controls UART0 only.  Keep the
+	 * proven timing used on this board, stopping Timer3 before loading it. */
 	SFRS = 0;
 	T3CON = 0x80;
 	RH3 = 0xFF;
