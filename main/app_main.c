@@ -462,7 +462,6 @@ void app_main(void)
 {
     ESP_ERROR_CHECK(ms51_programmer_init());
     ESP_ERROR_CHECK(ms51_storage_init());
-    ESP_ERROR_CHECK(ms51_debug_uart_init());
 
     ESP_LOGI(TAG, "ESP32-S3 -> MS51FC0AE ICP programmer");
     ESP_LOGI(TAG, "Pins: GPIO%d=nRESET, GPIO%d=ICP_CLK, GPIO%d=ICP_DAT",
@@ -472,6 +471,22 @@ void app_main(void)
              "MS51 runtime UART: GPIO%d TX -> P0.2 RXD1, GPIO%d RX <- P1.6 TXD1; "
              "both pins are released during ICP",
              CONFIG_MS51_CLK_GPIO, CONFIG_MS51_DAT_GPIO);
+
+    /* Keep the programmer and web UI available even if optional runtime UART
+     * cannot attach to the shared ICP pins on a particular board. */
+    start_console();
+
+    const esp_err_t web_error = ms51_web_start();
+    if (web_error != ESP_OK) {
+        ESP_LOGE(TAG, "Wi-Fi/web disabled: %s; USB console remains available",
+                 esp_err_to_name(web_error));
+    }
+
+    const esp_err_t debug_error = ms51_debug_uart_init();
+    if (debug_error != ESP_OK) {
+        ESP_LOGE(TAG, "MS51 runtime UART unavailable: %s; ICP programming remains available",
+                 esp_err_to_name(debug_error));
+    }
 
 #if CONFIG_MS51_AUTO_PROGRAM
     if (g_ms51_firmware_size > 0) {
@@ -484,12 +499,4 @@ void app_main(void)
         ESP_LOGW(TAG, "No firmware/ms51_app.bin was embedded; auto-program skipped");
     }
 #endif
-
-    start_console();
-
-    const esp_err_t web_error = ms51_web_start();
-    if (web_error != ESP_OK) {
-        ESP_LOGE(TAG, "Wi-Fi/web disabled: %s; USB console remains available",
-                 esp_err_to_name(web_error));
-    }
 }
