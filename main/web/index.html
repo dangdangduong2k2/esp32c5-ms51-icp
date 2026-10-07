@@ -743,7 +743,7 @@
       <p class="uplink-copy">Thiết bị sẽ vào Wi-Fi bên dưới. Khi đã có IP, điện thoại cũng chuyển sang chính Wi-Fi đó để điều khiển như bình thường.</p>
       <div class="uplink-status" id="uplinkStatus" data-state="not_configured" role="status" aria-live="polite">
         <span class="uplink-dot" aria-hidden="true"></span>
-        <div><strong id="uplinkState">Chưa thiết lập Wi-Fi Internet</strong><span id="uplinkDetails">Nhập tên và mật khẩu Wi-Fi 2.4 GHz.</span></div>
+        <div><strong id="uplinkState">Chưa thiết lập Wi-Fi Internet</strong><span id="uplinkDetails">Chọn mạng Wi-Fi và nhập mật khẩu.</span></div>
       </div>
       <div class="lan-access" id="lanAccess" hidden>
         <strong>Địa chỉ điều khiển sau khi điện thoại đổi sang Wi-Fi này</strong>
@@ -751,7 +751,7 @@
         <div class="lan-addresses">
           <div class="lan-address">
             <span>Tên dễ nhớ</span>
-            <a id="lanHostname" href="http://ms51.local" target="_blank" rel="noopener">http://ms51.local</a>
+            <a id="lanHostname" href="#" target="_blank" rel="noopener">Đang nhận địa chỉ…</a>
             <button class="btn copy-address" id="copyLanHostname" type="button">Sao chép</button>
           </div>
           <div class="lan-address">
@@ -774,7 +774,7 @@
           <button class="btn danger" id="uplinkForget" type="button">Quên Wi-Fi này</button>
         </div>
       </form>
-      <p class="field-note">Chỉ hỗ trợ Wi-Fi 2.4 GHz. Nếu muốn đổi mạng đang dùng, bấm “Quên Wi-Fi này” rồi quét lại. Nếu tên <code>ms51.local</code> không mở được, dùng IP đang hiện ở trên. Wi-Fi <code>MS51-PROGRAMMER</code> và <code>192.168.4.1</code> vẫn là đường dự phòng.</p>
+      <p class="field-note">Chọn mạng Wi-Fi được thiết bị tìm thấy. ESP32-C5 hỗ trợ 2.4 GHz và 5 GHz. Nếu địa chỉ theo tên thiết bị không mở được, dùng IP ở trên. Wi-Fi dự phòng có dạng <code>MS51-PROGRAMMER-&lt;MAC&gt;</code>, địa chỉ <code>192.168.4.1</code>.</p>
     </section>
 
     <section class="card config-card" id="runtimeConfigCard" aria-labelledby="runtimeConfigTitle">
@@ -1654,23 +1654,23 @@
         if (previous && findUplinkOption(previous)) els.uplinkSsid.value = previous;
       }
 
-      function renderUplink(uplink) {
+      function renderUplink(uplink, internet) {
         const info = uplink || {};
         const stateName = String(info.state || (info.configured ? 'connecting' : 'not_configured'));
         const ssid = String(info.ssid || '');
         const lanIp = String(info.ip || '');
-        const hostname = String(info.hostname || 'ms51.local');
+        const hostname = String(info.hostname || lanIp);
         const hostnameUrl = `http://${hostname}`;
         const lanIpUrl = lanIp ? `http://${lanIp}` : '';
-        const hasInternet = Boolean(info.nat_enabled && info.dns_ready);
+        const hasInternet = internet && internet.state === 'online' && Number(internet.checked_age_ms) >= 0 && Number(internet.checked_age_ms) <= 90000;
         let title = 'Chưa thiết lập Wi-Fi Internet';
-        let details = 'Nhập tên và mật khẩu Wi-Fi 2.4 GHz.';
+        let details = 'Chọn mạng Wi-Fi và nhập mật khẩu.';
 
         if (stateName === 'connecting') {
           title = 'Đang kết nối Wi-Fi Internet';
           details = ssid ? `Đang tìm ${ssid}…` : 'Đang chuẩn bị kết nối…';
         } else if (stateName === 'connected') {
-          title = hasInternet ? 'Đã có Internet' : 'Đã kết nối Wi-Fi, đang chuẩn bị Internet';
+          title = hasInternet ? 'Đã có Internet' : 'Đã kết nối Wi-Fi · Chưa xác nhận Internet';
           const parts = [];
           if (ssid) parts.push(ssid);
           if (info.ip) parts.push(`IP ${info.ip}`);
@@ -1815,7 +1815,7 @@
             els.wifiInfo.textContent = sharing && uplink.ip
               ? `Wi-Fi ngoài · ${uplink.ip} · Wi-Fi dự phòng ${data.wifi.ip}`
               : (data.wifi.ip ? `Wi-Fi dự phòng · ${data.wifi.ip}` : 'Kết nối Wi-Fi sẵn sàng');
-            renderUplink(uplink);
+            renderUplink(uplink, data.internet);
           }
           renderImage(data.image);
           if (data.busy) {

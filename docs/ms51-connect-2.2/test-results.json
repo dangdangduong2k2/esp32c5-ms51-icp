@@ -1,0 +1,29 @@
+{
+  "version": "2.2.0",
+  "result": "PASS",
+  "scenarios": [
+    "Registration validates confirmation, salts/hashes password; login rejects wrong password and restores account",
+    "Unpaired screen has one action; local verification cannot be skipped",
+    "Failed local handshake stays put; successful handshake opens scan-only page",
+    "Repeated scans issue one request; 2.4 and 5 GHz choices are shown",
+    "Password eye toggles without changing content/cursor; invalid password is rejected",
+    "Repeated connect clicks issue one write; failed association unlocks the password step",
+    "Successful association still requires LAN verification before remembering the pair",
+    "Account session persists; app launch opens the paired-device list",
+    "Multiple devices share a Wi-Fi SSID without overwriting; per-device Internet states and MAC deduplication",
+    "Stale/missing Internet telemetry and unreachable devices do not display a false online state",
+    "Switching devices freezes HTTP destination/MAC and discards old configuration callbacks",
+    "Device identity mismatch is rejected before opening or pairing",
+    "Duplicate usernames rejected; each local account has an isolated device registry",
+    "Lost local network invalidates late results and returns to the first step",
+    "Scan failure retries; Back returns to choices; open 5 GHz networks need no password",
+    "Android network request allows either band and does not require Internet"
+  ],
+  "environment": "Android API 35 emulator; real Activity and HTTP client; mock ESPs and radio callbacks",
+  "hardware_flashed_this_revision": false,
+  "unverified": [
+    "physical multi-board pairing",
+    "5 GHz RF pairing",
+    "Internet probe on physical ESP32-C5"
+  ]
+}

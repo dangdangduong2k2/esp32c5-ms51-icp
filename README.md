@@ -1,4 +1,31 @@
-# ESP32-S3 programmer for MS51FC0AE
+# MS51 Connect · ESP32 / MS51
+
+## Bản thử nghiệm 2.2.0
+
+[Tải APK Android](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v2.2.0/MS51-Connect-2.2.apk) · [Tất cả tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v2.2.0)
+
+- App Android native, giao diện navy/xanh ngọc; tạo tài khoản và mật khẩu lưu trên điện thoại.
+- Một tài khoản ghép nhiều thiết bị, danh sách hiển thị trạng thái Internet riêng của từng bo.
+- Thêm thiết bị theo từng bước: tìm Wi-Fi thiết bị → quét mạng → chọn mạng → nhập mật khẩu có nút con mắt → xác nhận trên mạng đích.
+- Tên AP lấy MAC chip: `MS51-PROGRAMMER-<MAC 12 ký tự>`, ví dụ `MS51-PROGRAMMER-3844BE1FE4E0`. Tên mDNS và mã thiết bị cũng riêng theo MAC.
+- ESP32-C5 hỗ trợ Wi-Fi 2.4/5 GHz; bản simulator chạy tạm khi chưa có MS51.
+
+| Thành phần | Mã nguồn / hướng dẫn |
+|---|---|
+| Android MS51 Connect | [mobile/android](mobile/android/README.md) |
+| Firmware mô phỏng trên ESP32-C5 | [firmware/esp32c5_simulator](firmware/esp32c5_simulator/README.md) |
+| Kết quả kiểm thử app 2.2 | [16 nhóm tình huống trên emulator](docs/ms51-connect-2.2/test-results.json) |
+| Firmware ICP dùng MS51 thật | Project ESP-IDF ở thư mục gốc, hướng dẫn bên dưới |
+
+**Trạng thái kiểm thử:** APK đã build, lint không có lỗi, chạy qua 16 nhóm kiểm thử trên emulator API 35 với hai ESP mô phỏng qua HTTP. Firmware C5 2.2 đã build nhưng chưa nạp bo; ghép qua sóng 5 GHz, nhiều bo vật lý và kiểm tra Internet trên bo vẫn cần thử thực tế. APK 2.2 cần firmware hỗ trợ MAC để ghép mới. Chưa hỗ trợ đọc NTC 10k.
+
+Tài khoản chỉ lưu trên điện thoại, chưa có máy chủ hoặc điều khiển từ xa. Trạng thái không liên lạc được không đồng nghĩa thiết bị mất Internet. APK được ký debug để cài thử.
+
+| Tài khoản | Danh sách thiết bị |
+|---|---|
+| ![Tạo tài khoản](docs/ms51-connect-2.2/02-tao-tai-khoan.png) | ![Danh sách thiết bị](docs/ms51-connect-2.2/04-danh-sach-thiet-bi.png) |
+
+## Firmware nạp ICP gốc (ESP32-S3)
 
 Project ESP-IDF này dùng ESP32-S3 để nhận dạng, xóa, ghi và kiểm tra APROM của
 MS51FC0AE qua ba chân nạp ICP:
@@ -30,7 +57,7 @@ GPIO bit-bang và không dùng peripheral I²C của ESP32.
 
 Sau khi ESP32-S3 khởi động, kết nối điện thoại hoặc máy tính vào:
 
-- Wi-Fi: `MS51-PROGRAMMER`
+- Wi-Fi: `MS51-PROGRAMMER-<MAC 12 ký tự>`
 - Mật khẩu: `12345678`
 - Trang nạp: `http://192.168.4.1`
 

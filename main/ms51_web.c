@@ -1,4 +1,5 @@
 #include "ms51_web.h"
+#include "ms51_presence.h"
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -50,8 +51,8 @@ static const char *TAG = "ms51_web";
 #define UPLINK_NVS_NAMESPACE "uplink"
 #define UPLINK_NVS_SSID_KEY "ssid"
 #define UPLINK_NVS_PASSWORD_KEY "password"
-#define MDNS_HOSTNAME "ms51"
-#define MDNS_HOSTNAME_FQDN MDNS_HOSTNAME ".local"
+#define MDNS_HOSTNAME ms51_presence_hostname()
+#define MDNS_HOSTNAME_FQDN ms51_presence_fqdn()
 #define MDNS_INSTANCE_NAME "MS51 Controller"
 
 extern const char web_index_start[] asm("_binary_index_html_start");
@@ -331,7 +332,7 @@ static esp_err_t start_mdns(void)
     mdns_txt_item_t service_txt[] = {
         {"path", "/"},
     };
-    error = mdns_service_add(MDNS_INSTANCE_NAME, "_http", "_tcp", 80,
+    error = mdns_service_add(ms51_presence_id(), "_http", "_tcp", 80,
                              service_txt, sizeof(service_txt) / sizeof(service_txt[0]));
     if (error != ESP_OK) {
         mdns_free();
@@ -612,8 +613,20 @@ static esp_err_t root_handler(httpd_req_t *request)
     return httpd_resp_sendstr(request, web_index_start);
 }
 
+static bool wrong_device(httpd_req_t *request) {
+    size_t length=httpd_req_get_hdr_value_len(request,"X-MS51-Device");
+    if(length==0)return false;
+    char id[40];
+    if(length>=sizeof(id) || httpd_req_get_hdr_value_str(request,"X-MS51-Device",id,sizeof(id))!=ESP_OK || strcmp(id,ms51_presence_id())!=0) {
+        send_error_json(request,"409 Conflict","Thiet bi khong khop. Hay ket noi lai.",ESP_ERR_INVALID_STATE);
+        return true;
+    }
+    return false;
+}
+
 static esp_err_t status_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     ms51_storage_info_t image;
     ms51_storage_get_info(&image);
     const web_state_t state = state_snapshot();
@@ -632,7 +645,7 @@ static esp_err_t status_handler(httpd_req_t *request)
         !json_escape(state.operation, operation, sizeof(operation)) ||
         !json_escape(esp_err_to_name(state.last_error), last_error,
                      sizeof(last_error)) ||
-        !json_escape(CONFIG_MS51_WIFI_SSID, ssid, sizeof(ssid)) ||
+        !json_escape(ms51_presence_ap_ssid(), ssid, sizeof(ssid)) ||
         !json_escape(uplink.ssid, uplink_ssid, sizeof(uplink_ssid)) ||
         !json_escape(uplink.ip, uplink_ip, sizeof(uplink_ip)) ||
         !json_escape(uplink.gateway, uplink_gateway, sizeof(uplink_gateway)) ||
@@ -645,7 +658,7 @@ static esp_err_t status_handler(httpd_req_t *request)
     // JSON-escaped status text can be substantially larger than its source
     // buffers.  Keep this response comfortably above the compiler-calculated
     // maximum as the image metadata adds format and coverage fields.
-    char payload[2048];
+    char payload[2560];
     if (image.valid) {
         snprintf(payload, sizeof(payload),
                  "{\"ok\":true,\"busy\":%s,\"job_id\":%" PRIu32
@@ -684,6 +697,10 @@ static esp_err_t status_handler(httpd_req_t *request)
                  uplink.nat_enabled ? "true" : "false", MDNS_HOSTNAME_FQDN,
                  s_mdns_started ? "true" : "false");
     }
+    char presence[384];
+    ms51_presence_json(presence,sizeof(presence));
+    size_t used=strlen(payload);
+    if(used>0)snprintf(payload+used-1,sizeof(payload)-used+1,"%s}",presence);
     return send_json(request, payload, NULL);
 }
 
@@ -702,6 +719,7 @@ static void timestamp_age_json(uint64_t timestamp, char output[16])
 
 static esp_err_t debug_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     ms51_debug_uart_snapshot_t snapshot;
     const esp_err_t snapshot_error = ms51_debug_uart_get_snapshot(&snapshot);
     if (snapshot_error != ESP_OK) {
@@ -772,6 +790,7 @@ static esp_err_t debug_handler(httpd_req_t *request)
 
 static esp_err_t info_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     char body[HTTP_JSON_BODY_SIZE];
     if (receive_json(request, body, sizeof(body)) != ESP_OK) {
         return send_error_json(request, "400 Bad Request",
@@ -816,6 +835,7 @@ static esp_err_t info_handler(httpd_req_t *request)
 
 static esp_err_t reset_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     char body[HTTP_JSON_BODY_SIZE];
     if (receive_json(request, body, sizeof(body)) != ESP_OK) {
         return send_error_json(request, "400 Bad Request",
@@ -885,6 +905,7 @@ static esp_err_t queue_job(job_type_t type, uint32_t requested_generation,
 
 static esp_err_t job_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     const job_type_t type = (job_type_t)(intptr_t)request->user_ctx;
     char body[HTTP_JSON_BODY_SIZE];
     if (receive_json(request, body, sizeof(body)) != ESP_OK) {
@@ -988,6 +1009,7 @@ static const char *runtime_config_status_message(uint8_t status)
 
 static esp_err_t runtime_config_get_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     if (state_is_busy()) {
         return send_error_json(request, "409 Conflict", "ESP32 đang bận với thao tác khác.",
                                ESP_ERR_INVALID_STATE);
@@ -1036,6 +1058,7 @@ static esp_err_t runtime_config_get_handler(httpd_req_t *request)
 
 static esp_err_t runtime_config_set_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     char body[HTTP_JSON_BODY_SIZE];
     if (receive_json(request, body, sizeof(body)) != ESP_OK) {
         return send_error_json(request, "400 Bad Request", "Yêu cầu phải là JSON hợp lệ.",
@@ -1214,6 +1237,7 @@ static esp_err_t upload_handler_legacy(httpd_req_t *request)
 
 static esp_err_t upload_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     if (!content_type_is_firmware(request)) {
         return send_error_json(request, "415 Unsupported Media Type",
                                "Upload must contain BIN or Intel HEX firmware.",
@@ -1532,6 +1556,7 @@ static bool uplink_scan_is_allowed(void)
 {
     const uplink_state_t uplink = uplink_snapshot();
     return uplink.connection_state == UPLINK_NOT_CONFIGURED ||
+           uplink.connection_state == UPLINK_CONNECTED ||
            uplink.connection_state == UPLINK_FAILED;
 }
 
@@ -1606,6 +1631,7 @@ static esp_err_t wifi_scan_start_when_ready(const wifi_scan_config_t *config)
 
 static esp_err_t wifi_scan_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     if (!s_wifi_started) {
         return send_error_json(request, "503 Service Unavailable",
                                "Wi-Fi chua san sang de quet.", ESP_ERR_INVALID_STATE);
@@ -1617,7 +1643,7 @@ static esp_err_t wifi_scan_handler(httpd_req_t *request)
     }
     if (!uplink_scan_is_allowed()) {
         return send_error_json(request, "409 Conflict",
-                               "Hay quen Wi-Fi Internet hien tai truoc khi quet mang khac.",
+                               "Wi-Fi dang ket noi; vui long cho roi quet lai.",
                                ESP_ERR_INVALID_STATE);
     }
     if (s_wifi_operation_mutex == NULL ||
@@ -1718,6 +1744,7 @@ static esp_err_t wifi_scan_handler(httpd_req_t *request)
 
 static esp_err_t uplink_handler(httpd_req_t *request)
 {
+    if(wrong_device(request))return ESP_OK;
     char body[HTTP_JSON_BODY_SIZE];
     if (receive_json(request, body, sizeof(body)) != ESP_OK) {
         return send_error_json(request, "400 Bad Request", "Yeu cau phai la JSON hop le.",
@@ -1922,7 +1949,7 @@ static void ip_event_handler(void *argument, esp_event_base_t event_base,
 
 static esp_err_t start_wifi_ap(void)
 {
-    const size_t ssid_length = strlen(CONFIG_MS51_WIFI_SSID);
+    const size_t ssid_length = strlen(ms51_presence_ap_ssid());
     const size_t password_length = strlen(CONFIG_MS51_WIFI_PASSWORD);
     if (ssid_length == 0 || ssid_length > 32 ||
         password_length < 8 || password_length > 63) {
@@ -1971,7 +1998,7 @@ static esp_err_t start_wifi_ap(void)
 
     wifi_config_t wifi_config;
     memset(&wifi_config, 0, sizeof(wifi_config));
-    memcpy(wifi_config.ap.ssid, CONFIG_MS51_WIFI_SSID, ssid_length);
+    memcpy(wifi_config.ap.ssid, ms51_presence_ap_ssid(), ssid_length);
     memcpy(wifi_config.ap.password, CONFIG_MS51_WIFI_PASSWORD, password_length);
     wifi_config.ap.ssid_len = ssid_length;
     wifi_config.ap.channel = CONFIG_MS51_WIFI_CHANNEL;
@@ -2060,6 +2087,7 @@ static void stop_wifi_ap(void)
 
 static void release_web_resources(void)
 {
+    ms51_presence_stop();
     if (s_job_task != NULL) {
         vTaskDelete(s_job_task);
         s_job_task = NULL;
@@ -2152,7 +2180,8 @@ esp_err_t ms51_web_start(void)
     strlcpy(s_state.message, "Sẵn sàng. Hãy chọn một file BIN.",
             sizeof(s_state.message));
 
-    esp_err_t error = start_wifi_ap();
+    esp_err_t error = ms51_presence_init();
+    if (error == ESP_OK) error = start_wifi_ap();
     if (error != ESP_OK) {
         release_web_resources();
         return error;
@@ -2163,6 +2192,7 @@ esp_err_t ms51_web_start(void)
         return ESP_ERR_NO_MEM;
     }
     error = start_http_server();
+    if (error == ESP_OK) error = ms51_presence_start();
     if (error != ESP_OK) {
         release_web_resources();
         return error;

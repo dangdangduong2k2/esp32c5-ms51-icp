@@ -1,0 +1,1873 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07111f">
+  <title>Bảng điều khiển thiết bị</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(15, 29, 48, .82);
+      --panel-2: #101f34;
+      --line: rgba(148, 171, 203, .18);
+      --text: #f3f7fc;
+      --muted: #96a9c1;
+      --primary: #34d399;
+      --primary-2: #10b981;
+      --blue: #60a5fa;
+      --danger: #fb7185;
+      --warning: #fbbf24;
+      --radius: 18px;
+      --shadow: 0 22px 60px rgba(0, 0, 0, .34);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { min-height: 100%; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--text);
+      background:
+        radial-gradient(800px 440px at 8% -10%, rgba(16,185,129,.18), transparent 70%),
+        radial-gradient(720px 440px at 100% 8%, rgba(59,130,246,.16), transparent 64%),
+        var(--bg);
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select { font: inherit; }
+
+    button { -webkit-tap-highlight-color: transparent; }
+
+    .shell {
+      width: min(920px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: max(24px, env(safe-area-inset-top)) 0 max(34px, env(safe-area-inset-bottom));
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 13px; min-width: 0; }
+
+    .logo {
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(52,211,153,.35);
+      border-radius: 14px;
+      color: var(--primary);
+      background: rgba(52,211,153,.1);
+      box-shadow: inset 0 0 24px rgba(52,211,153,.06);
+    }
+
+    .logo svg { width: 25px; height: 25px; }
+    h1 { margin: 0; font-size: clamp(19px, 4vw, 25px); letter-spacing: -.025em; }
+    .subtitle { margin: 1px 0 0; color: var(--muted); font-size: 12px; }
+
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(7,17,31,.55);
+      font-size: 12px;
+    }
+
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+    .connection.online .dot { background: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.12); }
+    .connection.online { color: #b8f7dc; }
+
+    .grid { display: grid; min-width: 0; grid-template-columns: 1.18fr .82fr; gap: 16px; }
+    .stack { display: grid; min-width: 0; gap: 16px; align-content: start; }
+
+    .card {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 20px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .card-head { display: flex; min-width: 0; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 15px; }
+    .card-head > * { min-width: 0; }
+    h2 { margin: 0; font-size: 15px; letter-spacing: .01em; }
+    .eyebrow { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .11em; }
+
+    .dropzone {
+      position: relative;
+      min-width: 0;
+      display: grid;
+      place-items: center;
+      min-height: 190px;
+      padding: 24px;
+      border: 1.5px dashed rgba(96,165,250,.4);
+      border-radius: 15px;
+      text-align: center;
+      background: rgba(96,165,250,.045);
+      transition: border-color .18s, background .18s, transform .18s;
+      cursor: pointer;
+    }
+
+    .dropzone:hover, .dropzone.drag { border-color: var(--blue); background: rgba(96,165,250,.09); }
+    .dropzone.drag { transform: scale(.995); }
+    .dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .upload-icon { width: 42px; height: 42px; margin: 0 auto 11px; color: var(--blue); }
+    .drop-title { margin: 0 0 4px; font-weight: 700; }
+    .drop-help { margin: 0; color: var(--muted); font-size: 12px; }
+    .browse { color: #93c5fd; text-decoration: underline; text-underline-offset: 3px; }
+
+    .file {
+      display: none;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: center;
+      margin-top: 14px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(16,31,52,.85);
+    }
+
+    .file.show { display: grid; }
+    .file-icon { display: grid; place-items: center; width: 38px; height: 42px; border-radius: 9px; color: var(--primary); background: rgba(52,211,153,.1); font-size: 11px; font-weight: 800; }
+    .file-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+    .file-meta { color: var(--muted); font: 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+    .icon-btn {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 9px;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .icon-btn:hover { color: var(--text); background: rgba(255,255,255,.06); }
+
+    .upload-row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+    .upload-row .btn { flex: 0 0 auto; }
+
+    .progress { display: none; flex: 1; min-width: 0; }
+    .progress.show { display: block; }
+    .progress-label { display: flex; justify-content: space-between; margin-bottom: 5px; color: var(--muted); font-size: 11px; }
+    .bar { height: 6px; overflow: hidden; border-radius: 99px; background: rgba(148,171,203,.14); }
+    .bar > span { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--primary-2), var(--primary)); transition: width .15s; }
+
+    .btn {
+      min-height: 42px;
+      padding: 10px 15px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--text);
+      background: var(--panel-2);
+      font-weight: 650;
+      cursor: pointer;
+      transition: transform .12s, border-color .15s, background .15s, opacity .15s;
+    }
+
+    .btn:hover:not(:disabled) { border-color: rgba(148,171,203,.4); background: #162943; }
+    .btn:active:not(:disabled) { transform: translateY(1px); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn.primary { color: #03251a; border-color: transparent; background: linear-gradient(135deg, #6ee7b7, var(--primary)); }
+    .btn.primary:hover:not(:disabled) { background: linear-gradient(135deg, #8af0c7, #43dda7); }
+    .btn.danger { color: #fecdd3; border-color: rgba(251,113,133,.32); background: rgba(251,113,133,.08); }
+    .btn.danger:hover:not(:disabled) { border-color: rgba(251,113,133,.7); background: rgba(251,113,133,.14); }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .actions .primary { grid-column: 1 / -1; }
+
+    .status-box {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 11px;
+      align-items: start;
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 12px;
+      color: #bfdbfe;
+      background: rgba(59,130,246,.08);
+      font-size: 12px;
+    }
+
+    .status-box.error { color: #fecdd3; background: rgba(251,113,133,.09); }
+    .status-box.success { color: #bbf7d0; background: rgba(52,211,153,.09); }
+    .status-box.busy .status-mark { animation: pulse 1s ease-in-out infinite; }
+    .status-mark { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: currentColor; }
+
+    .facts { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--line); }
+    .fact { display: grid; grid-template-columns: 95px 1fr; gap: 10px; padding: 10px 12px; background: rgba(12,25,42,.96); }
+    .fact dt { color: var(--muted); }
+    .fact dd { margin: 0; text-align: right; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .fact .locked { color: var(--danger); }
+    .fact .unlocked { color: var(--primary); }
+
+    .danger-card { border-color: rgba(251,113,133,.2); }
+    .danger-copy { margin: -5px 0 14px; color: var(--muted); font-size: 12px; }
+    .danger-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .debug-card { margin-top: 16px; }
+    .debug-copy { margin: -5px 0 16px; color: var(--muted); font-size: 12px; }
+    .debug-state { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .debug-state.live { color: var(--primary); }
+    .debug-state.waiting { color: var(--warning); }
+    .debug-state.paused { color: var(--blue); }
+
+    .runtime-visuals { display: grid; grid-template-columns: minmax(190px, .85fr) minmax(330px, 1.15fr); gap: 12px; }
+    .mode-panel {
+      --mode-color: #94a3b8;
+      --mode-line: rgba(148,163,184,.3);
+      --mode-bg: rgba(148,163,184,.09);
+      display: flex;
+      min-height: 142px;
+      align-items: center;
+      gap: 14px;
+      padding: 17px;
+      border: 1px solid var(--mode-line);
+      border-radius: 15px;
+      background: linear-gradient(145deg, var(--mode-bg), rgba(8,21,36,.72));
+    }
+    .mode-panel[data-mode="cool"] { --mode-color: #60a5fa; --mode-line: rgba(96,165,250,.4); --mode-bg: rgba(96,165,250,.12); }
+    .mode-panel[data-mode="ice"] { --mode-color: #67e8f9; --mode-line: rgba(103,232,249,.4); --mode-bg: rgba(103,232,249,.1); }
+    .mode-panel[data-mode="setting"] { --mode-color: #fbbf24; --mode-line: rgba(251,191,36,.38); --mode-bg: rgba(251,191,36,.1); }
+    .mode-panel[data-mode="advanced"] { --mode-color: #c084fc; --mode-line: rgba(192,132,252,.42); --mode-bg: rgba(192,132,252,.11); }
+    .mode-panel[data-mode="password"] { --mode-color: #fb7185; --mode-line: rgba(251,113,133,.4); --mode-bg: rgba(251,113,133,.11); }
+    .mode-icon {
+      display: grid;
+      place-items: center;
+      width: 47px;
+      height: 47px;
+      flex: 0 0 auto;
+      border-radius: 14px;
+      color: var(--mode-color);
+      background: var(--mode-bg);
+      box-shadow: inset 0 0 18px var(--mode-bg);
+      font-size: 24px;
+    }
+    .runtime-label { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .09em; }
+    .mode-value { display: block; margin-top: 3px; color: #f8fbff; font-size: 18px; letter-spacing: -.02em; }
+    .mode-help { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+
+    .display-cluster { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .display-card {
+      --display: #4ade80;
+      --display-glow: rgba(74,222,128,.38);
+      --display-line: rgba(74,222,128,.24);
+      --display-bg: rgba(74,222,128,.08);
+      min-width: 0;
+      padding: 13px;
+      border: 1px solid var(--display-line);
+      border-radius: 15px;
+      background: linear-gradient(145deg, var(--display-bg), rgba(8,21,36,.82));
+    }
+    .display-card.red { --display: #fb7185; --display-glow: rgba(251,113,133,.35); --display-line: rgba(251,113,133,.28); --display-bg: rgba(251,113,133,.08); }
+    .display-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: #dce9f8; font-size: 12px; font-weight: 700; }
+    .display-unit { color: var(--muted); font-size: 10px; font-weight: 500; }
+    .seven-seg {
+      display: flex;
+      min-height: 65px;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      margin-top: 10px;
+      padding: 7px;
+      border-radius: 10px;
+      color: var(--display);
+      background: rgba(2,10,19,.82);
+      box-shadow: inset 0 0 20px rgba(0,0,0,.36);
+    }
+    .seg-digit { position: relative; width: 25px; height: 47px; flex: 0 0 auto; }
+    .seg {
+      position: absolute;
+      border-radius: 4px;
+      background: rgba(148,171,203,.12);
+      transition: background .18s, box-shadow .18s;
+    }
+    .seg.active { background: var(--display); box-shadow: 0 0 7px var(--display-glow), 0 0 13px var(--display-glow); }
+    .seg.a, .seg.g, .seg.d { left: 4px; width: 17px; height: 4px; }
+    .seg.a { top: 0; }
+    .seg.g { top: 22px; }
+    .seg.d { bottom: 0; }
+    .seg.b, .seg.c, .seg.e, .seg.f { width: 4px; height: 18px; }
+    .seg.b, .seg.c { right: 0; }
+    .seg.f, .seg.e { left: 0; }
+    .seg.b, .seg.f { top: 2px; }
+    .seg.c, .seg.e { bottom: 2px; }
+
+    .relay-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+    .relay-card {
+      min-width: 0;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(8,21,36,.56);
+      transition: border-color .2s, background .2s, box-shadow .2s;
+    }
+    .relay-card.is-on { border-color: rgba(52,211,153,.4); background: linear-gradient(145deg, rgba(52,211,153,.12), rgba(8,21,36,.66)); box-shadow: inset 0 0 18px rgba(52,211,153,.05); }
+    .relay-head { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+    .relay-name { color: #dce9f8; font-size: 12px; font-weight: 700; }
+    .relay-state { color: #7c90aa; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+    .relay-card.is-on .relay-state { color: var(--primary); }
+    .relay-graphic { display: flex; align-items: center; gap: 9px; margin-top: 12px; }
+    .relay-indicator { width: 11px; height: 11px; border-radius: 50%; background: #52647a; box-shadow: inset 0 0 0 2px rgba(255,255,255,.07); }
+    .relay-card.is-on .relay-indicator { background: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.1), 0 0 12px rgba(52,211,153,.75); animation: relay-glow 1.7s ease-in-out infinite; }
+    .relay-switch { position: relative; width: 42px; height: 22px; border-radius: 99px; background: #2a3c53; transition: background .18s; }
+    .relay-switch::after { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; content: ''; background: #a9bbcf; box-shadow: 0 1px 4px rgba(0,0,0,.4); transition: transform .18s, background .18s; }
+    .relay-card.is-on .relay-switch { background: rgba(52,211,153,.67); }
+    .relay-card.is-on .relay-switch::after { transform: translateX(20px); background: #ebfff6; }
+    .relay-helper { display: block; min-height: 17px; margin-top: 8px; color: var(--muted); font-size: 10px; }
+    .relay-card.is-on .relay-helper { color: #a7e9ca; }
+
+    .technical-help { margin-top: 13px; border: 1px solid var(--line); border-radius: 12px; background: rgba(8,21,36,.38); }
+    .technical-help + .technical-help { margin-top: 9px; }
+    .technical-help summary { display: flex; align-items: center; min-height: 42px; padding: 10px 12px; cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; }
+    .technical-help summary::-webkit-details-marker { display: none; }
+    .technical-help summary::after { margin-left: auto; content: '⌄'; transition: transform .16s; }
+    .technical-help[open] summary { border-bottom: 1px solid var(--line); }
+    .technical-help[open] summary::after { transform: rotate(180deg); }
+    .technical-help p { margin: 0; padding: 11px 12px; color: var(--muted); font-size: 11px; }
+    .technical-help .facts { margin: 11px; }
+    .debug-log {
+      min-height: 66px;
+      max-height: 220px;
+      margin: 11px;
+      overflow: auto;
+      padding: 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: #c7d7ec;
+      background: #081524;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .uplink-card { margin-top: 16px; }
+    .uplink-copy { margin: -5px 0 14px; color: var(--muted); font-size: 12px; }
+    .uplink-status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 13px;
+      padding: 11px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--muted);
+      background: rgba(8,21,36,.52);
+    }
+    .uplink-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #64748b; }
+    .uplink-status strong { display: block; color: #dce9f8; font-size: 13px; }
+    .uplink-status span:last-child { display: block; margin-top: 1px; font-size: 11px; }
+    .uplink-status[data-state="connecting"] .uplink-dot { background: var(--warning); box-shadow: 0 0 0 4px rgba(251,191,36,.12); }
+    .uplink-status[data-state="connected"] .uplink-dot { background: var(--primary); box-shadow: 0 0 0 4px rgba(52,211,153,.12); }
+    .uplink-status[data-state="failed"] .uplink-dot { background: var(--danger); box-shadow: 0 0 0 4px rgba(251,113,133,.12); }
+    .uplink-status[data-state="connected"] strong { color: #b8f7dc; }
+    .uplink-status[data-state="failed"] strong { color: #fecdd3; }
+    .uplink-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .uplink-picker { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+    .uplink-picker .btn { min-height: 39px; padding: 8px 11px; white-space: nowrap; }
+    .uplink-actions { justify-content: flex-start; }
+    .lan-access {
+      margin: 0 0 13px;
+      padding: 12px;
+      border: 1px solid rgba(52,211,153,.35);
+      border-radius: 12px;
+      color: #cce8dd;
+      background: rgba(6,78,59,.17);
+    }
+    .lan-access[hidden] { display: none; }
+    .lan-access strong { display: block; color: #b8f7dc; font-size: 13px; }
+    .lan-access > span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .lan-addresses { display: grid; gap: 7px; margin-top: 10px; }
+    .lan-address {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 11px;
+    }
+    .lan-address > span { color: var(--muted); }
+    .lan-address a, .lan-address code {
+      min-width: 0;
+      overflow: hidden;
+      color: #dce9f8;
+      font: 12px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+    .lan-address a { color: #8be7bf; }
+    .copy-address { min-height: 29px; padding: 5px 8px; font-size: 11px; }
+
+    .config-card { margin-top: 16px; }
+    .config-copy { margin: -5px 0 15px; color: var(--muted); font-size: 12px; }
+    .config-copy code { color: #c7d7ec; }
+    .config-sections { display: grid; gap: 11px; }
+    .config-section {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      background: rgba(8,21,36,.52);
+    }
+    .config-section > summary {
+      display: flex;
+      align-items: center;
+      min-height: 47px;
+      padding: 12px 14px;
+      cursor: pointer;
+      color: #dce9f8;
+      font-weight: 700;
+      list-style: none;
+    }
+    .config-section > summary::-webkit-details-marker { display: none; }
+    .config-section > summary::after { margin-left: auto; color: var(--muted); content: '⌄'; transition: transform .16s; }
+    .config-section[open] > summary { border-bottom: 1px solid var(--line); }
+    .config-section[open] > summary::after { transform: rotate(180deg); }
+    .config-section-body { padding: 14px; }
+    .field-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+    .field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .field input, .field select {
+      width: 100%;
+      min-height: 39px;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      outline: none;
+      color: var(--text);
+      background: #0a1829;
+    }
+    .field input:focus, .field select:focus { border-color: rgba(96,165,250,.75); box-shadow: 0 0 0 3px rgba(96,165,250,.1); }
+    .field input:disabled, .field select:disabled { opacity: .5; cursor: not-allowed; }
+    .field-note { grid-column: 1 / -1; margin: 2px 0 0; color: #7890ad; font-size: 11px; }
+    .toggle-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 40px;
+      padding: 8px 9px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      color: #c7d7ec;
+      background: rgba(16,31,52,.62);
+      font-size: 12px;
+    }
+    .toggle input { width: 16px; height: 16px; accent-color: var(--primary-2); }
+    .range-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .range-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 83px 83px;
+      align-items: end;
+      gap: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(16,31,52,.46);
+    }
+    .range-name { padding-bottom: 8px; color: #c7d7ec; font-size: 12px; }
+    .range-row .field { font-size: 10px; }
+    .config-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 15px; }
+    .config-actions .btn { min-width: 164px; }
+    .config-warning { margin: 13px 0 0; color: #fcd34d; font-size: 11px; }
+
+    dialog {
+      width: min(430px, calc(100% - 28px));
+      padding: 0;
+      border: 1px solid rgba(251,113,133,.3);
+      border-radius: 18px;
+      color: var(--text);
+      background: #0d1b2e;
+      box-shadow: 0 30px 90px rgba(0,0,0,.65);
+    }
+
+    dialog::backdrop { background: rgba(2,8,18,.78); backdrop-filter: blur(5px); }
+    .modal { padding: 22px; }
+    .modal h3 { margin: 0 0 8px; font-size: 18px; }
+    .modal p { margin: 0 0 15px; color: var(--muted); font-size: 13px; }
+    .modal label { display: block; margin-bottom: 6px; font-size: 12px; }
+    .confirm-input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; outline: none; color: var(--text); background: #081524; }
+    .confirm-input:focus { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(251,113,133,.1); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 17px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom));
+      z-index: 20;
+      max-width: calc(100% - 28px);
+      padding: 11px 15px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: var(--text);
+      background: #12233a;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transform: translate(-50%, 15px);
+      pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      font-size: 13px;
+    }
+
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { border-color: rgba(251,113,133,.45); }
+    footer { padding: 20px 4px 0; color: #6f839c; text-align: center; font-size: 11px; }
+
+    @keyframes pulse { 50% { opacity: .3; transform: scale(.75); } }
+    @keyframes relay-glow { 50% { opacity: .68; } }
+
+    @media (max-width: 720px) {
+      .grid { grid-template-columns: 1fr; }
+      .card { padding: 17px; }
+      .connection .connection-label { display: none; }
+      .dropzone { min-height: 165px; }
+      .field-grid, .toggle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .range-grid { grid-template-columns: 1fr; }
+      .runtime-visuals { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 480px) {
+      .shell { width: min(100% - 20px, 920px); }
+      .danger-actions, .actions { grid-template-columns: 1fr; }
+      .actions .primary { grid-column: auto; }
+      .upload-row { align-items: stretch; flex-direction: column; }
+      .fact { grid-template-columns: 78px 1fr; }
+      .card-head { align-items: flex-start; flex-wrap: wrap; }
+      .field-grid, .toggle-grid { grid-template-columns: 1fr; }
+      .range-row { grid-template-columns: minmax(0, 1fr) 76px 76px; }
+      .config-actions .btn { width: 100%; }
+      .display-cluster { gap: 8px; }
+      .display-card { padding: 11px 8px; }
+      .seg-digit { width: 21px; height: 42px; }
+      .seg.a, .seg.g, .seg.d { left: 3px; width: 15px; }
+      .seg.g { top: 19px; }
+      .seg.b, .seg.c, .seg.e, .seg.f { height: 16px; }
+      .relay-grid { gap: 8px; }
+      .relay-card { padding: 11px 9px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation-duration: .001ms !important; }
+    }
+  </style>
+</head>
+<body><div style="background:#b45309;color:white;padding:12px;text-align:center;font:14px sans-serif">ESP32-C5 · MÔ PHỎNG MS51 · Không điều khiển MS51 thật</div>
+  <main class="shell">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><path d="M9 1v4m6-4v4M9 19v4m6-4v4M1 9h4m-4 6h4m14-6h4m-4 6h4M9 9h6v6H9z"/></svg>
+        </div>
+        <div>
+          <h1>Bảng điều khiển thiết bị</h1>
+          <p class="subtitle">Cập nhật · Theo dõi · Cài đặt</p>
+        </div>
+      </div>
+      <div class="connection" id="connection" title="Trạng thái kết nối thiết bị">
+        <span class="dot"></span>
+        <span class="connection-label" id="connectionText">Đang tìm thiết bị</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card" aria-labelledby="uploadTitle">
+        <div class="card-head">
+          <div>
+            <div class="eyebrow">Cập nhật</div>
+            <h2 id="uploadTitle">Chọn tệp chương trình</h2>
+          </div>
+          <span class="eyebrow">.BIN hoặc .HEX</span>
+        </div>
+
+        <label class="dropzone" id="dropzone" for="fileInput">
+          <input type="file" id="fileInput" accept=".bin,.hex,.ihex,.ihx,application/octet-stream,text/plain">
+          <div>
+            <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v4a2 2 0 002 2h10a2 2 0 002-2v-4"/></svg>
+            <p class="drop-title">Chọn hoặc thả <span class="browse">tệp cập nhật</span></p>
+            <p class="drop-help">Chấp nhận tệp .bin hoặc .hex</p>
+          </div>
+        </label>
+
+        <div class="file" id="fileCard">
+          <div class="file-icon" id="fileKind">BIN</div>
+          <div style="min-width:0">
+            <div class="file-name" id="fileName">—</div>
+            <div class="file-meta"><span id="fileSize">—</span> · CRC32 <span id="fileCrc">—</span></div>
+          </div>
+          <button class="icon-btn" id="removeFile" type="button" aria-label="Bỏ file đã chọn" title="Bỏ file">✕</button>
+        </div>
+
+        <div class="upload-row">
+          <button class="btn primary" id="uploadBtn" type="button" disabled>Lưu tệp cập nhật</button>
+          <div class="progress" id="progress">
+            <div class="progress-label"><span id="progressText">Đang tải lên…</span><span id="progressPct">0%</span></div>
+            <div class="bar"><span id="progressBar"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="stack">
+        <section class="card" aria-labelledby="controlTitle">
+          <div class="card-head">
+            <div>
+              <div class="eyebrow">Thao tác</div>
+              <h2 id="controlTitle">Thiết bị đang kết nối</h2>
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn primary action" data-action="program" data-needs-image type="button">Cập nhật chương trình</button>
+            <button class="btn action" data-action="info" type="button">Kiểm tra kết nối</button>
+            <button class="btn action" data-action="verify" data-needs-image type="button">Đối chiếu chương trình</button>
+            <button class="btn action" data-action="reset" type="button">Khởi động lại</button>
+          </div>
+          <div class="status-box" id="statusBox" role="status" aria-live="polite">
+            <span class="status-mark"></span>
+            <span id="statusText">Sẵn sàng.</span>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="deviceTitle">
+          <div class="card-head">
+            <div>
+              <div class="eyebrow">Tình trạng thiết bị</div>
+              <h2 id="deviceTitle">Thông tin thiết bị</h2>
+            </div>
+          </div>
+          <dl class="facts">
+            <div class="fact"><dt>Mã thiết bị</dt><dd id="pdid">Chưa đọc</dd></div>
+            <div class="fact"><dt>Mã cấu hình</dt><dd id="config">—</dd></div>
+            <div class="fact"><dt>Bảo vệ</dt><dd id="security">—</dd></div>
+            <div class="fact"><dt>Chương trình</dt><dd id="aprom">—</dd></div>
+            <div class="fact"><dt>Bộ nhớ phụ</dt><dd id="ldrom">—</dd></div>
+          </dl>
+        </section>
+      </div>
+    </div>
+
+    <section class="card debug-card" aria-labelledby="debugTitle">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Theo dõi trực tiếp</div>
+          <h2 id="debugTitle">Trạng thái đang chạy</h2>
+        </div>
+        <span class="debug-state waiting" id="debugState">Đang chờ dữ liệu</span>
+      </div>
+      <p class="debug-copy">Các giá trị được cập nhật tự động khi thiết bị đang chạy.</p>
+
+      <div class="runtime-visuals">
+        <div class="mode-panel" id="modePanel" data-mode="idle">
+          <span class="mode-icon" id="modeIcon" aria-hidden="true">○</span>
+          <div>
+            <span class="runtime-label">Chế độ hiện tại</span>
+            <strong class="mode-value" id="modeValue">Đang chờ dữ liệu</strong>
+            <span class="mode-help" id="modeHelp">Kết nối sẽ cập nhật ngay khi thiết bị gửi dữ liệu.</span>
+          </div>
+        </div>
+
+        <div class="display-cluster">
+          <div class="display-card green">
+            <div class="display-top"><span>Màn hình xanh</span><span class="display-unit">phút</span></div>
+            <div class="seven-seg" id="greenDisplay" role="img" aria-label="Màn hình xanh: chưa có dữ liệu"></div>
+          </div>
+          <div class="display-card red">
+            <div class="display-top"><span>Màn hình đỏ</span><span class="display-unit">phút</span></div>
+            <div class="seven-seg" id="redDisplay" role="img" aria-label="Màn hình đỏ: chưa có dữ liệu"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="relay-grid" aria-label="Trạng thái rơ-le">
+        <div class="relay-card" id="relay1Card">
+          <div class="relay-head"><span class="relay-name">Rơ-le 1</span><span class="relay-state" id="relay1State">—</span></div>
+          <div class="relay-graphic" aria-hidden="true"><span class="relay-indicator"></span><span class="relay-switch"></span></div>
+          <span class="relay-helper" id="relay1Help">Chưa có dữ liệu</span>
+        </div>
+        <div class="relay-card" id="relay2Card">
+          <div class="relay-head"><span class="relay-name">Rơ-le 2</span><span class="relay-state" id="relay2State">—</span></div>
+          <div class="relay-graphic" aria-hidden="true"><span class="relay-indicator"></span><span class="relay-switch"></span></div>
+          <span class="relay-helper" id="relay2Help">Chưa có dữ liệu</span>
+        </div>
+        <div class="relay-card" id="relay3Card">
+          <div class="relay-head"><span class="relay-name">Rơ-le 3</span><span class="relay-state" id="relay3State">—</span></div>
+          <div class="relay-graphic" aria-hidden="true"><span class="relay-indicator"></span><span class="relay-switch"></span></div>
+          <span class="relay-helper" id="relay3Help">Chưa có dữ liệu</span>
+        </div>
+      </div>
+
+      <details class="technical-help">
+        <summary>Thông tin kỹ thuật</summary>
+        <p>Dữ liệu trạng thái được nhận qua kết nối nội bộ; việc cập nhật chương trình sẽ tạm dừng phần theo dõi này.</p>
+        <dl class="facts" id="debugVars">
+          <div class="fact"><dt>Dữ liệu</dt><dd>Chưa có</dd></div>
+        </dl>
+      </details>
+      <details class="technical-help">
+        <summary>Nhật ký kỹ thuật</summary>
+        <pre class="debug-log" id="debugLog">Đang chờ dữ liệu từ thiết bị…</pre>
+      </details>
+    </section>
+
+    <section class="card uplink-card" id="uplinkCard" aria-labelledby="uplinkTitle">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Internet</div>
+          <h2 id="uplinkTitle">Kết nối Wi-Fi có Internet</h2>
+        </div>
+      </div>
+      <p class="uplink-copy">Thiết bị sẽ vào Wi-Fi bên dưới. Khi đã có IP, điện thoại cũng chuyển sang chính Wi-Fi đó để điều khiển như bình thường.</p>
+      <div class="uplink-status" id="uplinkStatus" data-state="not_configured" role="status" aria-live="polite">
+        <span class="uplink-dot" aria-hidden="true"></span>
+        <div><strong id="uplinkState">Chưa thiết lập Wi-Fi Internet</strong><span id="uplinkDetails">Chọn mạng Wi-Fi và nhập mật khẩu.</span></div>
+      </div>
+      <div class="lan-access" id="lanAccess" hidden>
+        <strong>Địa chỉ điều khiển sau khi điện thoại đổi sang Wi-Fi này</strong>
+        <span>Sao chép một địa chỉ bên dưới, chuyển điện thoại sang cùng Wi-Fi, rồi mở địa chỉ đó.</span>
+        <div class="lan-addresses">
+          <div class="lan-address">
+            <span>Tên dễ nhớ</span>
+            <a id="lanHostname" href="#" target="_blank" rel="noopener">Đang nhận địa chỉ…</a>
+            <button class="btn copy-address" id="copyLanHostname" type="button">Sao chép</button>
+          </div>
+          <div class="lan-address">
+            <span>IP của thiết bị</span>
+            <code id="lanIp">Đang chờ IP…</code>
+            <button class="btn copy-address" id="copyLanIp" type="button">Sao chép</button>
+          </div>
+        </div>
+      </div>
+      <form id="uplinkForm" autocomplete="off">
+        <div class="field-grid uplink-fields">
+          <div class="uplink-picker">
+            <label class="field">Chọn Wi-Fi có Internet<select id="uplinkSsid" required><option value="">Bấm “Quét Wi-Fi” để tìm mạng</option></select></label>
+            <button class="btn" id="uplinkScan" type="button">Quét Wi-Fi</button>
+          </div>
+          <label class="field">Mật khẩu Wi-Fi<input id="uplinkPassword" type="password" maxlength="63" autocapitalize="none" autocomplete="new-password" spellcheck="false" placeholder="Để trống nếu Wi-Fi không có mật khẩu"></label>
+        </div>
+        <div class="config-actions uplink-actions">
+          <button class="btn primary" id="uplinkConnect" type="submit">Lưu và kết nối Internet</button>
+          <button class="btn danger" id="uplinkForget" type="button">Quên Wi-Fi này</button>
+        </div>
+      </form>
+      <p class="field-note">Chọn mạng Wi-Fi được thiết bị tìm thấy. ESP32-C5 hỗ trợ 2.4 GHz và 5 GHz. Nếu địa chỉ theo tên thiết bị không mở được, dùng IP ở trên. Wi-Fi dự phòng có dạng <code>MS51-PROGRAMMER-&lt;MAC&gt;</code>, địa chỉ <code>192.168.4.1</code>.</p>
+    </section>
+
+    <section class="card config-card" id="runtimeConfigCard" aria-labelledby="runtimeConfigTitle">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow">Cài đặt</div>
+          <h2 id="runtimeConfigTitle">Cài đặt vận hành</h2>
+        </div>
+      </div>
+      <p class="config-copy">Đọc cài đặt đang dùng hoặc lưu thay đổi vào thiết bị. Thiết bị sẽ khởi động lại sau khi lưu.</p>
+
+      <form id="runtimeConfigForm" autocomplete="off">
+        <div class="config-sections">
+          <details class="config-section" open>
+            <summary>Thời gian hoạt động</summary>
+            <div class="config-section-body">
+              <div class="field-grid">
+                <label class="field">Làm lạnh (CL, phút)<input id="cfgCoolCl" type="number" min="1" max="999" value="5" inputmode="numeric"></label>
+                <label class="field">Làm lạnh (OP, phút)<input id="cfgCoolOp" type="number" min="1" max="999" value="5" inputmode="numeric"></label>
+                <label class="field">Xả đá (CL, phút)<input id="cfgDefrostCl" type="number" min="1" max="999" value="60" inputmode="numeric"></label>
+                <label class="field">Xả đá (OP, phút/giây)<input id="cfgDefrostOp" type="number" min="1" max="999" value="6" inputmode="numeric"></label>
+                <label class="field">Thời gian chờ ST (100 ms)<input id="cfgDelaySt" type="number" min="1" max="255" value="70" inputmode="numeric"></label>
+                <label class="field">ST LED (100 ms)<input id="cfgStLed" type="number" min="0" max="90" value="50" inputmode="numeric"></label>
+                <label class="field">ST LCD (100 ms)<input id="cfgStLcd" type="number" min="0" max="90" value="50" inputmode="numeric"></label>
+                <label class="field">Thời gian tự khóa<input id="cfgLockTime" type="number" min="0" max="999" value="0" inputmode="numeric"></label>
+                <label class="field">Độ sáng LED xanh<input id="cfgGreenBrightness" type="number" min="0" max="7" value="0" inputmode="numeric"></label>
+                <label class="field">Độ sáng LED đỏ<input id="cfgRedBrightness" type="number" min="0" max="7" value="0" inputmode="numeric"></label>
+                <label class="field">Thời gian thử lại<input id="cfgTryTime" type="number" min="0" max="999" value="0" inputmode="numeric"></label>
+                <label class="field">Đơn vị thử lại<select id="cfgTryUnit"><option value="0">Giờ</option><option value="1">Ngày</option></select></label>
+                <label class="field">Thời gian HCF OP<input id="cfgHcfTime" type="number" min="1" max="999" value="10" inputmode="numeric"></label>
+                <label class="field">Trễ bật xả đá<input id="cfgDelayDf" type="number" min="0" max="90" value="0" inputmode="numeric"></label>
+              </div>
+              <p class="field-note">Một số giá trị có giới hạn để tránh nhập vượt mức thiết bị hỗ trợ.</p>
+            </div>
+          </details>
+
+          <details class="config-section" open>
+            <summary>Chế độ và hiển thị</summary>
+            <div class="config-section-body">
+              <div class="field-grid" style="margin-bottom:11px">
+                <label class="field">Chế độ DF<select id="cfgDf"><option value="0">Tắt</option><option value="1" selected>Bật</option></select></label>
+                <label class="field">Chế độ END<select id="cfgEnd"><option value="0">Tắt</option><option value="1" selected>Bật</option></select></label>
+                <label class="field">Bắt đầu làm lạnh<select id="cfgCoolStart"><option value="0">CL</option><option value="1" selected>OP</option></select></label>
+                <label class="field">Bắt đầu xả đá<select id="cfgDefrostStart"><option value="0">CL</option><option value="1" selected>OP</option></select></label>
+                <label class="field">Kiểu màn hình<select id="cfgDisplayMode"><option value="0" selected>LCD</option><option value="1">LED</option></select></label>
+                <label class="field">Chế độ HCF<select id="cfgHcfMode"><option value="1" selected>CF</option><option value="0">H</option></select></label>
+                <label class="field">Chế độ HDF<select id="cfgHdf"><option value="0" selected>Tắt</option><option value="1">Bật</option></select></label>
+                <label class="field">Tỷ lệ thời gian R1/R2<select id="cfgOnTime"><option value="0" selected>R1:1 R2:1</option><option value="1">R1:2 R2:1</option><option value="2">R1:1 R2:2</option><option value="3">R1:2 R2:2</option></select></label>
+                <label class="field">Số lần chạm<select id="cfgTouch"><option value="0" selected>1</option><option value="1">2</option></select></label>
+              </div>
+              <div class="toggle-grid">
+                <label class="toggle"><input id="cfgDefrostOpSeconds" type="checkbox"> Xả đá OP tính giây</label>
+                <label class="toggle"><input id="cfgShowDf" type="checkbox"> Hiện chế độ DF</label>
+                <label class="toggle"><input id="cfgShowEnd" type="checkbox"> Hiện chế độ END</label>
+                <label class="toggle"><input id="cfgShowSl" type="checkbox"> Hiện chế độ SL</label>
+                <label class="toggle"><input id="cfgShowHcf" type="checkbox"> Hiện chế độ HCF</label>
+                <label class="toggle"><input id="cfgShowHdf" type="checkbox"> Hiện chế độ HDF</label>
+                <label class="toggle"><input id="cfgShowSt" type="checkbox"> Hiện ST LED</label>
+              </div>
+              <p class="field-note">Các lựa chọn “Hiện” quyết định nội dung được phép xuất hiện trên màn hình.</p>
+            </div>
+          </details>
+
+          <details class="config-section">
+            <summary>Giới hạn thời gian (Min / Max)</summary>
+            <div class="config-section-body">
+              <div class="range-grid">
+                <div class="range-row"><span class="range-name">Chạy lạnh CL</span><label class="field">Min<input id="cfgRangeCoolClMin" type="number" min="1" max="999" value="1" inputmode="numeric"></label><label class="field">Max<input id="cfgRangeCoolClMax" type="number" min="1" max="999" value="999" inputmode="numeric"></label></div>
+                <div class="range-row"><span class="range-name">Chạy lạnh OP</span><label class="field">Min<input id="cfgRangeCoolOpMin" type="number" min="1" max="999" value="1" inputmode="numeric"></label><label class="field">Max<input id="cfgRangeCoolOpMax" type="number" min="1" max="999" value="999" inputmode="numeric"></label></div>
+                <div class="range-row"><span class="range-name">Xả đá CL</span><label class="field">Min<input id="cfgRangeDefrostClMin" type="number" min="1" max="999" value="1" inputmode="numeric"></label><label class="field">Max<input id="cfgRangeDefrostClMax" type="number" min="1" max="999" value="999" inputmode="numeric"></label></div>
+                <div class="range-row"><span class="range-name">Xả đá OP</span><label class="field">Min<input id="cfgRangeDefrostOpMin" type="number" min="1" max="999" value="1" inputmode="numeric"></label><label class="field">Max<input id="cfgRangeDefrostOpMax" type="number" min="1" max="999" value="999" inputmode="numeric"></label></div>
+                <div class="range-row"><span class="range-name">ST LCD</span><label class="field">Min<input id="cfgRangeStLcdMin" type="number" min="0" max="90" value="0" inputmode="numeric"></label><label class="field">Max<input id="cfgRangeStLcdMax" type="number" min="0" max="90" value="90" inputmode="numeric"></label></div>
+                <div class="range-row"><span class="range-name">ST LED</span><label class="field">Min<input id="cfgRangeStLedMin" type="number" min="0" max="90" value="0" inputmode="numeric"></label><label class="field">Max<input id="cfgRangeStLedMax" type="number" min="0" max="90" value="90" inputmode="numeric"></label></div>
+              </div>
+            </div>
+          </details>
+
+          <details class="config-section" open>
+            <summary>Mật khẩu bảo vệ</summary>
+            <div class="config-section-body">
+              <div class="toggle-grid" style="margin-bottom:11px">
+                <label class="toggle"><input id="cfgPinEnable" type="checkbox" checked> Bật mật khẩu</label>
+              </div>
+              <div class="field-grid">
+                <label class="field" data-pin-field>Mật khẩu<input id="cfgPinPassword" type="number" min="0" max="999" value="123" inputmode="numeric"></label>
+                <label class="field" data-pin-field>Số lần nhập sai tối đa<input id="cfgPinWrongLimit" type="number" min="1" max="99" value="3" inputmode="numeric"></label>
+                <label class="field" data-pin-field>Chu kỳ yêu cầu mật khẩu<input id="cfgPinPeriod" type="number" min="0" max="999" value="0" inputmode="numeric"></label>
+                <label class="field" data-pin-field>Đơn vị chu kỳ<select id="cfgPinPeriodUnit"><option value="0" selected>Giờ</option><option value="1">Ngày</option></select></label>
+                <label class="field" data-pin-field>Mật khẩu dự phòng<input id="cfgPinBackupPassword" type="number" min="0" max="999" value="999" inputmode="numeric"></label>
+                <label class="field" data-pin-field>Thời gian dự phòng<input id="cfgPinBackupPeriod" type="number" min="1" max="999" value="1" inputmode="numeric"></label>
+                <label class="field" data-pin-field>Đơn vị dự phòng<select id="cfgPinBackupPeriodUnit"><option value="0" selected>Giờ</option><option value="1">Ngày</option></select></label>
+              </div>
+              <div class="toggle-grid" style="margin-top:11px">
+                <label class="toggle" data-pin-field><input id="cfgPinPeriodShow" type="checkbox" checked> Hiện phần chỉnh chu kỳ</label>
+              </div>
+              <p class="field-note">Tắt mật khẩu sẽ xóa các thiết lập mật khẩu đang lưu.</p>
+            </div>
+          </details>
+        </div>
+
+        <div class="config-actions">
+          <button class="btn" id="runtimeConfigRead" type="button">Đọc cài đặt</button>
+          <button class="btn primary" id="runtimeConfigSave" type="button">Lưu cài đặt</button>
+        </div>
+        <p class="config-warning">Lưu cài đặt sẽ xóa lịch sử mở khóa và trạng thái tạm của mật khẩu, sau đó thiết bị khởi động lại.</p>
+        <details class="technical-help">
+          <summary>Thông tin kỹ thuật</summary>
+          <p>Cài đặt được lưu vào vùng cấu hình nội bộ. Việc lưu không thay đổi chương trình đang chạy trên thiết bị.</p>
+        </details>
+      </form>
+    </section>
+
+    <section class="card danger-card" style="margin-top:16px" aria-labelledby="dangerTitle">
+      <div class="card-head">
+        <div>
+          <div class="eyebrow" style="color:var(--danger)">Dành cho kỹ thuật viên</div>
+          <h2 id="dangerTitle">Xóa / nạp đặc biệt</h2>
+        </div>
+      </div>
+      <p class="danger-copy">Chỉ dùng khi sửa chữa. Ghi đè toàn bộ bộ nhớ có thể làm mất vùng không có trong tệp; xóa thiết bị sẽ mất chương trình và cài đặt.</p>
+      <div class="danger-actions">
+        <button class="btn danger destructive" data-action="program-full" data-needs-image type="button">Ghi đè toàn bộ bộ nhớ</button>
+        <button class="btn danger destructive" data-action="erase" type="button">Xóa thiết bị</button>
+      </div>
+    </section>
+
+    <footer><span id="wifiInfo">Kết nối Wi-Fi sẵn sàng</span> · Thiết bị điều khiển</footer>
+  </main>
+
+  <dialog id="confirmDialog">
+    <form class="modal" method="dialog" id="confirmForm">
+      <h3 id="confirmTitle">Xác nhận thao tác</h3>
+      <p id="confirmMessage"></p>
+      <label for="confirmInput">Nhập chính xác <strong>CONFIRM</strong> để tiếp tục:</label>
+      <input class="confirm-input" id="confirmInput" autocomplete="off" spellcheck="false" placeholder="CONFIRM">
+      <div class="modal-actions">
+        <button class="btn" value="cancel" type="submit">Hủy</button>
+        <button class="btn danger" id="confirmBtn" value="confirm" type="submit" disabled>Xác nhận</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const $ = (selector) => document.querySelector(selector);
+      const els = {
+        connection: $('#connection'), connectionText: $('#connectionText'),
+        dropzone: $('#dropzone'), input: $('#fileInput'), fileCard: $('#fileCard'),
+        fileName: $('#fileName'), fileSize: $('#fileSize'), fileCrc: $('#fileCrc'), fileKind: $('#fileKind'),
+        remove: $('#removeFile'), upload: $('#uploadBtn'), progress: $('#progress'),
+        progressText: $('#progressText'), progressPct: $('#progressPct'), progressBar: $('#progressBar'),
+        statusBox: $('#statusBox'), statusText: $('#statusText'), toast: $('#toast'),
+        wifiInfo: $('#wifiInfo'), uplinkForm: $('#uplinkForm'), uplinkSsid: $('#uplinkSsid'),
+        uplinkPassword: $('#uplinkPassword'), uplinkConnect: $('#uplinkConnect'),
+        uplinkScan: $('#uplinkScan'), uplinkForget: $('#uplinkForget'), uplinkStatus: $('#uplinkStatus'),
+        uplinkState: $('#uplinkState'), uplinkDetails: $('#uplinkDetails'),
+        lanAccess: $('#lanAccess'), lanHostname: $('#lanHostname'), lanIp: $('#lanIp'),
+        copyLanHostname: $('#copyLanHostname'), copyLanIp: $('#copyLanIp'),
+        dialog: $('#confirmDialog'), confirmForm: $('#confirmForm'),
+        confirmTitle: $('#confirmTitle'), confirmMessage: $('#confirmMessage'),
+        confirmInput: $('#confirmInput'), confirmBtn: $('#confirmBtn'),
+        debugState: $('#debugState'), debugVars: $('#debugVars'), debugLog: $('#debugLog'),
+        modePanel: $('#modePanel'), modeIcon: $('#modeIcon'), modeValue: $('#modeValue'), modeHelp: $('#modeHelp'),
+        greenDisplay: $('#greenDisplay'), redDisplay: $('#redDisplay'),
+        relay1Card: $('#relay1Card'), relay2Card: $('#relay2Card'), relay3Card: $('#relay3Card'),
+        relay1State: $('#relay1State'), relay2State: $('#relay2State'), relay3State: $('#relay3State'),
+        relay1Help: $('#relay1Help'), relay2Help: $('#relay2Help'), relay3Help: $('#relay3Help'),
+        runtimeConfigForm: $('#runtimeConfigForm'), runtimeConfigRead: $('#runtimeConfigRead'),
+        runtimeConfigSave: $('#runtimeConfigSave'), cfgPinEnable: $('#cfgPinEnable')
+      };
+
+      const state = { file: null, crc32: null, selectedUploaded: false, uploadedGeneration: 0, serverImage: null, imageReady: false, busy: false, localBusy: false, uplinkBusy: false, uplinkScanBusy: false, uplinkKnownSsid: '', pendingDanger: null };
+      let toastTimer;
+
+      const crcTable = (() => {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+          let c = n;
+          for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+          table[n] = c >>> 0;
+        }
+        return table;
+      })();
+
+      function crc32(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let crc = 0xFFFFFFFF;
+        for (const byte of bytes) crc = crcTable[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+      }
+
+      function hex32(value) {
+        if (typeof value === 'string') return value.toUpperCase().startsWith('0X') ? value.toUpperCase() : value;
+        return '0x' + (Number(value) >>> 0).toString(16).padStart(8, '0').toUpperCase();
+      }
+
+      function formatBytes(bytes) {
+        const n = Number(bytes) || 0;
+        if (n < 1024) return n + ' B';
+        return (n / 1024).toFixed(n % 1024 ? 1 : 0) + ' KB';
+      }
+
+      function setOnline(online) {
+        els.connection.classList.toggle('online', online);
+        els.connectionText.textContent = online ? 'Thiết bị đã kết nối' : 'Mất kết nối';
+      }
+
+      function setStatus(message, kind = '') {
+        els.statusText.textContent = message || 'Sẵn sàng.';
+        els.statusBox.className = 'status-box' + (kind ? ' ' + kind : '');
+      }
+
+      function toast(message, error = false) {
+        clearTimeout(toastTimer);
+        els.toast.textContent = message;
+        els.toast.className = 'toast show' + (error ? ' error' : '');
+        toastTimer = setTimeout(() => { els.toast.className = 'toast'; }, 3200);
+      }
+
+      function updateButtons() {
+        const controlsLocked = state.busy || state.localBusy;
+        document.querySelectorAll('button.action, button.destructive').forEach((button) => {
+          button.disabled = controlsLocked || (button.hasAttribute('data-needs-image') && !state.imageReady);
+        });
+        els.upload.disabled = controlsLocked || !state.file;
+        els.remove.disabled = controlsLocked;
+        if (els.runtimeConfigForm) {
+          els.runtimeConfigForm.querySelectorAll('input, select').forEach((control) => {
+            control.disabled = controlsLocked;
+          });
+          els.runtimeConfigRead.disabled = controlsLocked;
+          els.runtimeConfigSave.disabled = controlsLocked;
+          syncPinControls();
+        }
+        if (els.uplinkForm) {
+          els.uplinkForm.querySelectorAll('input, select, button').forEach((control) => {
+            control.disabled = controlsLocked || state.uplinkBusy || state.uplinkScanBusy;
+          });
+        }
+      }
+
+      function syncPinControls() {
+        if (!els.cfgPinEnable) return;
+        const disabled = state.busy || state.localBusy || !els.cfgPinEnable.checked;
+        document.querySelectorAll('[data-pin-field] input, [data-pin-field] select').forEach((control) => {
+          control.disabled = disabled;
+        });
+      }
+
+      function setBusy(busy, message) {
+        state.localBusy = busy;
+        updateButtons();
+        if (message) setStatus(message, busy ? 'busy' : '');
+      }
+
+      async function parseResponse(response) {
+        const text = await response.text();
+        let data = {};
+        if (text) {
+          try { data = JSON.parse(text); }
+          catch (_) { data = { message: text }; }
+        }
+        if (!response.ok || data.ok === false) throw new Error(data.message || `Lỗi HTTP ${response.status}`);
+        return data;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, { cache: 'no-store', ...options });
+        return parseResponse(response);
+      }
+
+      const runtimeConfigSize = 217;
+
+      function configInteger(id, label, minimum, maximum) {
+        const raw = String(document.getElementById(id).value || '').trim();
+        if (!/^(0|[1-9]\d*)$/.test(raw)) throw new Error(`${label} phải là số nguyên.`);
+        const value = Number(raw);
+        if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+          throw new Error(`${label} phải từ ${minimum} đến ${maximum}.`);
+        }
+        return value;
+      }
+
+      function setConfigValue(id, value) {
+        document.getElementById(id).value = String(value);
+      }
+
+      function setConfigChecked(id, checked) {
+        document.getElementById(id).checked = Boolean(checked);
+      }
+
+      function configChecked(id) {
+        return document.getElementById(id).checked ? 1 : 0;
+      }
+
+      function writeU16BE(bytes, offset, value) {
+        bytes[offset] = (value >>> 8) & 0xFF;
+        bytes[offset + 1] = value & 0xFF;
+      }
+
+      function readU16BE(bytes, offset) {
+        return (bytes[offset] << 8) | bytes[offset + 1];
+      }
+
+      function writeU32BE(bytes, offset, value) {
+        bytes[offset] = (value >>> 24) & 0xFF;
+        bytes[offset + 1] = (value >>> 16) & 0xFF;
+        bytes[offset + 2] = (value >>> 8) & 0xFF;
+        bytes[offset + 3] = value & 0xFF;
+      }
+
+      function readU32BE(bytes, offset) {
+        return bytes[offset] * 0x1000000 + (bytes[offset + 1] << 16) +
+          (bytes[offset + 2] << 8) + bytes[offset + 3];
+      }
+
+      function bytesToHex(bytes) {
+        let output = '';
+        for (const value of bytes) output += value.toString(16).padStart(2, '0').toUpperCase();
+        return output;
+      }
+
+      function hexToBytes(text) {
+        if (typeof text !== 'string' || text.length !== runtimeConfigSize * 2 || !/^[0-9a-fA-F]+$/.test(text)) {
+          throw new Error('Thiết bị trả về dữ liệu cài đặt không hợp lệ.');
+        }
+        const bytes = new Uint8Array(runtimeConfigSize);
+        for (let index = 0; index < bytes.length; ++index) {
+          bytes[index] = Number.parseInt(text.slice(index * 2, index * 2 + 2), 16);
+        }
+        return bytes;
+      }
+
+      function readRanges() {
+        const fields = [
+          ['Chạy lạnh CL', 'cfgRangeCoolClMin', 'cfgRangeCoolClMax', 1, 999],
+          ['Chạy lạnh OP', 'cfgRangeCoolOpMin', 'cfgRangeCoolOpMax', 1, 999],
+          ['Xả đá CL', 'cfgRangeDefrostClMin', 'cfgRangeDefrostClMax', 1, 999],
+          ['Xả đá OP', 'cfgRangeDefrostOpMin', 'cfgRangeDefrostOpMax', 1, 999],
+          ['ST LCD', 'cfgRangeStLcdMin', 'cfgRangeStLcdMax', 0, 90],
+          ['ST LED', 'cfgRangeStLedMin', 'cfgRangeStLedMax', 0, 90]
+        ];
+        return fields.map(([label, minId, maxId, minimum, maximum]) => {
+          const min = configInteger(minId, `${label} Min`, minimum, maximum);
+          const max = configInteger(maxId, `${label} Max`, minimum, maximum);
+          if (min > max) throw new Error(`${label}: Min không thể lớn hơn Max.`);
+          return { label, min, max };
+        });
+      }
+
+      function buildRuntimeConfig() {
+        const coolCl = configInteger('cfgCoolCl', 'Chạy lạnh CL', 1, 999);
+        const coolOp = configInteger('cfgCoolOp', 'Chạy lạnh OP', 1, 999);
+        const defrostCl = configInteger('cfgDefrostCl', 'Xả đá CL', 1, 999);
+        const defrostOp = configInteger('cfgDefrostOp', 'Xả đá OP', 1, 999);
+        const stLed = configInteger('cfgStLed', 'ST LED', 0, 90);
+        const stLcd = configInteger('cfgStLcd', 'ST LCD', 0, 90);
+        const ranges = readRanges();
+        const timedValues = [coolCl, coolOp, defrostCl, defrostOp, stLcd, stLed];
+        ranges.forEach((range, index) => {
+          if (timedValues[index] < range.min || timedValues[index] > range.max) {
+            throw new Error(`${range.label} phải nằm trong giới hạn Min / Max đã chọn.`);
+          }
+        });
+
+        const bytes = new Uint8Array(runtimeConfigSize);
+        bytes[0] = 2;
+        [coolCl, coolOp, defrostCl, defrostOp].forEach((value, index) => writeU32BE(bytes, 1 + index * 4, value));
+        bytes[0x11] = configInteger('cfgDelaySt', 'Delay ST', 1, 255);
+        bytes[0x12] = stLed;
+        bytes[0x13] = configInteger('cfgDf', 'Mode DF', 0, 1);
+        bytes[0x14] = configInteger('cfgEnd', 'Mode END', 0, 1);
+        bytes[0x15] = configInteger('cfgCoolStart', 'Mode chạy lạnh', 0, 1);
+        bytes[0x16] = configInteger('cfgDefrostStart', 'Mode xả đá', 0, 1);
+        bytes[0x17] = configInteger('cfgDisplayMode', 'Mode SL', 0, 1);
+        writeU16BE(bytes, 0x18, configInteger('cfgLockTime', 'Tự khóa', 0, 999));
+        bytes[0x1A] = configInteger('cfgGreenBrightness', 'Độ sáng LED xanh', 0, 7);
+        bytes[0x1B] = configInteger('cfgRedBrightness', 'Độ sáng LED đỏ', 0, 7);
+        bytes[0x1C] = configInteger('cfgHcfMode', 'Mode HCF', 0, 1);
+        bytes[0x1D] = configInteger('cfgHdf', 'Mode HDF', 0, 1);
+        bytes[0x1E] = configInteger('cfgOnTime', 'On time Mode LED', 0, 3);
+        bytes[0x1F] = configInteger('cfgTouch', 'Touch Num', 0, 1);
+        writeU16BE(bytes, 0x20, configInteger('cfgTryTime', 'Try time', 0, 999));
+        writeU16BE(bytes, 0x22, configInteger('cfgHcfTime', 'HCF OP time', 1, 999));
+        writeU16BE(bytes, 0x24, configInteger('cfgDelayDf', 'Delay DF on', 0, 90));
+        bytes[0x26] = configChecked('cfgDefrostOpSeconds');
+        bytes[0x27] = configChecked('cfgShowDf');
+        bytes[0x28] = configChecked('cfgShowEnd');
+        bytes[0x29] = configChecked('cfgShowSl');
+        bytes[0x2A] = configChecked('cfgShowHcf');
+        bytes[0x2B] = configChecked('cfgShowHdf');
+        bytes[0x2C] = configInteger('cfgTryUnit', 'Đơn vị Try time', 0, 1);
+
+        ranges.forEach((range, index) => {
+          writeU16BE(bytes, 0xAB + index * 2, range.min);
+          writeU16BE(bytes, 0xB7 + index * 2, range.max);
+        });
+        bytes[0xC3] = configChecked('cfgShowSt');
+        bytes[0xC4] = stLcd;
+
+        if (els.cfgPinEnable.checked) {
+          writeU16BE(bytes, 0xC5, configInteger('cfgPinPassword', 'PIN password', 0, 999));
+          writeU16BE(bytes, 0xC7, configInteger('cfgPinPeriod', 'Loop', 0, 999));
+          writeU16BE(bytes, 0xCC, configInteger('cfgPinBackupPassword', 'Backup password', 0, 999));
+          writeU16BE(bytes, 0xD0, configInteger('cfgPinBackupPeriod', 'Backup time', 1, 999));
+          bytes[0xD2] = configInteger('cfgPinPeriodUnit', 'Đơn vị Loop', 0, 1);
+          bytes[0xD3] = configInteger('cfgPinBackupPeriodUnit', 'Đơn vị Backup', 0, 1);
+          bytes[0xD4] = 1;
+          bytes[0xD5] = configChecked('cfgPinPeriodShow');
+          bytes[0xD6] = configInteger('cfgPinWrongLimit', 'Wrong tries', 1, 99);
+        }
+        return bytes;
+      }
+
+      function applyRuntimeConfig(bytes) {
+        if (!(bytes instanceof Uint8Array) || bytes.length !== runtimeConfigSize || bytes[0] !== 2) {
+          throw new Error('Dữ liệu cài đặt không đúng định dạng.');
+        }
+        ['cfgCoolCl', 'cfgCoolOp', 'cfgDefrostCl', 'cfgDefrostOp'].forEach((id, index) => setConfigValue(id, readU32BE(bytes, 1 + index * 4)));
+        setConfigValue('cfgDelaySt', bytes[0x11]);
+        setConfigValue('cfgStLed', bytes[0x12]);
+        setConfigValue('cfgDf', bytes[0x13]);
+        setConfigValue('cfgEnd', bytes[0x14]);
+        setConfigValue('cfgCoolStart', bytes[0x15]);
+        setConfigValue('cfgDefrostStart', bytes[0x16]);
+        setConfigValue('cfgDisplayMode', bytes[0x17]);
+        setConfigValue('cfgLockTime', readU16BE(bytes, 0x18));
+        setConfigValue('cfgGreenBrightness', bytes[0x1A]);
+        setConfigValue('cfgRedBrightness', bytes[0x1B]);
+        setConfigValue('cfgHcfMode', bytes[0x1C]);
+        setConfigValue('cfgHdf', bytes[0x1D]);
+        setConfigValue('cfgOnTime', bytes[0x1E]);
+        setConfigValue('cfgTouch', bytes[0x1F]);
+        setConfigValue('cfgTryTime', readU16BE(bytes, 0x20));
+        setConfigValue('cfgHcfTime', readU16BE(bytes, 0x22));
+        setConfigValue('cfgDelayDf', readU16BE(bytes, 0x24));
+        setConfigChecked('cfgDefrostOpSeconds', bytes[0x26]);
+        setConfigChecked('cfgShowDf', bytes[0x27]);
+        setConfigChecked('cfgShowEnd', bytes[0x28]);
+        setConfigChecked('cfgShowSl', bytes[0x29]);
+        setConfigChecked('cfgShowHcf', bytes[0x2A]);
+        setConfigChecked('cfgShowHdf', bytes[0x2B]);
+        setConfigValue('cfgTryUnit', bytes[0x2C]);
+
+        const rangeIds = [
+          ['cfgRangeCoolClMin', 'cfgRangeCoolClMax'], ['cfgRangeCoolOpMin', 'cfgRangeCoolOpMax'],
+          ['cfgRangeDefrostClMin', 'cfgRangeDefrostClMax'], ['cfgRangeDefrostOpMin', 'cfgRangeDefrostOpMax'],
+          ['cfgRangeStLcdMin', 'cfgRangeStLcdMax'], ['cfgRangeStLedMin', 'cfgRangeStLedMax']
+        ];
+        rangeIds.forEach(([minId, maxId], index) => {
+          setConfigValue(minId, readU16BE(bytes, 0xAB + index * 2));
+          setConfigValue(maxId, readU16BE(bytes, 0xB7 + index * 2));
+        });
+        setConfigChecked('cfgShowSt', bytes[0xC3]);
+        setConfigValue('cfgStLcd', bytes[0xC4]);
+
+        if (bytes[0xD4] !== 0 && bytes[0xD4] !== 1) throw new Error('Trạng thái mật khẩu không hợp lệ.');
+        els.cfgPinEnable.checked = bytes[0xD4] === 1;
+        setConfigValue('cfgPinPassword', readU16BE(bytes, 0xC5));
+        setConfigValue('cfgPinPeriod', readU16BE(bytes, 0xC7));
+        setConfigValue('cfgPinBackupPassword', readU16BE(bytes, 0xCC));
+        setConfigValue('cfgPinBackupPeriod', readU16BE(bytes, 0xD0));
+        setConfigValue('cfgPinPeriodUnit', bytes[0xD2]);
+        setConfigValue('cfgPinBackupPeriodUnit', bytes[0xD3]);
+        setConfigChecked('cfgPinPeriodShow', bytes[0xD5]);
+        setConfigValue('cfgPinWrongLimit', bytes[0xD6]);
+        syncPinControls();
+      }
+
+      async function loadRuntimeConfig() {
+        if (state.busy || state.localBusy) return;
+        setBusy(true, 'Đang đọc cài đặt…');
+        try {
+          const data = await api('/api/runtime-config');
+          applyRuntimeConfig(hexToBytes(data.data));
+          const message = data.message || 'Đã đọc cài đặt.';
+          setStatus(message, 'success');
+          toast(message);
+          setOnline(true);
+        } catch (error) {
+          setStatus(error.message, 'error');
+          toast(error.message, true);
+        } finally {
+          setBusy(false);
+          setTimeout(refreshStatus, 250);
+        }
+      }
+
+      async function saveRuntimeConfig() {
+        if (state.busy || state.localBusy) return;
+        let config;
+        try {
+          config = buildRuntimeConfig();
+        } catch (error) {
+          setStatus(error.message, 'error');
+          toast(error.message, true);
+          return;
+        }
+        if (!window.confirm('Lưu toàn bộ cài đặt? Thiết bị sẽ khởi động lại và lịch sử mở khóa, trạng thái mật khẩu tạm thời sẽ được xóa.')) return;
+        setBusy(true, 'Đang lưu cài đặt…');
+        try {
+          const data = await api('/api/runtime-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data: bytesToHex(config) })
+          });
+          const message = data.message || 'Đã lưu cài đặt.';
+          setStatus(message, 'success');
+          toast(message);
+          setOnline(true);
+        } catch (error) {
+          setStatus(error.message, 'error');
+          toast(error.message, true);
+        } finally {
+          setBusy(false);
+          setTimeout(() => { refreshStatus(); refreshDebug(); }, 900);
+        }
+      }
+
+      async function selectFile(file) {
+        if (!file) return;
+        const name = file.name.toLowerCase();
+        const isHex = name.endsWith('.hex') || name.endsWith('.ihex') || name.endsWith('.ihx');
+        const isBin = name.endsWith('.bin');
+        if (!isBin && !isHex) return toast('Chỉ chấp nhận file .bin hoặc Intel HEX (.hex)', true);
+        const maxSize = isHex ? 96 * 1024 : 32768;
+        if (file.size < 1 || file.size > maxSize) return toast(`Dung lượng phải từ 1 đến ${maxSize} byte`, true);
+        state.file = file;
+        state.crc32 = crc32(await file.arrayBuffer());
+        state.selectedUploaded = false;
+        state.uploadedGeneration = 0;
+        state.imageReady = false;
+        els.fileName.textContent = file.name;
+        els.fileSize.textContent = formatBytes(file.size);
+        els.fileCrc.textContent = hex32(state.crc32);
+        els.fileKind.textContent = isHex ? 'HEX' : 'BIN';
+        els.remove.style.visibility = 'visible';
+        els.fileCard.classList.add('show');
+        els.progress.classList.remove('show');
+        updateButtons();
+        setStatus('Đã chọn tệp. Nhấn “Lưu tệp cập nhật”.');
+      }
+
+      function clearSelectedFile() {
+        state.file = null;
+        state.crc32 = null;
+        state.selectedUploaded = false;
+        state.uploadedGeneration = 0;
+        els.input.value = '';
+        els.fileCard.classList.remove('show');
+        els.progress.classList.remove('show');
+        renderImage(state.serverImage);
+      }
+
+      function uploadFile() {
+        if (!state.file || state.busy || state.localBusy) return;
+        setBusy(true, 'Đang lưu tệp cập nhật…');
+        els.progress.classList.add('show');
+        els.progressBar.style.width = '0%';
+        els.progressPct.textContent = '0%';
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/upload');
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        xhr.setRequestHeader('X-Filename', encodeURIComponent(state.file.name));
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          const pct = Math.round(event.loaded * 100 / event.total);
+          els.progressBar.style.width = pct + '%';
+          els.progressPct.textContent = pct + '%';
+        };
+        xhr.onerror = () => finishUpload(false, 'Không thể kết nối tới thiết bị điều khiển');
+        xhr.ontimeout = () => finishUpload(false, 'Tải lên quá thời gian');
+        xhr.timeout = 90000;
+        xhr.onload = () => {
+          let data = {};
+          try { data = xhr.responseText ? JSON.parse(xhr.responseText) : {}; }
+          catch (_) { data = { message: xhr.responseText }; }
+          const ok = xhr.status >= 200 && xhr.status < 300 && data.ok !== false;
+          finishUpload(ok, data.message || (ok ? 'Đã lưu tệp cập nhật.' : `Lỗi HTTP ${xhr.status}`));
+          if (ok) {
+            state.selectedUploaded = true;
+            state.imageReady = true;
+            state.uploadedGeneration = Number(data.image?.generation || 0);
+            if (data.image) renderImage(data.image);
+            els.progressBar.style.width = '100%';
+            els.progressPct.textContent = '100%';
+            setTimeout(refreshStatus, 350);
+          }
+        };
+        xhr.send(state.file);
+      }
+
+      function finishUpload(ok, message) {
+        setBusy(false);
+        setOnline(ok || els.connection.classList.contains('online'));
+        setStatus(message, ok ? 'success' : 'error');
+        toast(message, !ok);
+        if (!ok) els.progress.classList.remove('show');
+      }
+
+      function renderImage(image) {
+        state.serverImage = image || null;
+        const remoteReady = Boolean(image && image.valid && Number(image.size) > 0);
+        const localMatches = !state.file || (state.selectedUploaded &&
+          (state.uploadedGeneration > 0
+            ? Number(image?.generation) === state.uploadedGeneration
+            : (Number(image?.size) === state.file.size &&
+               (Number(image?.crc32) >>> 0) === (Number(state.crc32) >>> 0))));
+        if (state.file && state.selectedUploaded && remoteReady && !localMatches) {
+          state.selectedUploaded = false;
+          setStatus('Tệp cập nhật đã được thay đổi ở nơi khác. Hãy tải lại tệp đã chọn.', 'error');
+          toast('Tệp cập nhật đã thay đổi; thao tác cập nhật đã bị khóa.', true);
+        }
+        state.imageReady = remoteReady && localMatches;
+        if (!state.file) {
+          els.fileCard.classList.toggle('show', remoteReady);
+          if (remoteReady) {
+            els.fileName.textContent = image.name || 'chuong-trinh.bin';
+            const covered = Number(image.covered_size || image.size);
+            els.fileSize.textContent = covered === Number(image.size)
+              ? formatBytes(image.size)
+              : `${formatBytes(covered)} / ${formatBytes(image.size)} vùng chương trình`;
+            els.fileCrc.textContent = hex32(image.crc32);
+            els.fileKind.textContent = image.format === 'intel-hex' ? 'HEX' : 'BIN';
+            els.remove.style.visibility = 'hidden';
+          }
+        }
+        updateButtons();
+      }
+
+      function value(obj, ...keys) {
+        for (const key of keys) if (obj && obj[key] !== undefined && obj[key] !== null) return obj[key];
+        return null;
+      }
+
+      function renderInfo(data) {
+        const identity = data.identity || data;
+        let pdid = value(identity, 'pdid', 'part_id', 'partId');
+        const did = value(identity, 'device_id', 'deviceId');
+        const pid = value(identity, 'product_id', 'productId');
+        if (pdid === null && did !== null && pid !== null) pdid = ((Number(pid) << 16) | Number(did)) >>> 0;
+        const config = value(data, 'config');
+        const locked = value(data, 'locked', 'security_locked');
+        const aprom = value(data, 'aprom_size', 'aprom');
+        const ldrom = value(data, 'ldrom_size', 'ldrom');
+        $('#pdid').textContent = pdid === null ? '—' : hex32(pdid);
+        $('#config').textContent = Array.isArray(config) ? config.map(v => Number(v).toString(16).padStart(2, '0').toUpperCase()).join(' ') : (config ?? '—');
+        $('#security').textContent = locked === null ? '—' : (locked ? 'ĐÃ KHÓA' : 'Không khóa');
+        $('#security').className = locked === null ? '' : (locked ? 'locked' : 'unlocked');
+        $('#aprom').textContent = aprom === null ? '—' : formatBytes(aprom);
+        $('#ldrom').textContent = ldrom === null ? '—' : formatBytes(ldrom);
+      }
+
+      const sevenSegments = {
+        '0': 'abcdef', '1': 'bc', '2': 'abdeg', '3': 'abcdg', '4': 'bcfg',
+        '5': 'acdfg', '6': 'acdefg', '7': 'abc', '8': 'abcdefg', '9': 'abcdfg', '-': 'g'
+      };
+
+      const modeDescriptions = {
+        COOL: { label: 'Làm lạnh', help: 'Thiết bị đang làm lạnh.', icon: '❄', tone: 'cool' },
+        ICE_FLUSH: { label: 'Xả đá', help: 'Thiết bị đang xả đá.', icon: '❅', tone: 'ice' },
+        SETTING: { label: 'Cài đặt', help: 'Thiết bị đang ở màn hình cài đặt.', icon: '⚙', tone: 'setting' },
+        ADVANCE_SETTING: { label: 'Cài đặt nâng cao', help: 'Thiết bị đang ở phần cài đặt nâng cao.', icon: '⚙', tone: 'advanced' },
+        PASSWORD_CONFIG: { label: 'Cài đặt mật khẩu', help: 'Thiết bị đang thiết lập mật khẩu bảo vệ.', icon: '⌘', tone: 'password' },
+        IDLE: { label: 'Đang chờ', help: 'Thiết bị đang chờ thao tác tiếp theo.', icon: '○', tone: 'idle' }
+      };
+
+      function hasOwn(object, key) {
+        return Object.prototype.hasOwnProperty.call(object, key);
+      }
+
+      function renderSevenSegment(container, value, label) {
+        const raw = value === null || value === undefined ? '' : String(value).trim();
+        const numeric = /^\d+$/.test(raw);
+        const shown = numeric ? raw.slice(-3).padStart(3, ' ') : '---';
+        const fragment = document.createDocumentFragment();
+        for (const character of shown) {
+          const digit = document.createElement('span');
+          digit.className = 'seg-digit' + (character === ' ' ? ' blank' : '');
+          const enabled = sevenSegments[character] || '';
+          for (const segmentName of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
+            const segment = document.createElement('span');
+            segment.className = 'seg ' + segmentName + (enabled.includes(segmentName) ? ' active' : '');
+            digit.append(segment);
+          }
+          fragment.append(digit);
+        }
+        container.replaceChildren(fragment);
+        container.setAttribute('aria-label', numeric ? `${label}: ${raw} phút` : `${label}: chưa có dữ liệu`);
+      }
+
+      function renderMode(value, known) {
+        const key = known ? String(value || '').trim().toUpperCase() : '';
+        const mode = modeDescriptions[key] || (known
+          ? { label: 'Đang hoạt động', help: 'Thiết bị đang ở một chế độ khác.', icon: '◈', tone: 'idle' }
+          : { label: 'Đang chờ dữ liệu', help: 'Kết nối sẽ cập nhật ngay khi thiết bị gửi dữ liệu.', icon: '○', tone: 'idle' });
+        els.modePanel.dataset.mode = mode.tone;
+        els.modeIcon.textContent = mode.icon;
+        els.modeValue.textContent = mode.label;
+        els.modeHelp.textContent = mode.help;
+      }
+
+      function relayIsOn(value) {
+        const normalized = String(value ?? '').trim().toLowerCase();
+        return value === true || value === 1 || normalized === 'on' || normalized === '1' || normalized === 'true';
+      }
+
+      function renderRelay(number, value, known) {
+        const card = els[`relay${number}Card`];
+        const stateLabel = els[`relay${number}State`];
+        const help = els[`relay${number}Help`];
+        const on = known && relayIsOn(value);
+        card.classList.toggle('is-on', on);
+        stateLabel.textContent = known ? (on ? 'BẬT' : 'TẮT') : '—';
+        help.textContent = known ? (on ? 'Đang cấp điện' : 'Đang ngắt điện') : 'Chưa có dữ liệu';
+        card.setAttribute('aria-label', `Rơ-le ${number}: ${known ? (on ? 'đang bật' : 'đang tắt') : 'chưa có dữ liệu'}`);
+      }
+
+      function renderDebug(data) {
+        const hasData = data && data.last_rx_age_ms !== null && data.last_rx_age_ms !== undefined;
+        const age = hasData ? Number(data.last_rx_age_ms) : null;
+        let label = 'Đang chờ dữ liệu';
+        let kind = 'waiting';
+        if (!data || !data.enabled) {
+          label = 'Chưa nhận dữ liệu';
+        } else if (data.paused_for_icp) {
+          label = 'Tạm dừng cập nhật';
+          kind = 'paused';
+        } else if (data.receiver_attached && age !== null && age < 3000) {
+          label = 'Đang nhận dữ liệu';
+          kind = 'live';
+        }
+        els.debugState.textContent = label;
+        els.debugState.className = 'debug-state ' + kind;
+
+        const variables = Array.isArray(data?.variables) ? data.variables : [];
+        const values = {};
+        for (const variable of variables) {
+          if (variable && variable.name) values[String(variable.name).trim().toLowerCase()] = variable.value;
+        }
+        renderMode(values.mode, hasOwn(values, 'mode'));
+        renderSevenSegment(els.greenDisplay, values.green_min, 'Màn hình xanh');
+        renderSevenSegment(els.redDisplay, values.red_min, 'Màn hình đỏ');
+        renderRelay(1, values.relay1, hasOwn(values, 'relay1'));
+        renderRelay(2, values.relay2, hasOwn(values, 'relay2'));
+        renderRelay(3, values.relay3, hasOwn(values, 'relay3'));
+
+        els.debugVars.replaceChildren();
+        if (!variables.length) {
+          const row = document.createElement('div');
+          row.className = 'fact';
+          const name = document.createElement('dt');
+          const value = document.createElement('dd');
+          name.textContent = 'Dữ liệu';
+          value.textContent = data?.paused_for_icp ? 'Đang cập nhật chương trình' : 'Chưa có dữ liệu';
+          row.append(name, value);
+          els.debugVars.append(row);
+        } else {
+          for (const variable of variables) {
+            const row = document.createElement('div');
+            row.className = 'fact';
+            const name = document.createElement('dt');
+            const value = document.createElement('dd');
+            name.textContent = variable.name || 'unnamed';
+            value.textContent = String(variable.value ?? '');
+            row.append(name, value);
+            els.debugVars.append(row);
+          }
+        }
+
+        const logs = Array.isArray(data?.logs) ? data.logs : [];
+        els.debugLog.textContent = logs.length
+          ? logs.map(entry => entry.text || '').filter(Boolean).join('\n')
+          : (data?.paused_for_icp ? 'Theo dõi tạm dừng trong khi cập nhật chương trình.' : 'Đang chờ dữ liệu từ thiết bị…');
+      }
+
+      async function refreshDebug() {
+        try {
+          const data = await api('/api/debug');
+          renderDebug(data);
+        } catch (_) {
+          renderDebug({ enabled: false });
+        }
+      }
+
+      async function runAction(action, destructive = false) {
+        if (state.busy || state.localBusy) return;
+        const labels = { info: 'Đang kiểm tra kết nối…', program: 'Đang cập nhật chương trình…', verify: 'Đang đối chiếu chương trình…', reset: 'Đang khởi động lại thiết bị…', 'program-full': 'Đang ghi đè toàn bộ bộ nhớ…', erase: 'Đang xóa thiết bị…' };
+        setBusy(true, labels[action] || 'Đang xử lý…');
+        try {
+          const options = {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ generation: Number(state.serverImage?.generation || 0) })
+          };
+          if (destructive) {
+            options.body = JSON.stringify({
+              generation: Number(state.serverImage?.generation || 0),
+              confirm: 'CONFIRM'
+            });
+          }
+          const data = await api('/api/' + action, options);
+          if (action === 'info') renderInfo(data);
+          const message = data.message || (action === 'info' ? 'Thiết bị đã phản hồi.' : 'Thao tác hoàn tất.');
+          if (data.accepted) {
+            state.busy = true;
+            setStatus(message, 'busy');
+          } else {
+            setStatus(message, 'success');
+            toast(message);
+          }
+          setOnline(true);
+        } catch (error) {
+          setStatus(error.message, 'error');
+          toast(error.message, true);
+        } finally {
+          setBusy(false);
+          setTimeout(refreshStatus, 500);
+        }
+      }
+
+      function requestDanger(action) {
+        state.pendingDanger = action;
+        const full = action === 'program-full';
+        els.confirmTitle.textContent = full ? 'Ghi đè toàn bộ bộ nhớ?' : 'Xóa thiết bị?';
+        els.confirmMessage.textContent = full
+          ? 'Vùng chương trình không có trong tệp cũng sẽ bị xóa. Thao tác không thể hoàn tác.'
+          : 'Chương trình, vùng bộ nhớ phụ và cài đặt bảo vệ sẽ bị xóa. Chỉ dùng để sửa chữa.';
+        els.confirmInput.value = '';
+        els.confirmBtn.disabled = true;
+        if (typeof els.dialog.showModal === 'function') {
+          els.dialog.showModal();
+          setTimeout(() => els.confirmInput.focus(), 50);
+        } else if (window.prompt('Nhập CONFIRM để tiếp tục:') === 'CONFIRM') {
+          runAction(action, true);
+        }
+      }
+
+      function findUplinkOption(ssid) {
+        return Array.from(els.uplinkSsid.options).find((option) => option.value === ssid) || null;
+      }
+
+      function ensureUplinkOption(ssid, label = ssid) {
+        if (!ssid) return null;
+        let option = findUplinkOption(ssid);
+        if (!option) {
+          option = document.createElement('option');
+          option.value = ssid;
+          option.textContent = label;
+          els.uplinkSsid.append(option);
+        }
+        return option;
+      }
+
+      function renderScanResults(networks) {
+        const previous = els.uplinkSsid.value || state.uplinkKnownSsid;
+        const fragment = document.createDocumentFragment();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = networks.length ? 'Chọn Wi-Fi có Internet' : 'Không tìm thấy Wi-Fi gần đây';
+        fragment.append(placeholder);
+        for (const network of networks) {
+          if (!network || !network.ssid) continue;
+          const option = document.createElement('option');
+          option.value = String(network.ssid);
+          const rssi = Number(network.rssi);
+          const signal = Number.isFinite(rssi) ? `${rssi} dBm` : 'Sóng không rõ';
+          option.textContent = `${network.ssid} · ${signal} · ${network.auth || 'Bảo mật'}`;
+          fragment.append(option);
+        }
+        els.uplinkSsid.replaceChildren(fragment);
+        if (previous && findUplinkOption(previous)) els.uplinkSsid.value = previous;
+      }
+
+      function renderUplink(uplink, internet) {
+        const info = uplink || {};
+        const stateName = String(info.state || (info.configured ? 'connecting' : 'not_configured'));
+        const ssid = String(info.ssid || '');
+        const lanIp = String(info.ip || '');
+        const hostname = String(info.hostname || lanIp);
+        const hostnameUrl = `http://${hostname}`;
+        const lanIpUrl = lanIp ? `http://${lanIp}` : '';
+        const hasInternet = internet && internet.state === 'online' && Number(internet.checked_age_ms) >= 0 && Number(internet.checked_age_ms) <= 90000;
+        let title = 'Chưa thiết lập Wi-Fi Internet';
+        let details = 'Chọn mạng Wi-Fi và nhập mật khẩu.';
+
+        if (stateName === 'connecting') {
+          title = 'Đang kết nối Wi-Fi Internet';
+          details = ssid ? `Đang tìm ${ssid}…` : 'Đang chuẩn bị kết nối…';
+        } else if (stateName === 'connected') {
+          title = hasInternet ? 'Đã có Internet' : 'Đã kết nối Wi-Fi · Chưa xác nhận Internet';
+          const parts = [];
+          if (ssid) parts.push(ssid);
+          if (info.ip) parts.push(`IP ${info.ip}`);
+          if (Number.isFinite(Number(info.rssi)) && Number(info.rssi) !== 0) parts.push(`${info.rssi} dBm`);
+          details = parts.join(' · ') || 'Đang nhận thông tin mạng…';
+        } else if (stateName === 'failed') {
+          title = 'Không thể kết nối Wi-Fi Internet';
+          details = ssid ? `Kiểm tra lại ${ssid}, mật khẩu và sóng Wi-Fi.` : 'Kiểm tra tên Wi-Fi và mật khẩu.';
+        }
+
+        els.uplinkStatus.dataset.state = stateName;
+        els.uplinkState.textContent = title;
+        els.uplinkDetails.textContent = details;
+
+        const canUseLan = stateName === 'connected' && Boolean(lanIpUrl);
+        els.lanAccess.hidden = !canUseLan;
+        if (canUseLan) {
+          els.lanHostname.href = hostnameUrl;
+          els.lanHostname.textContent = hostnameUrl;
+          els.lanIp.textContent = lanIpUrl;
+          els.copyLanHostname.dataset.address = hostnameUrl;
+          els.copyLanIp.dataset.address = lanIpUrl;
+        }
+
+        if (ssid && document.activeElement !== els.uplinkSsid) {
+          ensureUplinkOption(ssid, `${ssid} · Wi-Fi đang lưu`);
+          if (!els.uplinkSsid.value) els.uplinkSsid.value = ssid;
+        } else if (!info.configured && state.uplinkKnownSsid &&
+                   els.uplinkSsid.value === state.uplinkKnownSsid &&
+                   document.activeElement !== els.uplinkSsid) {
+          els.uplinkSsid.value = '';
+        }
+        state.uplinkKnownSsid = ssid;
+      }
+
+      function copyAddress(value) {
+        if (!value) return;
+        const copied = () => toast(`Đã sao chép ${value}`);
+        const fallback = () => {
+          const input = document.createElement('textarea');
+          input.value = value;
+          input.setAttribute('readonly', '');
+          input.style.position = 'fixed';
+          input.style.opacity = '0';
+          document.body.append(input);
+          input.select();
+          try {
+            if (document.execCommand('copy')) copied();
+            else toast('Không thể sao chép tự động. Hãy ghi lại địa chỉ trên màn hình.', true);
+          } catch (_) {
+            toast('Không thể sao chép tự động. Hãy ghi lại địa chỉ trên màn hình.', true);
+          }
+          input.remove();
+        };
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(value).then(copied, fallback);
+        } else {
+          fallback();
+        }
+      }
+
+      async function scanUplinkNetworks() {
+        if (state.uplinkScanBusy || state.uplinkBusy || state.busy || state.localBusy) return;
+        state.uplinkScanBusy = true;
+        els.uplinkScan.textContent = 'Đang quét…';
+        updateButtons();
+        try {
+          const data = await api('/api/uplink/scan');
+          const networks = Array.isArray(data.networks) ? data.networks : [];
+          renderScanResults(networks);
+          toast(networks.length ? `Đã tìm thấy ${networks.length} Wi-Fi.` : 'Không tìm thấy Wi-Fi gần đây.', !networks.length);
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          state.uplinkScanBusy = false;
+          els.uplinkScan.textContent = 'Quét Wi-Fi';
+          updateButtons();
+        }
+      }
+
+      async function saveUplink(event) {
+        event.preventDefault();
+        if (state.uplinkBusy || state.busy || state.localBusy) return;
+        const ssid = els.uplinkSsid.value;
+        const password = els.uplinkPassword.value;
+        if (!ssid || ssid.length > 32) return toast('Tên Wi-Fi phải có từ 1 đến 32 ký tự.', true);
+        if (password && (password.length < 8 || password.length > 63)) {
+          return toast('Mật khẩu Wi-Fi để trống hoặc dài từ 8 đến 63 ký tự.', true);
+        }
+
+        state.uplinkBusy = true;
+        updateButtons();
+        try {
+          const data = await api('/api/uplink', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'connect', ssid, password })
+          });
+          els.uplinkPassword.value = '';
+          toast(data.message || 'Đang kết nối Wi-Fi Internet.');
+          els.uplinkStatus.dataset.state = 'connecting';
+          els.uplinkState.textContent = 'Đang kết nối Wi-Fi Internet';
+          els.uplinkDetails.textContent = `Đang tìm ${ssid}…`;
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          state.uplinkBusy = false;
+          updateButtons();
+          setTimeout(refreshStatus, 250);
+        }
+      }
+
+      async function forgetUplink() {
+        if (state.uplinkBusy || state.busy || state.localBusy) return;
+        state.uplinkBusy = true;
+        updateButtons();
+        try {
+          const data = await api('/api/uplink', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'forget' })
+          });
+          els.uplinkPassword.value = '';
+          els.uplinkSsid.value = '';
+          toast(data.message || 'Đã quên Wi-Fi Internet.');
+        } catch (error) {
+          toast(error.message, true);
+        } finally {
+          state.uplinkBusy = false;
+          updateButtons();
+          setTimeout(refreshStatus, 250);
+        }
+      }
+
+      async function refreshStatus() {
+        if (state.localBusy) return;
+        try {
+          const data = await api('/api/status');
+          setOnline(true);
+          if (data.wifi) {
+            const uplink = data.wifi.uplink;
+            const sharing = uplink && uplink.state === 'connected' &&
+              uplink.nat_enabled && uplink.dns_ready;
+            els.wifiInfo.textContent = sharing && uplink.ip
+              ? `Wi-Fi ngoài · ${uplink.ip} · Wi-Fi dự phòng ${data.wifi.ip}`
+              : (data.wifi.ip ? `Wi-Fi dự phòng · ${data.wifi.ip}` : 'Kết nối Wi-Fi sẵn sàng');
+            renderUplink(uplink, data.internet);
+          }
+          renderImage(data.image);
+          if (data.busy) {
+            state.busy = true;
+            updateButtons();
+            setStatus(data.last_message || 'Thiết bị điều khiển đang xử lý…', 'busy');
+          } else {
+            state.busy = false;
+            updateButtons();
+            if (data.last_message) {
+              const failed = data.last_error && data.last_error !== 'ESP_OK';
+              setStatus(data.last_message, failed ? 'error' : '');
+            }
+          }
+        } catch (_) {
+          setOnline(false);
+        }
+      }
+
+      els.input.addEventListener('change', () => selectFile(els.input.files[0]));
+      els.remove.addEventListener('click', clearSelectedFile);
+      els.upload.addEventListener('click', uploadFile);
+      els.runtimeConfigRead.addEventListener('click', loadRuntimeConfig);
+      els.runtimeConfigSave.addEventListener('click', saveRuntimeConfig);
+      els.cfgPinEnable.addEventListener('change', syncPinControls);
+      els.uplinkScan.addEventListener('click', scanUplinkNetworks);
+      els.uplinkForm.addEventListener('submit', saveUplink);
+      els.uplinkForget.addEventListener('click', forgetUplink);
+      els.copyLanHostname.addEventListener('click', () => copyAddress(els.copyLanHostname.dataset.address));
+      els.copyLanIp.addEventListener('click', () => copyAddress(els.copyLanIp.dataset.address));
+      ['dragenter', 'dragover'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.add('drag'); }));
+      ['dragleave', 'drop'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.remove('drag'); }));
+      els.dropzone.addEventListener('drop', event => selectFile(event.dataTransfer.files[0]));
+      document.querySelectorAll('.action').forEach(button => button.addEventListener('click', () => runAction(button.dataset.action)));
+      document.querySelectorAll('.destructive').forEach(button => button.addEventListener('click', () => requestDanger(button.dataset.action)));
+      els.confirmInput.addEventListener('input', () => { els.confirmBtn.disabled = els.confirmInput.value !== 'CONFIRM'; });
+      els.confirmForm.addEventListener('submit', event => {
+        if (event.submitter && event.submitter.value === 'confirm') {
+          event.preventDefault();
+          if (els.confirmInput.value !== 'CONFIRM') return;
+          const action = state.pendingDanger;
+          els.dialog.close();
+          runAction(action, true);
+        }
+      });
+
+      updateButtons();
+      refreshStatus();
+      refreshDebug();
+      setInterval(refreshStatus, 3000);
+      setInterval(refreshDebug, 1000);
+    })();
+  </script>
+</body>
+</html>

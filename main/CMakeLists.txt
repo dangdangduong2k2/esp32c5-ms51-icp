@@ -30,7 +30,7 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 endif()
 
 idf_component_register(
-    SRCS
+    SRCS "ms51_presence.c"
         "app_main.c"
         "ms51_debug_uart.c"
         "ms51_image.c"
@@ -42,7 +42,7 @@ idf_component_register(
         "${ms51_generated_c}"
     INCLUDE_DIRS "."
     EMBED_TXTFILES "web/index.html"
-    PRIV_REQUIRES
+    PRIV_REQUIRES esp_http_client
         console
         esp_driver_gpio
         esp_driver_uart

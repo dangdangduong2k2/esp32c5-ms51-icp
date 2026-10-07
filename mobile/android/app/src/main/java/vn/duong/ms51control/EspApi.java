@@ -21,6 +21,45 @@ final class EspApi {
 
     private volatile String baseUrl = DEVICE_BASE_URL;
     private volatile Network network;
+    private volatile boolean demo;
+    private volatile String expectedDeviceId = "";
+    private int readTimeoutMs = 15000;
+
+    /** Freeze destination and network before queuing a provisioning operation. */
+    EspApi snapshot(int timeoutMs) {
+        EspApi copy = new EspApi();
+        copy.baseUrl = baseUrl;
+        copy.network = network;
+        copy.demo = demo;
+        copy.expectedDeviceId = expectedDeviceId;
+        copy.readTimeoutMs = timeoutMs;
+        return copy;
+    }
+
+    void setDemo(boolean value) { demo = value; }
+    void setExpectedDeviceId(String value) { expectedDeviceId = value == null ? "" : value; }
+
+    private JSONObject demoResponse(String path) throws JSONException, IOException {
+        if ("/api/status".equals(path)) {
+            return new JSONObject("{\"ok\":true,\"busy\":false,\"wifi\":{\"uplink\":{\"state\":\"connected\",\"ssid\":\"Wi-Fi minh họa\",\"ip\":\"192.168.1.51\",\"rssi\":-48}},\"image\":{\"valid\":false}}");
+        }
+        if ("/api/debug".equals(path)) {
+            JSONObject response = new JSONObject("{\"ok\":true,\"enabled\":true,\"last_rx_age_ms\":120}");
+            org.json.JSONArray variables = new org.json.JSONArray();
+            String[][] values = {{"mode","COOL"},{"green_min","025"},{"red_min","008"},
+                    {"relay1","1"},{"relay2","0"},{"relay3","1"}};
+            for (String[] pair : values) variables.put(new JSONObject().put("name",pair[0]).put("value",pair[1]));
+            response.put("variables",variables);
+            response.put("logs",new org.json.JSONArray().put(new JSONObject().put("text",
+                    "Dữ liệu minh họa • Chưa kết nối phần cứng.\nKết nối thiết bị để nhận nhật ký trực tiếp.")));
+            return response;
+        }
+        if ("/api/runtime-config".equals(path)) {
+            return new JSONObject().put("ok",true).put("data",RuntimeConfigCodec.toHex(RuntimeConfigCodec.defaults().raw))
+                    .put("message","Đang hiển thị cài đặt minh họa.");
+        }
+        throw new IOException("Chế độ xem thử: kết nối thiết bị để dùng chức năng này.");
+    }
 
     void setBaseUrl(String value) {
         if (value == null || value.trim().isEmpty()) return;
@@ -38,17 +77,24 @@ final class EspApi {
     }
 
     JSONObject get(String path) throws IOException, JSONException {
+        if (demo) return demoResponse(path);
         HttpURLConnection connection = open(path, "GET");
-        return executeJson(connection, null, null);
+        JSONObject result = executeJson(connection, null, null);
+        if ("/api/status".equals(path) && !expectedDeviceId.isEmpty()
+                && !expectedDeviceId.equals(DeviceStore.identity(result)))
+            throw new IOException("Địa chỉ này không còn thuộc thiết bị đã ghép.");
+        return result;
     }
 
     JSONObject post(String path, JSONObject body) throws IOException, JSONException {
+        if (demo) throw new IOException("Chế độ xem thử: không gửi lệnh đến thiết bị.");
         HttpURLConnection connection = open(path, "POST");
         return executeJson(connection, body.toString().getBytes(StandardCharsets.UTF_8),
                 "application/json; charset=utf-8");
     }
 
     JSONObject upload(String fileName, byte[] data) throws IOException, JSONException {
+        if (demo) throw new IOException("Chế độ xem thử: không tải tệp lên thiết bị.");
         HttpURLConnection connection = open("/api/upload", "POST");
         connection.setRequestProperty("X-Filename", fileName == null ? "firmware.hex" : fileName);
         return executeJson(connection, data, "application/octet-stream");
@@ -67,8 +113,10 @@ final class EspApi {
         HttpURLConnection connection = (HttpURLConnection) rawConnection;
         connection.setRequestMethod(method);
         connection.setConnectTimeout(5000);
-        connection.setReadTimeout(15000);
+        connection.setReadTimeout(readTimeoutMs);
         connection.setUseCaches(false);
+        connection.setInstanceFollowRedirects(false);
+        if (!expectedDeviceId.isEmpty()) connection.setRequestProperty("X-MS51-Device", expectedDeviceId);
         connection.setRequestProperty("Accept", "application/json");
         return connection;
     }

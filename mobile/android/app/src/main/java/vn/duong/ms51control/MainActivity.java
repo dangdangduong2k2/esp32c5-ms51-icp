@@ -8,6 +8,10 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.RippleDrawable;
+import android.widget.ImageView;
+import android.view.WindowInsets;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
@@ -15,7 +19,6 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.Uri;
-import android.net.wifi.ScanResult;
 import android.net.wifi.WifiNetworkSpecifier;
 import android.os.Build;
 import android.os.Bundle;
@@ -67,7 +70,13 @@ public final class MainActivity extends Activity {
     private static final int ROLE_DEVICE = 1;
     private static final int ROLE_PHONE = 2;
 
-    private enum Screen { CONNECT_DEVICE, CONFIGURE_WIFI, SWITCH_PHONE, CONTROL }
+    private LinearLayout pageRoot;
+    private boolean demoMode;
+    private boolean configLoaded;
+    private int dashboardEpoch;
+    private boolean foreground;
+
+    private enum Screen { AUTH, HOME, CONNECT_DEVICE, CONFIGURE_WIFI, WIFI_PASSWORD, SWITCH_PHONE, CONTROL }
     private enum Tab { OVERVIEW, SETTINGS, FIRMWARE, DEVICE }
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -105,13 +114,13 @@ public final class MainActivity extends Activity {
     private JSONObject lastDebug;
     private int imageGeneration;
     private Uri selectedFirmwareUri;
+    private int filePickerEpoch;
     private String selectedFirmwareName = "";
     private String uplinkSsid = "";
     private String uplinkIp = "";
     private String uplinkPasswordForPhone = "";
     private RuntimeConfigCodec.Config runtimeConfig = RuntimeConfigCodec.defaults();
     private boolean dashboardBusy;
-    private boolean launchedInitialConnection;
     private boolean waitingForWifiSettingsReturn;
     private boolean manualWifiVerificationQueued;
 
@@ -125,474 +134,759 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setStatusBarColor(Design.BG);
+        getWindow().setNavigationBarColor(Color.WHITE);
+        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                | (Build.VERSION.SDK_INT >= 26 ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
         connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        showConnectDevice(false);
-        // Opening the app always starts at the device connection gate. Android will show
-        // its own explicit consent dialog; this is the strongest connection flow Android permits.
-        mainHandler.postDelayed(() -> {
-            if (!launchedInitialConnection && screen == Screen.CONNECT_DEVICE) {
-                launchedInitialConnection = true;
-                startDeviceConnection();
-            }
-        }, 350);
+        accounts = new LocalAccounts(this); deviceStore = new DeviceStore(this);
+        JSONObject user = accounts.session();
+        if (user == null) showAuth(false); else { acceptAccount(user); showDevices(); }
     }
+
+    // Local account and multi-device home. The ESP MAC is the durable device identity.
+    private LocalAccounts accounts;
+    private DeviceStore deviceStore;
+    private String accountId = "", username = "";
+    private DeviceStore.Device activeDevice;
+    private String pairingDeviceId = "", pairingHostname = "", legacyPairingId = "";
+    private volatile int authEpoch, homeEpoch, controlEpoch;
+    private boolean authBusy, registerMode, openingDevice;
+    private EditText accountName, accountPassword, accountConfirm;
+    private final ExecutorService presenceIo = Executors.newFixedThreadPool(3);
+    private final Map<String, TextView> deviceLabels = new HashMap<>();
+    private final java.util.Set<String> checkingDevices = new java.util.HashSet<>();
+    private final Runnable homeRefresh = new Runnable() {
+        @Override public void run() {
+            if (screen != Screen.HOME || !foreground) return;
+            refreshDevices(); mainHandler.postDelayed(this, 15000);
+        }
+    };
+
+    private void showAuth(boolean register) {
+        stopHome(); stopDashboard(); ++setupEpoch; ++authEpoch;
+        screen = Screen.AUTH; setupBusy = false; authBusy = false; registerMode = register;
+        lastUiMessage = "";
+        LinearLayout content = createPage("KHÔNG GIAN CỦA BẠN", register ? "Tạo tài khoản" : "Chào mừng trở lại",
+                register ? "Bắt đầu quản lý các thiết bị của bạn." : "Đăng nhập để mở không gian thiết bị.");
+        LinearLayout hero = card(); hero.setBackground(new Design.Hero());
+        TextView welcome = valueText("Kết nối trong\ntầm tay bạn."); welcome.setTextSize(27); welcome.setTextColor(Color.WHITE);
+        hero.addView(welcome);
+        TextView caption = bodyText("MS51 CONNECT"); caption.setTextColor(Design.MINT); caption.setLetterSpacing(.12f);
+        hero.addView(caption, fullParams(0,20,0,0)); content.addView(hero,fullParams(0,0,0,20));
+        accountName = textInput("Tên đăng nhập", false); accountName.setSingleLine(true);
+        accountName.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        accountName.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
+        content.addView(accountName, fullParams(0,0,0,8));
+        accountPassword = accountSecret(content, "Mật khẩu");
+        accountConfirm = register ? accountSecret(content, "Nhập lại mật khẩu") : null;
+        Button submit = primaryButton(register ? "Tạo tài khoản" : "Đăng nhập");
+        Button alternate = neutralButton(register ? "Đã có tài khoản? Đăng nhập" : "Tạo tài khoản mới");
+        submit.setOnClickListener(v -> {
+            if (authBusy) return;
+            String name = accountName.getText().toString();
+            char[] password = accountPassword.getText().toString().toCharArray();
+            if (register && !java.util.Arrays.equals(password, accountConfirm.getText().toString().toCharArray())) {
+                java.util.Arrays.fill(password, '\0'); accountConfirm.setError("Mật khẩu nhập lại chưa khớp."); return;
+            }
+            authBusy = true; final int token = ++authEpoch;
+            submit.setEnabled(false); alternate.setEnabled(false); accountName.setEnabled(false);
+            accountPassword.setEnabled(false); if (accountConfirm != null) accountConfirm.setEnabled(false);
+            submit.setText(register ? "Đang tạo tài khoản…" : "Đang đăng nhập…");
+            io.execute(() -> {
+                try {
+                    JSONObject user = register ? accounts.register(name,password) : accounts.login(name,password);
+                    runOnUiThread(() -> {
+                        if (token != authEpoch || isDestroyed()) return;
+                        accountPassword.setText(""); if (accountConfirm != null) accountConfirm.setText("");
+                        authBusy = false; acceptAccount(user); showDevices();
+                    });
+                } catch (Exception error) {
+                    runOnUiThread(() -> {
+                        if (token != authEpoch || isDestroyed()) return;
+                        authBusy = false; submit.setEnabled(true); alternate.setEnabled(true); accountName.setEnabled(true);
+                        accountPassword.setEnabled(true); if (accountConfirm != null) accountConfirm.setEnabled(true);
+                        submit.setText(register ? "Tạo tài khoản" : "Đăng nhập"); showMessage(errorMessage(error));
+                    });
+                } finally { java.util.Arrays.fill(password, '\0'); }
+            });
+        });
+        alternate.setOnClickListener(v -> { if (!authBusy) showAuth(!register); });
+        content.addView(submit,fullParams(0,20,0,8)); content.addView(alternate);
+        addHelp(content,"Tài khoản chỉ lưu trên điện thoại này. Mật khẩu tối thiểu 8 ký tự.");
+    }
+
+    private EditText accountSecret(LinearLayout content, String hint) {
+        LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(rounded(0xFFF0F4F7,dp(12)));
+        EditText field = textInput(hint,true); field.setSaveEnabled(false);
+        field.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(128)});
+        row.addView(field,new LinearLayout.LayoutParams(0,dp(56),1));
+        android.widget.ImageButton eye = new android.widget.ImageButton(this);
+        eye.setBackgroundColor(Color.TRANSPARENT); eye.setPadding(dp(14),dp(14),dp(14),dp(14));
+        eye.setImageDrawable(new Design.Icon("eye",Design.TEAL)); eye.setContentDescription("Hiện " + hint.toLowerCase(Locale.ROOT));
+        eye.setOnClickListener(v -> {
+            if (authBusy) return;
+            boolean hidden = field.getTransformationMethod() instanceof android.text.method.PasswordTransformationMethod;
+            field.setTransformationMethod(hidden ? null : android.text.method.PasswordTransformationMethod.getInstance());
+            field.setSelection(field.length()); eye.setImageDrawable(new Design.Icon(hidden ? "eye-off" : "eye",Design.TEAL));
+            eye.setContentDescription((hidden ? "Ẩn " : "Hiện ") + hint.toLowerCase(Locale.ROOT));
+        });
+        row.addView(eye,new LinearLayout.LayoutParams(dp(52),dp(52)));
+        content.addView(row,fullParams(0,4,0,8)); return field;
+    }
+
+    private void acceptAccount(JSONObject user) {
+        accountId = user.optString("id"); username = user.optString("username");
+        // Version 2.1 had no MAC identity. Preserve its record, but require a local re-pair.
+        android.content.SharedPreferences old = getPreferences(MODE_PRIVATE);
+        String oldIp = old.getString("paired_ip","");
+        if (!old.getBoolean("legacy_migrated",false) && !oldIp.isEmpty()) {
+            deviceStore.save(accountId,new DeviceStore.Device("legacy-v21","Thiết bị từ bản 2.1",oldIp,"",old.getString("paired_ssid","")));
+            old.edit().putBoolean("legacy_migrated",true).apply();
+        }
+    }
+
+    private void logout() {
+        ++controlEpoch; ++setupEpoch; releaseRequestedNetwork(); accounts.logout();
+        accountId = ""; username = ""; activeDevice = null; clearDeviceState();
+        showAuth(false);
+    }
+
+    private void clearDeviceState() {
+        configLoaded = false; runtimeConfig = RuntimeConfigCodec.defaults();
+        lastStatus = null; lastDebug = null; imageGeneration = 0;
+        selectedFirmwareUri = null; selectedFirmwareName = "";
+        configInputs.clear(); configChoices.clear(); configChecks.clear(); pinDependentViews.clear();
+        firmwareInfo = null; firmwareFileInfo = null; deviceInfo = null;
+        uplinkSsid = ""; uplinkIp = ""; uplinkPasswordForPhone = ""; pendingPassword = "";
+    }
+
+    private DeviceStore.Device findDevice(String id) {
+        for (DeviceStore.Device d : deviceStore.list(accountId)) if (d.id.equals(id)) return d;
+        return null;
+    }
+
+    private void showDevices() {
+        ++controlEpoch; ++setupEpoch; stopDashboard(); stopHome();
+        screen = Screen.HOME; setupBusy = false; openingDevice = false; activeDevice = null;
+        clearDeviceState(); api.setExpectedDeviceId(""); lastUiMessage = "";
+        LinearLayout content = createPage("THIẾT BỊ CỦA BẠN", "Xin chào, " + username,
+                "Mọi thiết bị, trong một không gian.");
+        List<DeviceStore.Device> devices = deviceStore.list(accountId);
+        LinearLayout hero = card(); hero.setBackground(new Design.Hero());
+        TextView count = valueText(String.format(Locale.ROOT,"%02d",devices.size())); count.setTextSize(46); count.setTextColor(Color.WHITE);
+        hero.addView(count);
+        TextView caption = bodyText("THIẾT BỊ ĐÃ GHÉP NỐI"); caption.setTextColor(Design.MINT); caption.setLetterSpacing(.1f);
+        hero.addView(caption,fullParams(0,5,0,0)); content.addView(hero,fullParams(0,0,0,20));
+        Button add = primaryButton("+  Thêm thiết bị");
+        add.setOnClickListener(v -> { legacyPairingId = ""; activeDevice = null; releaseRequestedNetwork(); showConnectDevice(false); });
+        content.addView(add,fullParams(0,0,0,24));
+        deviceLabels.clear();
+        if (devices.isEmpty()) {
+            TextView empty = valueText("Chưa có thiết bị"); empty.setTextSize(19); content.addView(empty);
+            addHelp(content,"Nhấn Thêm thiết bị để kết nối bo đầu tiên.");
+        } else {
+            addSectionTitle(content,"Danh sách thiết bị");
+            for (DeviceStore.Device device : devices) {
+                LinearLayout card = card();
+                TextView name = valueText(device.name); name.setTextSize(20); card.addView(name);
+                TextView wifi = mutedText(device.ssid.isEmpty() ? device.id : device.ssid); card.addView(wifi,fullParams(0,5,0,10));
+                TextView state = bodyText(device.legacy() ? "Cần ghép lại để nhận diện bo" : "Đang kiểm tra kết nối…");
+                state.setTextColor(Design.MUTED); state.setTextSize(13); card.addView(state);
+                deviceLabels.put(device.id,state);
+                card.setContentDescription("Mở " + device.name); card.setOnClickListener(v -> openDevice(device));
+                card.setOnLongClickListener(v -> { deviceOptions(device); return true; });
+                content.addView(card,fullParams(0,12,0,0));
+            }
+            addHelp(content,"Chạm để mở · Giữ để đổi tên hoặc bỏ ghép nối.");
+            addHelp(content,"Trạng thái Internet do thiết bị kiểm tra. Điện thoại cần ở cùng mạng để cập nhật.");
+        }
+        mainHandler.post(homeRefresh);
+    }
+
+    private void deviceOptions(DeviceStore.Device device) {
+        if (screen != Screen.HOME) return;
+        final String owner = accountId;
+        new AlertDialog.Builder(this).setTitle(device.name).setItems(new String[]{"Đổi tên", "Bỏ ghép nối"},(dialog,which) -> {
+            if (!owner.equals(accountId) || screen != Screen.HOME) return;
+            if (which == 0) {
+                EditText name = textInput("Tên thiết bị",false); name.setText(device.name);
+                name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(40)});
+                AlertDialog edit = new AlertDialog.Builder(this).setTitle("Đổi tên thiết bị").setView(name)
+                        .setNegativeButton("Hủy",null).setPositiveButton("Lưu",null).create();
+                edit.setOnShowListener(d -> edit.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                    if (!owner.equals(accountId) || screen != Screen.HOME) { edit.dismiss(); return; }
+                    String value = name.getText().toString().trim(); if (value.isEmpty()) { name.setError("Nhập tên thiết bị."); return; }
+                    DeviceStore.Device latest = findDevice(device.id); if (latest == null) { edit.dismiss(); return; }
+                    deviceStore.save(owner,new DeviceStore.Device(latest.id,value,latest.ip,latest.hostname,latest.ssid)); edit.dismiss(); showDevices();
+                })); edit.show();
+            } else new AlertDialog.Builder(this).setTitle("Bỏ ghép nối " + device.name + "?")
+                    .setMessage("Thiết bị sẽ được gỡ khỏi tài khoản này trên điện thoại.")
+                    .setNegativeButton("Hủy",null).setPositiveButton("Bỏ ghép nối",(d,w) -> {
+                        if (owner.equals(accountId) && screen == Screen.HOME) { deviceStore.remove(owner,device.id); showDevices(); }
+                    }).show();
+        }).show();
+    }
+
+    private void stopHome() { ++homeEpoch; checkingDevices.clear(); mainHandler.removeCallbacks(homeRefresh); }
+    private void restartHomeChecks() {
+        stopHome(); openingDevice = false;
+        for (Map.Entry<String,TextView> item : deviceLabels.entrySet()) {
+            if (!item.getKey().startsWith("legacy-")) { item.getValue().setText("Đang kiểm tra kết nối…"); item.getValue().setTextColor(Design.MUTED); }
+        }
+        mainHandler.post(homeRefresh);
+    }
+    private boolean currentHome(int token) { return token == homeEpoch && screen == Screen.HOME && foreground && !isDestroyed(); }
+    private Network wifiNetwork() {
+        if (activeNetwork != null) {
+            NetworkCapabilities caps = connectivityManager.getNetworkCapabilities(activeNetwork);
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return activeNetwork;
+        }
+        for (Network candidate : connectivityManager.getAllNetworks()) {
+            NetworkCapabilities caps = connectivityManager.getNetworkCapabilities(candidate);
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return candidate;
+        }
+        return null;
+    }
+    private EspApi deviceSession(DeviceStore.Device device, Network network) {
+        EspApi session = new EspApi(); session.setNetwork(network); session.setExpectedDeviceId(device.id);
+        session.setBaseUrl("http://" + device.ip); return session.snapshot(4000);
+    }
+    private JSONObject resolveDevice(DeviceStore.Device device, EspApi session) throws Exception {
+        Exception failure = new IOException("Không liên lạc được với thiết bị.");
+        for (String host : new String[]{device.ip,device.hostname}) {
+            if (host.isEmpty()) continue;
+            try { session.setBaseUrl("http://" + host); return session.get("/api/status"); }
+            catch(Exception error) { failure = error; }
+        }
+        throw failure;
+    }
+    private DeviceStore.Device updateAddress(DeviceStore.Device device, JSONObject status) {
+        JSONObject uplink = getUplink(status); String ip = uplink.optString("ip",device.ip);
+        if (!isPrivateIpv4(ip)) ip = device.ip;
+        DeviceStore.Device current = findDevice(device.id);
+        if (current == null) return device;
+        DeviceStore.Device updated = new DeviceStore.Device(device.id,current.name,ip,device.hostname,uplink.optString("ssid",device.ssid));
+        if (!updated.ip.equals(current.ip) || !updated.ssid.equals(current.ssid)) deviceStore.save(accountId,updated);
+        return updated;
+    }
+    private void refreshDevices() {
+        final int token = homeEpoch;
+        final Network network = wifiNetwork();
+        for (DeviceStore.Device device : deviceStore.list(accountId)) {
+            if (device.legacy() || checkingDevices.contains(device.id)) continue;
+            TextView label = deviceLabels.get(device.id); if (label == null) continue;
+            if (network == null) { label.setText("Không liên lạc được · Điện thoại chưa vào Wi-Fi"); label.setTextColor(Design.MUTED); continue; }
+            checkingDevices.add(device.id);
+            EspApi session = deviceSession(device,network);
+            presenceIo.execute(() -> {
+                if (token != homeEpoch) return;
+                try {
+                    JSONObject status = resolveDevice(device,session);
+                    runOnUiThread(() -> {
+                        if (!currentHome(token)) return;
+                        checkingDevices.remove(device.id); updateAddress(device,status);
+                        String value = DeviceStore.internetLabel(status); label.setText(value);
+                        label.setTextColor("Có Internet".equals(value) ? Design.TEAL : Design.MUTED);
+                    });
+                } catch (Exception error) {
+                    runOnUiThread(() -> {
+                        if (!currentHome(token)) return;
+                        checkingDevices.remove(device.id); label.setText("Không liên lạc được"); label.setTextColor(Design.MUTED);
+                    });
+                }
+            });
+        }
+    }
+    private void openDevice(DeviceStore.Device device) {
+        if (screen != Screen.HOME || openingDevice) return;
+        if (device.legacy()) { legacyPairingId = device.id; releaseRequestedNetwork(); showConnectDevice(false); return; }
+        Network network = wifiNetwork();
+        if (network == null) { showMessage("Kết nối điện thoại vào " + device.ssid + " để mở thiết bị."); return; }
+        openingDevice = true; int token = homeEpoch;
+        showMessage("Đang mở " + device.name + "…"); EspApi session = deviceSession(device,network);
+        presenceIo.execute(() -> {
+            if (token != homeEpoch) return;
+            try {
+                JSONObject status = resolveDevice(device,session);
+                runOnUiThread(() -> {
+                    if (!currentHome(token)) return;
+                    openingDevice = false; activeDevice = updateAddress(device,status);
+                    stopHome(); ++controlEpoch; clearDeviceState();
+                    api.setExpectedDeviceId(device.id); api.setNetwork(network); api.setBaseUrl(session.getBaseUrl());
+                    rememberStatus(status); lastUiMessage = ""; showControl(Tab.OVERVIEW);
+                });
+            } catch(Exception error) { runOnUiThread(() -> {
+                if (currentHome(token)) { openingDevice = false; showMessage("Chưa mở được " + device.name + ". Kiểm tra điện thoại cùng Wi-Fi với thiết bị."); }
+            }); }
+        });
+    }
+    private boolean currentControl(int token) { return token == controlEpoch && screen == Screen.CONTROL && !isDestroyed() && !isFinishing(); }
+    private void onControl(int token, Runnable callback) { runOnUiThread(() -> { if (currentControl(token)) callback.run(); }); }
+
 
     // -------------------------------------------------------------------------
     // Provisioning flow
     // -------------------------------------------------------------------------
 
-    private void showConnectDevice(boolean changingWifi) {
+    // One action per page; epochs reject responses from an older page/session.
+    private volatile int setupEpoch;
+    private boolean setupBusy, localDeviceReady, manualConnection, changingWifi;
+    private Button setupAction;
+    private String setupActionLabel = "";
+    private EditText setupPassword;
+    private android.widget.ImageButton passwordEye;
+    private LinearLayout setupResults;
+    private JSONArray scannedNetworks;
+    private String selectedSsid = "", selectedAuth = "";
+
+    private void newSetupPage(Screen next) {
+        ++setupEpoch;
+        setupBusy = false;
+        manualWifiVerificationQueued = false;
+        setupAction = null; setupPassword = null; passwordEye = null; setupResults = null;
+        screen = next; lastUiMessage = "";
+        stopHome();
         stopDashboard();
-        screen = Screen.CONNECT_DEVICE;
-        LinearLayout content = createPage("BƯỚC 1 / 3", "Kết nối thiết bị", changingWifi
-                ? "Kết nối lại Wi‑Fi riêng của bộ điều khiển trước khi đổi mạng cho thiết bị."
-                : "Để bắt đầu, điện thoại cần kết nối Wi‑Fi riêng của bộ điều khiển.");
+    }
 
-        LinearLayout card = card();
-        addSectionTitle(card, "Wi‑Fi của bộ điều khiển");
-        addValueLine(card, "Tên Wi‑Fi", ESP_SSID);
-        addValueLine(card, "Mật khẩu", ESP_PASSWORD);
-        addHelp(card, "App sẽ mở hộp thoại xác nhận của Android. Chọn Kết nối để tiếp tục.");
-        Button connect = primaryButton("Kết nối " + ESP_SSID);
-        connect.setOnClickListener(v -> startDeviceConnection());
-        card.addView(connect, fullParams(0, 12, 0, 0));
-        Button settings = neutralButton("Mở cài đặt Wi‑Fi");
-        settings.setOnClickListener(v -> openWifiSettings());
-        card.addView(settings, fullParams(0, 8, 0, 0));
-        Button check = neutralButton("Đã kết nối, kiểm tra thiết bị");
-        check.setOnClickListener(v -> verifyManualWifiAfterSettings());
-        card.addView(check, fullParams(0, 8, 0, 0));
-        content.addView(card, fullParams(0, 0, 0, 0));
+    private int beginSetup(String message) {
+        if (setupBusy || isFinishing() || isDestroyed()) return -1;
+        setupBusy = true;
+        int token = ++setupEpoch;
+        lastUiMessage = "";
+        if (messageView != null) messageView.setVisibility(View.GONE);
+        setSetupEnabled(false);
+        if (setupAction != null) setupAction.setText(message);
+        return token;
+    }
 
-        LinearLayout note = card();
-        addSectionTitle(note, "Luồng sử dụng");
-        addHelp(note, "1. Kết nối bộ điều khiển  •  2. Cài Wi‑Fi có Internet cho thiết bị  •  3. Chuyển điện thoại sang Wi‑Fi đó. Chỉ sau ba bước app mới mở màn điều khiển.");
-        content.addView(note, fullParams(0, 12, 0, 0));
+    private boolean currentSetup(int token) {
+        return token == setupEpoch && !isFinishing() && !isDestroyed();
+    }
+
+    private void setSetupEnabled(boolean enabled) {
+        if (setupAction != null) { setupAction.setEnabled(enabled); setupAction.setAlpha(enabled ? 1f : .6f); }
+        if (setupPassword != null) setupPassword.setEnabled(enabled);
+        if (passwordEye != null) passwordEye.setEnabled(enabled);
+        if (setupResults != null) for (int i = 0; i < setupResults.getChildCount(); i++) {
+            View child = setupResults.getChildAt(i);
+            child.setEnabled(enabled && !Boolean.FALSE.equals(child.getTag()));
+        }
+    }
+
+    private void finishSetup(int token, String message) {
+        if (!currentSetup(token)) return;
+        setupBusy = false;
+        manualWifiVerificationQueued = false;
+        setSetupEnabled(true);
+        if (setupAction != null) setupAction.setText(setupActionLabel);
+        if (message != null && !message.isEmpty()) showMessage(message);
+        else {
+            lastUiMessage = "";
+            if (messageView != null) messageView.setVisibility(View.GONE);
+        }
+    }
+
+    private void addSetupAction(LinearLayout content, String label, Runnable action) {
+        setupActionLabel = label; setupAction = primaryButton(label);
+        setupAction.setOnClickListener(v -> { if (!setupBusy) action.run(); });
+        content.addView(setupAction, fullParams(0, 20, 0, 0));
+    }
+
+    private void showConnectDevice(boolean changing) {
+        ++controlEpoch;
+        api.setExpectedDeviceId(changing && activeDevice != null ? activeDevice.id : "");
+        pairingDeviceId = changing && activeDevice != null ? activeDevice.id : "";
+        pairingHostname = pairingDeviceId.isEmpty() ? "" : pairingDeviceId + ".local";
+        newSetupPage(Screen.CONNECT_DEVICE);
+        changingWifi = changing; localDeviceReady = false; manualConnection = false;
+        demoMode = false; api.setDemo(false); configLoaded = false;
+        lastStatus = null; lastDebug = null; imageGeneration = 0;
+        uplinkSsid = ""; uplinkIp = ""; uplinkPasswordForPhone = "";
+        selectedSsid = ""; selectedAuth = ""; scannedNetworks = null;
+        LinearLayout content = createPage("GHÉP NỐI THIẾT BỊ", "Bắt đầu kết nối",
+                "Bật nguồn và đặt thiết bị gần điện thoại.");
+        LinearLayout visual = card();
+        visual.setBackground(new Design.Hero()); visual.setGravity(Gravity.CENTER);
+        visual.setPadding(dp(24), dp(48), dp(24), dp(48));
+        visual.addView(icon("wifi", Design.MINT, 76), new LinearLayout.LayoutParams(dp(76), dp(76)));
+        content.addView(visual, fullParams(0, 12, 0, 4));
+        addSetupAction(content, "Tìm Wi-Fi thiết bị", this::startDeviceConnection);
     }
 
     private void startDeviceConnection() {
-        requestWifi(ESP_SSID, ESP_PASSWORD, ROLE_DEVICE, "");
+        if (screen != Screen.CONNECT_DEVICE || setupBusy) return;
+        if (beginSetup("Đang tìm thiết bị…") < 0) return;
+        api.setBaseUrl(EspApi.DEVICE_BASE_URL);
+        if (manualConnection) openWifiSettings();
+        else requestWifi(ESP_SSID, ESP_PASSWORD, ROLE_DEVICE, "");
     }
 
     private void showWifiSetup(JSONObject status) {
-        stopDashboard();
-        screen = Screen.CONFIGURE_WIFI;
-        rememberStatus(status);
-        LinearLayout content = createPage("BƯỚC 2 / 3", "Cài Wi‑Fi cho thiết bị",
-                "Chọn Wi‑Fi 2.4 GHz có Internet. Thiết bị sẽ tự lưu và kết nối mạng này.");
-
-        JSONObject uplink = getUplink(status);
-        String state = uplink.optString("state", "not_configured");
-        String currentSsid = uplink.optString("ssid", "");
-        String currentIp = uplink.optString("ip", "");
-        if ("connected".equals(state) && isPrivateIpv4(currentIp)) {
-            LinearLayout activeCard = card();
-            addSectionTitle(activeCard, "Wi‑Fi đang lưu trên thiết bị");
-            addValueLine(activeCard, "Tên Wi‑Fi", blankForDash(currentSsid));
-            addValueLine(activeCard, "IP của thiết bị", currentIp);
-            addHelp(activeCard, "Để hiện danh sách Wi‑Fi mới, thiết bị cần ngắt mạng cũ trước. Sau đó app sẽ tự quét danh sách để bạn chọn.");
-            Button forget = primaryButton("Đổi Wi‑Fi: ngắt mạng cũ và quét danh sách");
-            forget.setOnClickListener(v -> confirmForgetThenConfigure());
-            activeCard.addView(forget, fullParams(0, 10, 0, 0));
-            content.addView(activeCard, fullParams(0, 0, 0, 0));
-        }
-
-        LinearLayout setupCard = card();
-        addSectionTitle(setupCard, "Chọn Wi‑Fi mới");
-        final EditText ssidInput = textInput("Tên Wi‑Fi có Internet", false);
-        if (!currentSsid.isEmpty()) ssidInput.setText(currentSsid);
-        setupCard.addView(ssidInput, fullParams(0, 0, 0, 0));
-        final LinearLayout scanResults = new LinearLayout(this);
-        scanResults.setOrientation(LinearLayout.VERTICAL);
-        scanResults.setVisibility(View.GONE);
-        Button scan = neutralButton("Quét Wi‑Fi gần đây");
-        scan.setOnClickListener(v -> {
-            if ("connected".equals(getUplink(lastStatus).optString("state", ""))) {
-                confirmForgetThenConfigure();
-                return;
-            }
-            scanNetworks(scan, scanResults, ssidInput);
-        });
-        setupCard.addView(scan, fullParams(0, 10, 0, 0));
-        setupCard.addView(scanResults, fullParams(0, 6, 0, 0));
-
-        final EditText passwordInput = textInput("Mật khẩu Wi‑Fi", true);
-        passwordInput.setHint("Để trống nếu Wi‑Fi không có mật khẩu");
-        setupCard.addView(passwordInput, fullParams(0, 10, 0, 0));
-        Button saveAndConnect = primaryButton("Lưu và kết nối Internet");
-        saveAndConnect.setOnClickListener(v -> connectUplink(ssidInput, passwordInput));
-        setupCard.addView(saveAndConnect, fullParams(0, 12, 0, 0));
-        addHelp(setupCard, "Chỉ hỗ trợ Wi‑Fi 2.4 GHz. Mật khẩu không được lưu trong điện thoại; thiết bị tự lưu trong bộ nhớ của nó.");
-        content.addView(setupCard, fullParams(0, 12, 0, 0));
-
-        // Step 2 should behave like a picker, not a blank form. For a fresh
-        // or failed uplink the ESP is allowed to scan, so populate the list
-        // immediately instead of waiting for the user to discover the button.
-        if ("not_configured".equals(state) || "failed".equals(state)) {
-            mainHandler.postDelayed(() -> {
-                if (screen == Screen.CONFIGURE_WIFI && scan.isEnabled()
-                        && scanResults.getVisibility() != View.VISIBLE) {
-                    scanNetworks(scan, scanResults, ssidInput);
-                }
-            }, 180);
-        }
+        if (!localDeviceReady) return;
+        newSetupPage(Screen.CONFIGURE_WIFI); rememberStatus(status);
+        LinearLayout content = createPage("CHỌN MẠNG", "Wi-Fi cho thiết bị",
+                "Chọn mạng 2.4 GHz hoặc 5 GHz của bạn.");
+        addSetupAction(content, "Quét Wi-Fi", this::scanNetworks);
+        setupResults = new LinearLayout(this); setupResults.setOrientation(LinearLayout.VERTICAL);
+        content.addView(setupResults, fullParams(0, 18, 0, 0));
+        if (scannedNetworks != null) renderNetworks(scannedNetworks);
     }
 
-    private void scanNetworks(Button scanButton, LinearLayout resultRoot, EditText ssidInput) {
-        scanButton.setEnabled(false);
-        resultRoot.removeAllViews();
-        addHelp(resultRoot, "Đang lấy danh sách Wi‑Fi từ bộ điều khiển…");
-        resultRoot.setVisibility(View.VISIBLE);
-        showMessage("Thiết bị đang quét Wi‑Fi…");
+    private void scanNetworks() {
+        if (screen != Screen.CONFIGURE_WIFI || !localDeviceReady) return;
+        int token = beginSetup("Đang quét…");
+        if (token < 0) return;
+        scannedNetworks = null; setupResults.removeAllViews();
+        EspApi session = api.snapshot(20000);
         io.execute(() -> {
             try {
-                JSONObject response = api.get("/api/uplink/scan");
-                JSONArray networks = response.optJSONArray("networks");
+                JSONArray networks = session.get("/api/uplink/scan").optJSONArray("networks");
                 runOnUiThread(() -> {
-                    scanButton.setEnabled(true);
-                    resultRoot.removeAllViews();
-                    int count = networks == null ? 0 : networks.length();
-                    if (count == 0) {
-                        addHelp(resultRoot, "Không tìm thấy Wi‑Fi gần đây. Bạn vẫn có thể tự nhập tên Wi‑Fi.");
-                    } else {
-                        for (int index = 0; index < count; index++) {
-                            JSONObject network = networks.optJSONObject(index);
-                            if (network == null) continue;
-                            String ssid = network.optString("ssid", "");
-                            if (ssid.isEmpty()) continue;
-                            String label = ssid + "  ·  " + network.optInt("rssi", 0) + " dBm  ·  "
-                                    + network.optString("auth", "Bảo mật");
-                            Button option = neutralButton(label);
-                            option.setTextSize(12);
-                            option.setOnClickListener(v -> {
-                                ssidInput.setText(ssid);
-                                resultRoot.setVisibility(View.GONE);
-                                showMessage("Đã chọn " + ssid + ". Nhập mật khẩu rồi kết nối.");
-                            });
-                            resultRoot.addView(option, fullParams(0, 5, 0, 0));
-                        }
-                    }
-                    resultRoot.setVisibility(View.VISIBLE);
-                    showMessage("Đã quét xong. Chọn một Wi‑Fi hoặc tự nhập tên.");
+                    if (!currentSetup(token) || screen != Screen.CONFIGURE_WIFI) return;
+                    scannedNetworks = networks == null ? new JSONArray() : networks;
+                    finishSetup(token, ""); renderNetworks(scannedNetworks);
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> {
-                    scanButton.setEnabled(true);
-                    resultRoot.removeAllViews();
-                    addHelp(resultRoot, "Chưa lấy được danh sách Wi‑Fi. Bạn có thể quét lại hoặc tự nhập tên Wi‑Fi.");
-                    resultRoot.setVisibility(View.VISIBLE);
-                    showMessage(errorMessage(error));
-                });
+                runOnUiThread(() -> finishSetup(token, "Chưa quét được Wi-Fi. " + errorMessage(error)));
             }
         });
     }
 
-    private void confirmForgetThenConfigure() {
-        new AlertDialog.Builder(this)
-                .setTitle("Đổi Wi‑Fi cho thiết bị?")
-                .setMessage("Thiết bị sẽ ngắt mạng đang dùng, sau đó app tự hiện danh sách Wi‑Fi mới.")
-                .setNegativeButton("Hủy", null)
-                .setPositiveButton("Quét Wi‑Fi mới", (dialog, which) -> forgetUplink())
-                .show();
+    private void renderNetworks(JSONArray networks) {
+        setupResults.removeAllViews();
+        int count = 0;
+        for (int i = 0; i < networks.length(); i++) {
+            JSONObject network = networks.optJSONObject(i);
+            if (network == null) continue;
+            final String ssid = network.optString("ssid", ""), auth = network.optString("auth", "WPA2");
+            if (ssid.isEmpty() || ssid.startsWith(ESP_SSID)) continue;
+            int channel = network.optInt("channel", 0);
+            String band = channel > 14 ? "5 GHz" : channel > 0 ? "2.4 GHz" : "Wi-Fi";
+            boolean supported = !"WEP".equals(auth) && !auth.toUpperCase(Locale.US).contains("ENTERPRISE");
+            Button option = neutralButton(ssid + "\n" + band + (supported ? "" : " · Chưa hỗ trợ bảo mật này"));
+            option.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+            option.setTag(supported); option.setEnabled(supported);
+            option.setOnClickListener(v -> {
+                if (screen == Screen.CONFIGURE_WIFI && !setupBusy && localDeviceReady) showWifiPassword(ssid, auth);
+            });
+            setupResults.addView(option, fullParams(0, 0, 0, 8)); count++;
+        }
+        if (count == 0) addHelp(setupResults, "Chưa tìm thấy mạng. Đặt thiết bị gần router rồi quét lại.");
     }
 
-    private void forgetUplink() {
-        showMessage("Đang quên Wi‑Fi đã lưu…");
+    private boolean isOpenNetwork(String auth) {
+        return "Mo".equalsIgnoreCase(auth) || "open".equalsIgnoreCase(auth);
+    }
+
+    private void showWifiPassword(String ssid, String auth) {
+        if (!localDeviceReady) return;
+        newSetupPage(Screen.WIFI_PASSWORD); selectedSsid = ssid; selectedAuth = auth;
+        LinearLayout content = createPage("KẾT NỐI WI-FI", ssid,
+                isOpenNetwork(auth) ? "Mạng này không yêu cầu mật khẩu." : "Nhập mật khẩu Wi-Fi để tiếp tục.");
+        if (!isOpenNetwork(auth)) addPasswordField(content, "Mật khẩu Wi-Fi");
+        addSetupAction(content, "Kết nối", this::connectUplink);
+    }
+
+    private void addPasswordField(LinearLayout content, String hint) {
+        LinearLayout row = new LinearLayout(this); row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(rounded(0xFFF0F4F7, dp(12)));
+        setupPassword = textInput(hint, true); setupPassword.setSaveEnabled(false);
+        setupPassword.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        setupPassword.setOnEditorActionListener((view, action, event) -> {
+            if (action == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                if (!setupBusy && setupAction != null) setupAction.performClick();
+                return true;
+            }
+            return false;
+        });
+        row.addView(setupPassword, new LinearLayout.LayoutParams(0, dp(56), 1));
+        passwordEye = new android.widget.ImageButton(this);
+        passwordEye.setImageDrawable(new Design.Icon("eye", Design.TEAL));
+        passwordEye.setContentDescription("Hiện mật khẩu"); passwordEye.setBackgroundColor(Color.TRANSPARENT);
+        passwordEye.setPadding(dp(14), dp(14), dp(14), dp(14));
+        passwordEye.setOnClickListener(v -> {
+            if (setupBusy || setupPassword == null) return;
+            int position = setupPassword.getSelectionStart();
+            boolean hidden = setupPassword.getTransformationMethod() instanceof android.text.method.PasswordTransformationMethod;
+            setupPassword.setTransformationMethod(hidden ? null : android.text.method.PasswordTransformationMethod.getInstance());
+            setupPassword.setSelection(Math.max(0, position));
+            passwordEye.setImageDrawable(new Design.Icon(hidden ? "eye-off" : "eye", Design.TEAL));
+            passwordEye.setContentDescription(hidden ? "Ẩn mật khẩu" : "Hiện mật khẩu");
+        });
+        row.addView(passwordEye, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        content.addView(row, fullParams(0, 12, 0, 0));
+    }
+
+    private void connectUplink() {
+        if (screen != Screen.WIFI_PASSWORD || !localDeviceReady || setupBusy) return;
+        final String ssid = selectedSsid, password = setupPassword == null ? "" : setupPassword.getText().toString();
+        int length = utf8Length(password);
+        if (!isOpenNetwork(selectedAuth) && (length < 8 || length > 63)) {
+            setupPassword.setError("Kiểm tra lại độ dài mật khẩu Wi-Fi."); return;
+        }
+        int token = beginSetup("Đang kết nối…");
+        if (token < 0) return;
+        if (setupPassword != null) {
+            setupPassword.setTransformationMethod(android.text.method.PasswordTransformationMethod.getInstance());
+            passwordEye.setImageDrawable(new Design.Icon("eye", Design.TEAL));
+            passwordEye.setContentDescription("Hiện mật khẩu");
+            ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
+                    .hideSoftInputFromWindow(setupPassword.getWindowToken(), 0);
+        }
+        uplinkSsid = ssid; uplinkPasswordForPhone = password; uplinkIp = "";
+        EspApi session = api.snapshot(6000);
         io.execute(() -> {
             try {
                 JSONObject body = new JSONObject();
-                body.put("action", "forget");
-                JSONObject response = api.post("/api/uplink", body);
-                runOnUiThread(() -> {
-                    showMessage(response.optString("message", "Đã quên Wi‑Fi."));
-                    refreshSetupStatus();
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
+                body.put("action", "connect"); body.put("ssid", ssid); body.put("password", password);
+                session.post("/api/uplink", body);
+                waitForUplink(session, token, ssid);
+            } catch (EspApi.ApiException rejected) {
+                runOnUiThread(() -> finishSetup(token, errorMessage(rejected)));
+            } catch (Exception uncertain) {
+                // Band/channel may change after accepting credentials, before the reply arrives.
+                // Never resend the write blindly: read status, then verify on the target LAN.
+                waitForUplink(session, token, ssid);
             }
         });
     }
 
-    private void refreshSetupStatus() {
-        io.execute(() -> {
+    private void waitForUplink(EspApi session, int token, String ssid) {
+        long deadline = android.os.SystemClock.elapsedRealtime() + 45000;
+        int transportErrors = 0;
+        while (token == setupEpoch && android.os.SystemClock.elapsedRealtime() < deadline
+                && !Thread.currentThread().isInterrupted()) {
             try {
-                JSONObject response = api.get("/api/status");
-                runOnUiThread(() -> showWifiSetup(response));
-            } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
-            }
-        });
-    }
-
-    private void connectUplink(EditText ssidInput, EditText passwordInput) {
-        String ssid = ssidInput.getText().toString().trim();
-        String password = passwordInput.getText().toString();
-        if (ssid.isEmpty() || utf8Length(ssid) > 32) {
-            showMessage("Tên Wi‑Fi phải có từ 1 đến 32 ký tự.");
-            return;
-        }
-        int passwordSize = utf8Length(password);
-        if (passwordSize != 0 && (passwordSize < 8 || passwordSize > 63)) {
-            showMessage("Mật khẩu Wi‑Fi phải để trống hoặc có từ 8 đến 63 ký tự.");
-            return;
-        }
-        showMessage("Đang lưu Wi‑Fi và đợi thiết bị kết nối…");
-        io.execute(() -> {
-            try {
-                JSONObject body = new JSONObject();
-                body.put("action", "connect");
-                body.put("ssid", ssid);
-                body.put("password", password);
-                api.post("/api/uplink", body);
-                waitForUplink(ssid, password);
-            } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
-            }
-        });
-    }
-
-    private void waitForUplink(String desiredSsid, String desiredPassword) {
-        String failure = "";
-        for (int attempt = 0; attempt < 36 && !Thread.currentThread().isInterrupted(); attempt++) {
-            try {
-                JSONObject status = api.get("/api/status");
-                JSONObject uplink = getUplink(status);
+                JSONObject status = session.get("/api/status"), uplink = getUplink(status);
                 String state = uplink.optString("state", "");
-                String ip = uplink.optString("ip", "");
-                if ("connected".equals(state) && isPrivateIpv4(ip)) {
+                if (ssid.equals(uplink.optString("ssid")) && "connected".equals(state)
+                        && isPrivateIpv4(uplink.optString("ip"))) {
                     runOnUiThread(() -> {
-                        rememberStatus(status);
-                        uplinkSsid = uplink.optString("ssid", desiredSsid);
-                        uplinkIp = ip;
-                        uplinkPasswordForPhone = desiredPassword;
-                        showSwitchPhone();
-                    });
-                    return;
+                        if (!currentSetup(token)) return;
+                        rememberStatus(status); showSwitchPhone();
+                    }); return;
                 }
-                if ("failed".equals(state)) {
-                    failure = uplink.optString("reason", "Thiết bị không thể vào Wi‑Fi này.");
-                    break;
+                if (ssid.equals(uplink.optString("ssid")) && "failed".equals(state)) {
+                    runOnUiThread(() -> finishSetup(token, "Chưa kết nối được. Kiểm tra mật khẩu và thử lại.")); return;
                 }
+                transportErrors = 0;
             } catch (Exception error) {
-                failure = errorMessage(error);
+                if (++transportErrors >= 2) {
+                    runOnUiThread(() -> { if (currentSetup(token)) showSwitchPhone(); }); return;
+                }
             }
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                return;
-            }
+            try { Thread.sleep(800); }
+            catch (InterruptedException error) { Thread.currentThread().interrupt(); return; }
         }
-        final String message = failure.isEmpty()
-                ? "Chưa thấy thiết bị kết nối Wi‑Fi. Kiểm tra tên, mật khẩu và sóng 2.4 GHz rồi thử lại."
-                : failure;
-        runOnUiThread(() -> showMessage(message));
+        runOnUiThread(() -> finishSetup(token, "Thiết bị chưa kết nối được. Kiểm tra mật khẩu rồi thử lại."));
     }
 
     private void showSwitchPhone() {
-        stopDashboard();
-        screen = Screen.SWITCH_PHONE;
-        LinearLayout content = createPage("BƯỚC 3 / 3", "Chuyển điện thoại sang Wi‑Fi mới",
-                "Thiết bị đã vào mạng mới. Điện thoại cần vào cùng mạng để điều khiển bình thường.");
-
-        LinearLayout card = card();
-        addSectionTitle(card, "Thiết bị đã kết nối");
-        addValueLine(card, "Wi‑Fi", blankForDash(uplinkSsid));
-        addValueLine(card, "IP của thiết bị", blankForDash(uplinkIp));
-        addHelp(card, "IP này được hiển thị để bạn luôn biết địa chỉ của thiết bị sau khi đổi mạng.");
-
-        final EditText phonePassword = textInput("Mật khẩu Wi‑Fi cho điện thoại", true);
-        if (uplinkPasswordForPhone.isEmpty()) {
-            phonePassword.setHint("Nhập lại mật khẩu của " + blankForDash(uplinkSsid));
-            card.addView(phonePassword, fullParams(0, 10, 0, 0));
-        } else {
-            addHelp(card, "Mật khẩu vừa nhập sẽ chỉ dùng cho lần chuyển mạng này, không lưu trong app.");
-        }
-
-        Button join = primaryButton("Kết nối điện thoại tới " + blankForDash(uplinkSsid));
-        join.setOnClickListener(v -> {
-            String password = uplinkPasswordForPhone.isEmpty() ? phonePassword.getText().toString() : uplinkPasswordForPhone;
-            int size = utf8Length(password);
-            if (size != 0 && (size < 8 || size > 63)) {
-                showMessage("Mật khẩu Wi‑Fi phải để trống hoặc có từ 8 đến 63 ký tự.");
-                return;
+        newSetupPage(Screen.SWITCH_PHONE); manualConnection = false;
+        LinearLayout content = createPage("HOÀN TẤT GHÉP NỐI", "Kết nối điện thoại",
+                "Cho điện thoại vào " + uplinkSsid + " để tiếp tục.");
+        if (uplinkPasswordForPhone.isEmpty() && !isOpenNetwork(selectedAuth)) addPasswordField(content, "Mật khẩu Wi-Fi");
+        addSetupAction(content, "Tiếp tục", () -> {
+            String password = setupPassword == null ? uplinkPasswordForPhone : setupPassword.getText().toString();
+            if (!isOpenNetwork(selectedAuth) && (utf8Length(password) < 8 || utf8Length(password) > 63)) {
+                if (setupPassword != null) setupPassword.setError("Kiểm tra lại mật khẩu Wi-Fi."); return;
             }
-            requestWifi(uplinkSsid, password, ROLE_PHONE, uplinkIp);
+            if (beginSetup("Đang kết nối…") < 0) return;
+            if (manualConnection) openWifiSettings();
+            else requestWifi(uplinkSsid, password, ROLE_PHONE, uplinkIp);
         });
-        card.addView(join, fullParams(0, 12, 0, 0));
-        Button settings = neutralButton("Mở cài đặt Wi‑Fi nếu Android không tự chuyển");
-        settings.setOnClickListener(v -> openWifiSettings());
-        card.addView(settings, fullParams(0, 8, 0, 0));
-        Button check = neutralButton("Đã kết nối, kiểm tra IP thiết bị");
-        check.setOnClickListener(v -> verifyManualWifiAfterSettings());
-        card.addView(check, fullParams(0, 8, 0, 0));
-        addHelp(card, "Android luôn yêu cầu bạn xác nhận khi app đổi Wi‑Fi. Sau khi xác nhận, app sẽ kiểm tra đúng IP ở trên trước khi mở điều khiển.");
-        content.addView(card, fullParams(0, 0, 0, 0));
     }
 
-    // -------------------------------------------------------------------------
-    // Android Wi-Fi connection bridge
-    // -------------------------------------------------------------------------
-
     private boolean hasWifiPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            return checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED;
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        }
+        if (Build.VERSION.SDK_INT >= 33) return checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= 29) return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         return true;
     }
 
+    @android.annotation.TargetApi(29)
+    private NetworkRequest makeWifiRequest(String ssid, String password, String auth) {
+        WifiNetworkSpecifier.Builder specifier = new WifiNetworkSpecifier.Builder();
+        if (ESP_SSID.equals(ssid)) specifier.setSsidPattern(new android.os.PatternMatcher(ESP_SSID + "-", android.os.PatternMatcher.PATTERN_PREFIX));
+        else specifier.setSsid(ssid);
+        if (!password.isEmpty()) {
+            if ("WPA3".equals(auth)) specifier.setWpa3Passphrase(password);
+            else specifier.setWpa2Passphrase(password);
+        }
+        // C5's AP and target can both use 5 GHz. Specifier connections are local-only.
+        return new NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .setNetworkSpecifier(specifier.build()).build();
+    }
+
     private void requestWifi(String ssid, String password, int role, String stationIp) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-            showMessage("Máy Android này cần chọn Wi‑Fi thủ công trong phần Cài đặt.");
-            openWifiSettings();
-            return;
-        }
-        pendingRole = role;
-        pendingSsid = ssid;
-        pendingPassword = password;
-        pendingStationIp = stationIp;
+        pendingRole = role; pendingSsid = ssid; pendingPassword = password; pendingStationIp = stationIp;
+        if (Build.VERSION.SDK_INT < 29) { openWifiSettings(); return; }
         if (!hasWifiPermission()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                requestPermissions(new String[]{Manifest.permission.NEARBY_WIFI_DEVICES}, WIFI_PERMISSION_REQUEST);
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION}, WIFI_PERMISSION_REQUEST);
-            } else {
-                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, WIFI_PERMISSION_REQUEST);
-            }
-            return;
+            String[] permissions = Build.VERSION.SDK_INT >= 33 ? new String[]{Manifest.permission.NEARBY_WIFI_DEVICES}
+                    : Build.VERSION.SDK_INT >= 31 ? new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}
+                    : new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
+            requestPermissions(permissions, WIFI_PERMISSION_REQUEST); return;
         }
-        if (ssid == null || ssid.trim().isEmpty()) {
-            showMessage("Chưa có tên Wi‑Fi để kết nối.");
-            return;
-        }
-
         releaseRequestedNetwork();
-        final int token = ++requestToken;
-        WifiNetworkSpecifier.Builder specifier = new WifiNetworkSpecifier.Builder().setSsid(ssid);
-        if (password != null && !password.isEmpty()) specifier.setWpa2Passphrase(password);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            specifier.setBand(ScanResult.WIFI_BAND_24_GHZ);
-        }
-        NetworkRequest.Builder requestBuilder = new NetworkRequest.Builder()
-                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-                .setNetworkSpecifier(specifier.build());
-        // The ESP SoftAP has no Internet, so its request must be local-only.
-        // The third step intentionally keeps Internet capability: the phone is
-        // moving to the same normal Wi‑Fi as the ESP, not to another local AP.
-        if (role == ROLE_DEVICE) requestBuilder.removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
-        NetworkRequest request = requestBuilder.build();
-        networkCallback = new ConnectivityManager.NetworkCallback() {
-            @Override
-            public void onAvailable(Network network) {
-                runOnUiThread(() -> onWifiAvailable(token, role, network));
-            }
-
-            @Override
-            public void onUnavailable() {
-                runOnUiThread(() -> {
-                    if (token == requestToken) showMessage("Android không thể kết nối Wi‑Fi đã chọn.");
-                });
-            }
-
-            @Override
-            public void onLost(Network network) {
-                runOnUiThread(() -> onWifiLost(token, network));
-            }
-        };
+        int networkToken = ++requestToken;
+        final int operationToken = setupEpoch;
         try {
-            showMessage("Android đang yêu cầu kết nối " + ssid + "… hãy xác nhận trong hộp thoại hệ thống.");
+            NetworkRequest request = makeWifiRequest(ssid, password, role == ROLE_DEVICE ? "WPA2" : selectedAuth);
+            networkCallback = new ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(Network network) {
+                    runOnUiThread(() -> onWifiAvailable(networkToken, role, network));
+                }
+                @Override public void onUnavailable() {
+                    runOnUiThread(() -> {
+                        if (networkToken != requestToken || !currentSetup(operationToken)) return;
+                        manualConnection = true;
+                        finishSetup(operationToken, "Chưa kết nối được Wi-Fi. Bấm lại để chọn mạng trong cài đặt điện thoại.");
+                    });
+                }
+                @Override public void onLost(Network network) {
+                    runOnUiThread(() -> onWifiLost(networkToken, network));
+                }
+            };
             connectivityManager.requestNetwork(request, networkCallback, mainHandler, 30000);
-        } catch (SecurityException error) {
-            showMessage("Android chưa cho phép thay đổi Wi‑Fi: " + error.getMessage());
-        } catch (IllegalArgumentException error) {
-            showMessage("Không thể dùng thông tin Wi‑Fi này: " + error.getMessage());
+        } catch (SecurityException | IllegalArgumentException error) {
+            manualConnection = true;
+            finishSetup(operationToken, "Bấm lại để chọn Wi-Fi trong cài đặt điện thoại.");
         }
     }
 
     private void onWifiAvailable(int token, int role, Network network) {
-        if (token != requestToken) return;
-        activeNetwork = network;
-        api.setNetwork(network);
-        connectivityManager.bindProcessToNetwork(network);
-        if (role == ROLE_DEVICE) {
-            api.setBaseUrl(EspApi.DEVICE_BASE_URL);
-            showMessage("Đã vào Wi‑Fi bộ điều khiển. Đang kiểm tra thiết bị…");
-            verifyDeviceConnection();
-        } else {
-            api.setBaseUrl("http://" + pendingStationIp);
-            showMessage("Đã vào Wi‑Fi mới. Đang kiểm tra IP " + pendingStationIp + "…");
-            verifyPhoneOnLan();
-        }
+        if (token != requestToken || isDestroyed() || isFinishing()) return;
+        if (role == ROLE_DEVICE && screen != Screen.CONNECT_DEVICE) return;
+        if (role == ROLE_PHONE && screen != Screen.SWITCH_PHONE) return;
+        if (activeNetwork != null && activeNetwork.equals(network)) return;
+        activeNetwork = network; api.setNetwork(network); connectivityManager.bindProcessToNetwork(network);
+        if (role == ROLE_DEVICE) { api.setBaseUrl(EspApi.DEVICE_BASE_URL); verifyDeviceConnection(); }
+        else verifyPhoneOnLan();
     }
 
     private void onWifiLost(int token, Network network) {
         if (token != requestToken || activeNetwork == null || !activeNetwork.equals(network)) return;
-        activeNetwork = null;
-        api.setNetwork(null);
-        connectivityManager.bindProcessToNetwork(null);
-        if (screen == Screen.CONTROL) {
-            showMessage("Mất kết nối Wi‑Fi với thiết bị. Vào tab Thiết bị để kết nối lại.");
+        activeNetwork = null; api.setNetwork(null); connectivityManager.bindProcessToNetwork(null);
+        if (screen == Screen.WIFI_PASSWORD && setupBusy) return; // Bounded status check owns C5 band handoff recovery.
+        if (screen == Screen.HOME) { restartHomeChecks(); return; }
+        if (screen == Screen.AUTH) return;
+        if (screen == Screen.CONTROL) showMessage("Mất kết nối Wi-Fi. Kết nối lại trong tab Thiết bị.");
+        else if (screen == Screen.SWITCH_PHONE) {
+            ++setupEpoch; finishSetup(setupEpoch, "Mất kết nối. Bấm Tiếp tục để thử lại.");
         } else {
-            showMessage("Kết nối Wi‑Fi vừa bị mất. Hãy thử kết nối lại.");
+            releaseRequestedNetwork(); showConnectDevice(changingWifi);
+            showMessage("Mất kết nối với thiết bị. Hãy tìm lại Wi-Fi thiết bị.");
         }
     }
 
     private void verifyDeviceConnection() {
+        int token = setupEpoch;
+        EspApi session = api.snapshot(6000);
         io.execute(() -> {
             try {
-                JSONObject status = api.get("/api/status");
-                runOnUiThread(() -> showWifiSetup(status));
+                JSONObject status = session.get("/api/status");
+                String identity = DeviceStore.identity(status);
+                if (identity.isEmpty()) throw new IOException("Thiết bị cần firmware hỗ trợ mã MAC để ghép nối.");
+                runOnUiThread(() -> {
+                    if (!currentSetup(token) || screen != Screen.CONNECT_DEVICE) return;
+                    pairingDeviceId = identity; pairingHostname = DeviceStore.hostname(status);
+                    api.setExpectedDeviceId(identity);
+                    localDeviceReady = true; showWifiSetup(status);
+                });
             } catch (Exception error) {
-                runOnUiThread(() -> showMessage("Đã vào Wi‑Fi nhưng chưa thấy bộ điều khiển: " + errorMessage(error)));
+                runOnUiThread(() -> finishSetup(token, "Chưa kết nối được thiết bị. " + errorMessage(error)));
             }
         });
     }
 
     private void verifyPhoneOnLan() {
+        int token = setupEpoch;
+        String expectedSsid = uplinkSsid, knownIp = uplinkIp;
+        EspApi session = api.snapshot(5000);
         io.execute(() -> {
-            try {
-                JSONObject status = api.get("/api/status");
-                runOnUiThread(() -> {
-                    rememberStatus(status);
-                    showControl(Tab.OVERVIEW);
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> showMessage("Đã vào Wi‑Fi nhưng không mở được IP " + pendingStationIp + ": " + errorMessage(error)));
+            String[] hosts = isPrivateIpv4(knownIp) ? new String[]{knownIp, pairingHostname} : new String[]{pairingHostname};
+            for (String host : hosts) {
+                if (token != setupEpoch || Thread.currentThread().isInterrupted()) return;
+                try {
+                    session.setBaseUrl("http://" + host);
+                    JSONObject status = session.get("/api/status"), uplink = getUplink(status);
+                    String ip = uplink.optString("ip", "");
+                    if (!"connected".equals(uplink.optString("state")) || !expectedSsid.equals(uplink.optString("ssid"))
+                            || !isPrivateIpv4(ip)) throw new IOException("Chưa xác nhận được thiết bị trên Wi-Fi đã chọn.");
+                    runOnUiThread(() -> {
+                        if (!currentSetup(token)) return;
+                        api.setBaseUrl("http://" + ip); rememberStatus(status);
+                        DeviceStore.Device existing = findDevice(pairingDeviceId);
+                        String name = existing == null ? "MS51 " + pairingDeviceId.substring(11).toUpperCase(Locale.ROOT) : existing.name;
+                        try {
+                            deviceStore.save(accountId, new DeviceStore.Device(pairingDeviceId, name, ip, pairingHostname, expectedSsid));
+                            if (!legacyPairingId.isEmpty()) deviceStore.remove(accountId, legacyPairingId);
+                            legacyPairingId = "";
+                        } catch (Exception error) { finishSetup(token, errorMessage(error)); return; }
+                        pendingPassword = ""; uplinkPasswordForPhone = "";
+                        if (setupPassword != null) setupPassword.setText("");
+                        showDevices();
+                    }); return;
+                } catch (Exception ignored) { /* Try mDNS when DHCP changed the address. */ }
             }
+            runOnUiThread(() -> finishSetup(token, "Chưa thấy thiết bị trên " + expectedSsid + ". Kiểm tra điện thoại cùng mạng rồi thử lại."));
         });
     }
 
     private void releaseRequestedNetwork() {
         requestToken++;
         if (networkCallback != null) {
-            try {
-                connectivityManager.unregisterNetworkCallback(networkCallback);
-            } catch (IllegalArgumentException ignored) {
-                // It may already have been released by Android.
-            }
+            try { connectivityManager.unregisterNetworkCallback(networkCallback); }
+            catch (IllegalArgumentException ignored) { }
             networkCallback = null;
         }
-        activeNetwork = null;
-        api.setNetwork(null);
-        connectivityManager.bindProcessToNetwork(null);
+        activeNetwork = null; api.setNetwork(null); connectivityManager.bindProcessToNetwork(null);
     }
 
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode != WIFI_PERMISSION_REQUEST) return;
-        boolean granted = hasWifiPermission();
-        if (!granted) {
-            showMessage("Cần quyền Wi‑Fi để app mở bước kết nối. Bạn có thể bật quyền trong Cài đặt ứng dụng.");
-            return;
+        if (requestCode != WIFI_PERMISSION_REQUEST || !setupBusy
+                || (screen != Screen.CONNECT_DEVICE && screen != Screen.SWITCH_PHONE)) return;
+        if (!hasWifiPermission()) {
+            manualConnection = true;
+            finishSetup(setupEpoch, "Chưa có quyền Wi-Fi. Bấm lại để kết nối trong cài đặt điện thoại."); return;
         }
         requestWifi(pendingSsid, pendingPassword, pendingRole, pendingStationIp);
     }
+
+    private void openWifiSettings() {
+        if (screen != Screen.CONNECT_DEVICE && screen != Screen.SWITCH_PHONE) return;
+        releaseRequestedNetwork(); waitingForWifiSettingsReturn = true;
+        showMessage("Chọn " + (screen == Screen.CONNECT_DEVICE ? ESP_SSID : uplinkSsid) + " rồi quay lại app.");
+        try {
+            Intent intent = Build.VERSION.SDK_INT >= 29 ? new Intent(Settings.Panel.ACTION_WIFI) : new Intent(Settings.ACTION_WIFI_SETTINGS);
+            startActivityForResult(intent, WIFI_SETTINGS_REQUEST);
+        } catch (ActivityNotFoundException error) {
+            waitingForWifiSettingsReturn = false; finishSetup(setupEpoch, "Không mở được cài đặt Wi-Fi trên điện thoại này.");
+        }
+    }
+
+    private void verifyManualWifiAfterSettings() {
+        if (manualWifiVerificationQueued || !setupBusy) return;
+        if (screen != Screen.CONNECT_DEVICE && screen != Screen.SWITCH_PHONE) return;
+        manualWifiVerificationQueued = true; waitingForWifiSettingsReturn = false;
+        Network wifi = null;
+        for (Network candidate : connectivityManager.getAllNetworks()) {
+            NetworkCapabilities caps = connectivityManager.getNetworkCapabilities(candidate);
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) { wifi = candidate; break; }
+        }
+        if (wifi == null) {
+            manualWifiVerificationQueued = false; finishSetup(setupEpoch, "Chưa kết nối Wi-Fi. Bấm lại để tiếp tục."); return;
+        }
+        activeNetwork = wifi; api.setNetwork(wifi);
+        if (screen == Screen.CONNECT_DEVICE) { api.setBaseUrl(EspApi.DEVICE_BASE_URL); verifyDeviceConnection(); }
+        else verifyPhoneOnLan();
+    }
+
+
 
     // -------------------------------------------------------------------------
     // Native control tabs
@@ -602,7 +896,15 @@ public final class MainActivity extends Activity {
         stopDashboard();
         screen = Screen.CONTROL;
         tab = selectedTab;
-        LinearLayout content = createPage("ĐÃ KẾT NỐI", "Bộ điều khiển", controlSubtitle());
+        String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt vận hành"
+                : tab == Tab.FIRMWARE ? "Nạp chương trình" : "Thiết bị của bạn";
+        LinearLayout content = createPage("KHÔNG GIAN THIẾT BỊ", title,
+                tab == Tab.OVERVIEW ? "Theo dõi bộ điều khiển, ngay trong tầm tay."
+                : tab == Tab.SETTINGS ? "Tinh chỉnh cho từng nhu cầu vận hành."
+                : tab == Tab.FIRMWARE ? "Cập nhật và quản lý chương trình MS51."
+                : "Thông tin kết nối và bộ điều khiển.");
+        TextView deviceName = mutedText(activeDevice == null ? "" : activeDevice.name);
+        deviceName.setTextColor(Design.TEAL); content.addView(deviceName, fullParams(0,0,0,12));
         addNavigation(content);
         switch (tab) {
             case OVERVIEW:
@@ -622,116 +924,138 @@ public final class MainActivity extends Activity {
     }
 
     private void addNavigation(LinearLayout content) {
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        scroll.setHorizontalScrollBarEnabled(false);
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, 0, 0, dp(2));
-        addNavButton(row, Tab.OVERVIEW, "Vận hành");
-        addNavButton(row, Tab.SETTINGS, "Cài đặt");
-        addNavButton(row, Tab.FIRMWARE, "Nạp chương trình");
-        addNavButton(row, Tab.DEVICE, "Thiết bị");
-        scroll.addView(row, new HorizontalScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        content.addView(scroll, fullParams(0, 0, 0, 10));
+        row.setPadding(dp(10), dp(9), dp(10), dp(9));
+        row.setBackgroundColor(Color.WHITE);
+        row.setElevation(dp(12));
+        addNavButton(row, Tab.OVERVIEW, "Tổng quan", "home");
+        addNavButton(row, Tab.SETTINGS, "Cài đặt", "settings");
+        addNavButton(row, Tab.FIRMWARE, "Firmware", "upload");
+        addNavButton(row, Tab.DEVICE, "Thiết bị", "chip");
+        pageRoot.addView(row, fullParams(0, 0, 0, 0));
     }
 
-    private void addNavButton(LinearLayout row, Tab target, String label) {
-        Button button = target == tab ? primaryButton(label) : neutralButton(label);
-        button.setTextSize(12);
-        button.setOnClickListener(v -> showControl(target));
-        row.addView(button, wrapParams(0, 0, 7, 0));
+    private void addNavButton(LinearLayout row, Tab target, String label, String symbol) {
+        boolean selected = target == tab;
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL); item.setGravity(Gravity.CENTER);
+        item.setPadding(dp(2), dp(8), dp(2), dp(7));
+        item.setBackground(new RippleDrawable(ColorStateList.valueOf(0x1800776C),
+                rounded(selected ? 0xFFE7F5F1 : Color.WHITE, dp(16)), null));
+        item.addView(icon(symbol, selected ? Design.TEAL : Design.MUTED, 22),
+                new LinearLayout.LayoutParams(dp(22), dp(22)));
+        TextView text = mutedText(label); text.setTextSize(11); text.setGravity(Gravity.CENTER);
+        text.setTextColor(selected ? Design.TEAL : Design.MUTED);
+        if (selected) text.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        item.addView(text, fullParams(0, 5, 0, 0));
+        item.setContentDescription(label); item.setOnClickListener(v -> showControl(target));
+        item.setSelected(selected);
+        row.addView(item, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    }
+
+    private void addQuickAction(LinearLayout row, String title, String symbol, Runnable action) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL); item.setGravity(Gravity.CENTER);
+        ImageView image = icon(symbol, Design.TEAL, 23);
+        image.setPadding(dp(14), dp(14), dp(14), dp(14));
+        image.setBackground(rounded(0xFFE7F3EF, dp(18)));
+        item.addView(image, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        TextView label = mutedText(title); label.setGravity(Gravity.CENTER); label.setTextColor(Design.INK);
+        item.addView(label, fullParams(0, 8, 0, 0));
+        item.setPadding(0, dp(6), 0, dp(6)); item.setOnClickListener(v -> action.run());
+        item.setContentDescription(title);
+        row.addView(item, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
     }
 
     private void buildOverview(LinearLayout content) {
-        LinearLayout connectionCard = card();
-        addSectionTitle(connectionCard, "Trạng thái kết nối");
-        dashboardConnection = bodyText("Đang đọc trạng thái thiết bị…");
-        connectionCard.addView(dashboardConnection, fullParams(0, 2, 0, 0));
-        Button refresh = neutralButton("Làm mới ngay");
-        refresh.setOnClickListener(v -> refreshDashboard());
-        connectionCard.addView(refresh, fullParams(0, 10, 0, 0));
-        content.addView(connectionCard, fullParams(0, 0, 0, 0));
+        LinearLayout hero = card(); hero.setBackground(new Design.Hero());
+        hero.setPadding(dp(22), dp(22), dp(22), dp(22));
+        TextView caption = mutedText("BỘ ĐIỀU KHIỂN  /  MS51");
+        caption.setTextColor(0xFFB9D0DD); caption.setLetterSpacing(.10f); hero.addView(caption);
+        dashboardMode = valueText("Đang chờ dữ liệu"); dashboardMode.setTextSize(29);
+        dashboardMode.setTextColor(Color.WHITE); hero.addView(dashboardMode, fullParams(0, 15, 0, 7));
+        TextView detail = bodyText("Chế độ vận hành hiện tại"); detail.setTextColor(0xFFB9D0DD);
+        hero.addView(detail, fullParams(0, 0, 0, 22));
+        View line = new View(this); line.setBackgroundColor(0x30FFFFFF);
+        hero.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
+        dashboardConnection = bodyText("Đang đọc trạng thái…");
+        dashboardConnection.setTextSize(12); dashboardConnection.setTextColor(Design.MINT);
+        hero.addView(dashboardConnection, fullParams(0, 14, 0, 0));
+        content.addView(hero, fullParams(0, 0, 0, 18));
 
-        LinearLayout modeCard = card();
-        addSectionTitle(modeCard, "Chế độ đang chạy");
-        dashboardMode = valueText("Đang chờ dữ liệu UART");
-        dashboardMode.setTextSize(24);
-        modeCard.addView(dashboardMode, fullParams(0, 3, 0, 0));
-        content.addView(modeCard, fullParams(0, 12, 0, 0));
+        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
+        addQuickAction(actions, "Làm mới", "refresh", this::refreshDashboard);
+        addQuickAction(actions, "Cài đặt", "settings", () -> showControl(Tab.SETTINGS));
+        addQuickAction(actions, "Nạp tệp", "upload", () -> showControl(Tab.FIRMWARE));
+        addQuickAction(actions, "Kết nối", "wifi", () -> showControl(Tab.DEVICE));
+        content.addView(actions, fullParams(0, 0, 0, 20));
 
-        LinearLayout ledCard = card();
-        addSectionTitle(ledCard, "Thời gian hiển thị");
-        LinearLayout displays = new LinearLayout(this);
-        displays.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout greenColumn = new LinearLayout(this); greenColumn.setOrientation(LinearLayout.VERTICAL);
-        TextView greenLabel = mutedText("LED xanh · phút");
-        greenDisplay = new SevenSegmentView(this);
-        greenDisplay.setSegmentColor(Color.rgb(52, 211, 153));
-        greenColumn.addView(greenLabel, fullParams(0, 0, 0, 2));
-        greenColumn.addView(greenDisplay, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(78)));
-        LinearLayout redColumn = new LinearLayout(this); redColumn.setOrientation(LinearLayout.VERTICAL);
-        TextView redLabel = mutedText("LED đỏ · phút");
-        redDisplay = new SevenSegmentView(this);
-        redDisplay.setSegmentColor(Color.rgb(248, 113, 113));
-        redColumn.addView(redLabel, fullParams(0, 0, 0, 2));
-        redColumn.addView(redDisplay, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(78)));
-        displays.addView(greenColumn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        displays.addView(redColumn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        ledCard.addView(displays, fullParams(0, 2, 0, 0));
-        content.addView(ledCard, fullParams(0, 12, 0, 0));
+        addSectionTitle(content, "Thời gian hiển thị");
+        LinearLayout timers = new LinearLayout(this); timers.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout green = timerCard("LED XANH", "green", 0xFF008978);
+        LinearLayout red = timerCard("LED ĐỎ", "red", 0xFFCF5A68);
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -2, 1); left.setMargins(0,0,dp(6),0);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, -2, 1); right.setMargins(dp(6),0,0,0);
+        timers.addView(green,left); timers.addView(red,right);
+        content.addView(timers, fullParams(0, 6, 0, 20));
 
-        LinearLayout relayCard = card();
-        addSectionTitle(relayCard, "Rơ-le");
-        LinearLayout relayRow = new LinearLayout(this);
-        relayRow.setOrientation(LinearLayout.HORIZONTAL);
-        for (int index = 0; index < relayViews.length; index++) {
-            TextView relay = new TextView(this);
-            relay.setGravity(Gravity.CENTER);
-            relay.setTextColor(Color.rgb(180, 198, 218));
-            relay.setTextSize(13);
-            relay.setTypeface(Typeface.DEFAULT_BOLD);
-            relay.setPadding(dp(4), dp(13), dp(4), dp(13));
-            relay.setText("RL" + (index + 1) + "\n—");
-            relay.setBackground(rounded(Color.rgb(22, 43, 66), dp(10)));
-            relayViews[index] = relay;
-            LinearLayout.LayoutParams relayParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            relayParams.setMargins(index == 0 ? 0 : dp(4), 0, index == 2 ? 0 : dp(4), 0);
-            relayRow.addView(relay, relayParams);
+        LinearLayout relayCard = card(); addSectionTitle(relayCard, "Trạng thái rơ-le");
+        LinearLayout relays = new LinearLayout(this); relays.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i=0;i<3;i++) {
+            TextView relay = valueText("RL" + (i+1) + "\n—");
+            relay.setTextSize(13); relay.setGravity(Gravity.CENTER);
+            relay.setLineSpacing(dp(7),1f); relay.setPadding(dp(4),dp(16),dp(4),dp(16));
+            relayViews[i]=relay;
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0,-2,1);
+            rp.setMargins(i==0?0:dp(4),0,i==2?0:dp(4),0); relays.addView(relay,rp);
         }
-        relayCard.addView(relayRow, fullParams(0, 2, 0, 0));
-        content.addView(relayCard, fullParams(0, 12, 0, 0));
+        relayCard.addView(relays, fullParams(0, 10, 0, 0));
+        content.addView(relayCard, fullParams(0, 0, 0, 16));
+        LinearLayout variables = card(); addSectionTitle(variables,"Dữ liệu trực tiếp");
+        dashboardVariables=monospaceText("Đang chờ dữ liệu…");
+        variables.addView(dashboardVariables,fullParams(0,8,0,0));
+        content.addView(variables,fullParams(0,0,0,16));
+        LinearLayout logs = card(); addSectionTitle(logs,"Nhật ký thiết bị");
+        dashboardLogs=monospaceText("Đang chờ dữ liệu…");
+        logs.addView(dashboardLogs,fullParams(0,8,0,0));
+        content.addView(logs);
+        renderDashboard(lastStatus,lastDebug);
+    }
 
-        LinearLayout variablesCard = card();
-        addSectionTitle(variablesCard, "Biến MS51 đang gửi");
-        dashboardVariables = monospaceText("Đang chờ dữ liệu…");
-        variablesCard.addView(dashboardVariables, fullParams(0, 2, 0, 0));
-        content.addView(variablesCard, fullParams(0, 12, 0, 0));
-
-        LinearLayout logCard = card();
-        addSectionTitle(logCard, "Nhật ký thiết bị");
-        dashboardLogs = monospaceText("Đang chờ dữ liệu UART…");
-        logCard.addView(dashboardLogs, fullParams(0, 2, 0, 0));
-        content.addView(logCard, fullParams(0, 12, 0, 0));
-        renderDashboard(lastStatus, lastDebug);
+    private LinearLayout timerCard(String label, String channel, int color) {
+        LinearLayout card = card();
+        TextView title=mutedText(label); title.setTextColor(color); title.setLetterSpacing(.08f);
+        card.addView(title);
+        SevenSegmentView display=new SevenSegmentView(this); display.setSegmentColor(color);
+        card.addView(display,new LinearLayout.LayoutParams(-1,dp(64)));
+        TextView unit=mutedText("phút"); card.addView(unit,fullParams(0,6,0,0));
+        if("green".equals(channel)) greenDisplay=display; else redDisplay=display;
+        return card;
     }
 
     private void refreshDashboard() {
-        if (screen != Screen.CONTROL || tab != Tab.OVERVIEW || dashboardBusy) return;
+        if (!foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW || dashboardBusy) return;
         dashboardBusy = true;
+        final int epoch = dashboardEpoch;
+        final int controlToken = controlEpoch;
+        final EspApi session = api.snapshot(15000);
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             JSONObject status = null;
             JSONObject debug = null;
             Exception failure = null;
             try {
-                status = api.get("/api/status");
-                debug = api.get("/api/debug");
+                status = session.get("/api/status");
+                debug = session.get("/api/debug");
             } catch (Exception error) {
                 failure = error;
             }
             JSONObject finalStatus = status;
             JSONObject finalDebug = debug;
             Exception finalFailure = failure;
-            runOnUiThread(() -> {
+            onControl(controlToken, () -> {
+                if (epoch != dashboardEpoch || !foreground) return;
                 dashboardBusy = false;
                 if (screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
                 if (finalFailure == null) {
@@ -739,6 +1063,8 @@ public final class MainActivity extends Activity {
                     lastDebug = finalDebug;
                     renderDashboard(finalStatus, finalDebug);
                 } else if (dashboardConnection != null) {
+                    renderDashboard(null, null);
+                    dashboardMode.setText("Mất kết nối");
                     dashboardConnection.setText("Chưa đọc được thiết bị: " + errorMessage(finalFailure));
                 }
                 mainHandler.postDelayed(dashboardRefresh, 1000);
@@ -779,7 +1105,7 @@ public final class MainActivity extends Activity {
         }
         String age = debug.isNull("last_rx_age_ms") ? "" : " · " + debug.optLong("last_rx_age_ms", 0) + " ms";
         String mode = values.get("mode");
-        dashboardMode.setText(mode == null || "null".equals(mode) ? "Đang chờ dữ liệu UART" : mode);
+        dashboardMode.setText(friendlyMode(mode));
         greenDisplay.setValue(values.get("green_min"));
         redDisplay.setValue(values.get("red_min"));
         setRelay(relayViews[0], 1, values.get("relay1"));
@@ -807,8 +1133,8 @@ public final class MainActivity extends Activity {
         boolean known = rawValue != null && !"null".equals(rawValue);
         boolean on = known && ("on".equalsIgnoreCase(rawValue) || "1".equals(rawValue) || "true".equalsIgnoreCase(rawValue));
         relay.setText("RL" + number + "\n" + (known ? (on ? "BẬT" : "TẮT") : "—"));
-        relay.setTextColor(on ? Color.WHITE : Color.rgb(180, 198, 218));
-        relay.setBackground(rounded(on ? Color.rgb(16, 120, 85) : Color.rgb(22, 43, 66), dp(10)));
+        relay.setTextColor(on ? Design.TEAL : Design.MUTED);
+        relay.setBackground(rounded(on ? 0xFFE0F4EC : 0xFFF1F4F7, dp(14)));
     }
 
     // -------------------------------------------------------------------------
@@ -902,7 +1228,7 @@ public final class MainActivity extends Activity {
 
     private void addRangeFields(LinearLayout parent, String label, String key) {
         TextView title = mutedText(label);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         parent.addView(title, fullParams(0, 9, 0, 2));
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL);
         EditText min = numberInput("Min");
@@ -917,7 +1243,7 @@ public final class MainActivity extends Activity {
     private void addNumberField(LinearLayout parent, String label, String key) {
         TextView fieldLabel = mutedText(label);
         parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
-        EditText input = numberInput("");
+        EditText input = numberInput(label);
         configInputs.put(key, input);
         parent.addView(input, fullParams(0, 0, 0, 0));
     }
@@ -925,7 +1251,7 @@ public final class MainActivity extends Activity {
     private void addPinNumberField(LinearLayout parent, String label, String key) {
         TextView fieldLabel = mutedText(label);
         parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
-        EditText input = numberInput("");
+        EditText input = numberInput(label);
         configInputs.put(key, input); pinDependentViews.add(fieldLabel); pinDependentViews.add(input);
         parent.addView(input, fullParams(0, 0, 0, 0));
     }
@@ -934,6 +1260,7 @@ public final class MainActivity extends Activity {
         TextView fieldLabel = mutedText(label);
         parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
         Spinner spinner = choiceSpinner(choices);
+        spinner.setContentDescription(label);
         configChoices.put(key, spinner);
         parent.addView(spinner, fullParams(0, 0, 0, 0));
     }
@@ -942,6 +1269,7 @@ public final class MainActivity extends Activity {
         TextView fieldLabel = mutedText(label);
         parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
         Spinner spinner = choiceSpinner(choices);
+        spinner.setContentDescription(label);
         configChoices.put(key, spinner); pinDependentViews.add(fieldLabel); pinDependentViews.add(spinner);
         parent.addView(spinner, fullParams(0, 0, 0, 0));
     }
@@ -949,7 +1277,9 @@ public final class MainActivity extends Activity {
     private CheckBox addCheckField(LinearLayout parent, String label, String key, boolean pinRelated) {
         CheckBox check = new CheckBox(this);
         check.setText(label);
-        check.setTextColor(Color.rgb(222, 233, 246));
+        check.setTextColor(Design.INK);
+        check.setButtonTintList(ColorStateList.valueOf(Design.TEAL));
+        check.setMinHeight(dp(48));
         check.setTextSize(14);
         check.setPadding(0, dp(5), 0, dp(5));
         configChecks.put(key, check);
@@ -960,22 +1290,28 @@ public final class MainActivity extends Activity {
 
     private void loadRuntimeConfig() {
         showMessage("Đang đọc cài đặt từ MS51…");
+        final int controlToken = controlEpoch;
+        final EspApi session = api.snapshot(15000);
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             try {
-                JSONObject response = api.get("/api/runtime-config");
+                JSONObject response = session.get("/api/runtime-config");
                 RuntimeConfigCodec.Config decoded = RuntimeConfigCodec.decode(response.getString("data"));
-                runOnUiThread(() -> {
+                onControl(controlToken, () -> {
                     runtimeConfig = decoded;
+                    configLoaded = true;
                     applyRuntimeConfigToViews();
                     showMessage(response.optString("message", "Đã đọc cài đặt."));
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
+                onControl(controlToken, () -> showMessage(errorMessage(error)));
             }
         });
     }
 
     private void saveRuntimeConfig() {
+        if (demoMode) { showMessage("Chế độ xem thử: không ghi cài đặt vào thiết bị."); return; }
+        if (!configLoaded) { showMessage("Hãy đọc cài đặt từ thiết bị trước khi lưu."); return; }
         final Map<String, Integer> values;
         final byte[] bytes;
         try {
@@ -986,17 +1322,20 @@ public final class MainActivity extends Activity {
             return;
         }
         showMessage("Đang lưu cài đặt. MS51 sẽ khởi động lại…");
+        final int controlToken = controlEpoch;
+        final EspApi session = api.snapshot(15000);
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             try {
                 JSONObject body = new JSONObject();
                 body.put("data", RuntimeConfigCodec.toHex(bytes));
-                JSONObject response = api.post("/api/runtime-config", body);
-                runOnUiThread(() -> {
+                JSONObject response = session.post("/api/runtime-config", body);
+                onControl(controlToken, () -> {
                     runtimeConfig = new RuntimeConfigCodec.Config(bytes, values);
                     showMessage(response.optString("message", "Đã lưu cài đặt."));
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
+                onControl(controlToken, () -> showMessage(errorMessage(error)));
             }
         });
     }
@@ -1054,6 +1393,9 @@ public final class MainActivity extends Activity {
     // -------------------------------------------------------------------------
 
     private void buildFirmware(LinearLayout content) {
+        TextView steps = mutedText("01  CHỌN TỆP     →     02  TẢI LÊN     →     03  NẠP");
+        steps.setTextColor(Design.TEAL); steps.setTextSize(11);
+        content.addView(steps, fullParams(2, 2, 0, 18));
         LinearLayout fileCard = card();
         addSectionTitle(fileCard, "Tệp chương trình MS51");
         firmwareFileInfo = bodyText(selectedFirmwareName.isEmpty()
@@ -1088,7 +1430,7 @@ public final class MainActivity extends Activity {
         content.addView(programCard, fullParams(0, 12, 0, 0));
 
         LinearLayout dangerCard = card();
-        addSectionTitle(dangerCard, "Dành cho sửa chữa");
+        addSectionTitle(dangerCard, "Công cụ nâng cao");
         addHelp(dangerCard, "Các lệnh bên dưới có thể xóa phần chương trình hoặc cấu hình không có trong tệp. Chúng yêu cầu nhập CONFIRM.");
         Button fullProgram = dangerButton("Ghi đè toàn bộ bộ nhớ");
         fullProgram.setOnClickListener(v -> confirmDanger("program-full"));
@@ -1105,6 +1447,7 @@ public final class MainActivity extends Activity {
         intent.setType("*/*");
         intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/octet-stream", "text/plain", "text/x-ihex", "application/x-ihex"});
         try {
+            filePickerEpoch = controlEpoch;
             startActivityForResult(intent, FIRMWARE_FILE_REQUEST);
         } catch (ActivityNotFoundException error) {
             showMessage("Điện thoại không có trình chọn tệp.");
@@ -1112,6 +1455,7 @@ public final class MainActivity extends Activity {
     }
 
     private void uploadFirmware() {
+        if (demoMode) { showMessage("Chế độ xem thử: không tải tệp lên thiết bị."); return; }
         if (selectedFirmwareUri == null || selectedFirmwareName.isEmpty()) {
             showMessage("Hãy chọn tệp HEX hoặc BIN trước.");
             return;
@@ -1122,46 +1466,56 @@ public final class MainActivity extends Activity {
             return;
         }
         showMessage("Đang gửi " + selectedFirmwareName + " vào thiết bị…");
+        final Uri fileUri = selectedFirmwareUri;
+        final String fileName = selectedFirmwareName;
+        final int controlToken = controlEpoch;
+        final EspApi session = api.snapshot(15000);
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             try {
-                String lowerName = selectedFirmwareName.toLowerCase(Locale.US);
+                String lowerName = fileName.toLowerCase(Locale.US);
                 int limit = lowerName.endsWith(".bin") ? 32 * 1024 : 96 * 1024;
-                byte[] bytes = readUri(selectedFirmwareUri, limit);
-                String serverName = selectedFirmwareName.replaceAll("[^A-Za-z0-9._-]", "_");
-                JSONObject response = api.upload(serverName, bytes);
+                byte[] bytes = readUri(fileUri, limit);
+                String serverName = fileName.replaceAll("[^A-Za-z0-9._-]", "_");
+                JSONObject response = session.upload(serverName, bytes);
                 JSONObject image = response.optJSONObject("image");
-                runOnUiThread(() -> {
+                onControl(controlToken, () -> {
                     if (image != null) imageGeneration = image.optInt("generation", 0);
                     if (firmwareInfo != null) firmwareInfo.setText(imageSummary(image));
                     showMessage(response.optString("message", "Đã gửi tệp vào thiết bị."));
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
+                onControl(controlToken, () -> showMessage(errorMessage(error)));
             }
         });
     }
 
     private void readChipInfo() {
         showMessage("Đang đọc thông tin MS51…");
+        final int controlToken = controlEpoch;
+        final EspApi session = api.snapshot(15000);
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             try {
-                JSONObject response = api.post("/api/info", new JSONObject());
+                JSONObject response = session.post("/api/info", new JSONObject());
                 String info = "PDID: " + response.optInt("pdid", 0)
                         + "\nDevice ID: " + response.optInt("device_id", 0)
                         + "\nKhóa chip: " + (response.optBoolean("locked", false) ? "Có" : "Không")
                         + "\nAPROM: " + response.optInt("aprom_size", 0) + " bytes";
-                runOnUiThread(() -> {
+                onControl(controlToken, () -> {
                     if (firmwareInfo != null) firmwareInfo.setText(info);
                     if (deviceInfo != null) deviceInfo.setText(info);
                     showMessage(response.optString("message", "Đã đọc thông tin MS51."));
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
+                onControl(controlToken, () -> showMessage(errorMessage(error)));
             }
         });
     }
 
     private void confirmDanger(String action) {
+        final int dialogToken = controlEpoch;
+        if (demoMode) { showMessage("Chế độ xem thử: các lệnh ghi và xóa đã bị khóa."); return; }
         final EditText confirm = new EditText(this);
         confirm.setSingleLine(true);
         confirm.setHint("Nhập CONFIRM");
@@ -1173,6 +1527,7 @@ public final class MainActivity extends Activity {
                 .setView(confirm)
                 .setNegativeButton("Hủy", null)
                 .setPositiveButton("Xác nhận", (dialog, which) -> {
+                    if (!currentControl(dialogToken)) return;
                     if (!"CONFIRM".equals(confirm.getText().toString().trim())) {
                         showMessage("Chưa nhập đúng CONFIRM.");
                         return;
@@ -1183,42 +1538,50 @@ public final class MainActivity extends Activity {
     }
 
     private void runJob(String action, boolean needsImage, boolean destructive) {
+        if (demoMode) { showMessage("Chế độ xem thử: không gửi lệnh đến thiết bị."); return; }
         if (needsImage && imageGeneration <= 0) {
             showMessage("Hãy gửi tệp firmware vào thiết bị trước.");
             return;
         }
         showMessage("Thiết bị đang thực hiện: " + jobLabel(action));
+        final int generation = imageGeneration;
+        final int controlToken = controlEpoch;
+        final EspApi session = api.snapshot(15000);
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             try {
                 JSONObject body = new JSONObject();
-                body.put("generation", needsImage ? imageGeneration : 0);
+                body.put("generation", needsImage ? generation : 0);
                 if (destructive) body.put("confirm", "CONFIRM");
-                JSONObject response = api.post("/api/" + action, body);
+                JSONObject response = session.post("/api/" + action, body);
                 boolean accepted = response.optBoolean("accepted", false);
-                runOnUiThread(() -> {
+                onControl(controlToken, () -> {
                     showMessage(response.optString("message", "Đã gửi lệnh."));
-                    if (accepted) pollJob(80);
+                    if (accepted) pollJob(80, session, controlToken, response.optInt("job_id", -1));
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
+                onControl(controlToken, () -> showMessage(errorMessage(error)));
             }
         });
     }
 
-    private void pollJob(int remaining) {
+    private void pollJob(int remaining, EspApi session, int controlToken, int jobId) {
+        if (!currentControl(controlToken)) return;
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             try {
-                JSONObject status = api.get("/api/status");
-                runOnUiThread(() -> {
+                JSONObject status = session.get("/api/status");
+                onControl(controlToken, () -> {
                     rememberStatus(status);
-                    boolean busy = status.optBoolean("busy", false);
-                    String message = status.optString("last_message", busy ? "Đang xử lý…" : "Hoàn tất.");
-                    showMessage(message);
-                    if (busy && remaining > 0) mainHandler.postDelayed(() -> pollJob(remaining - 1), 850);
+                    if (jobId >= 0 && status.optInt("job_id",-1) != jobId) {
+                        showMessage("Thiết bị đã nhận tác vụ khác. Hãy kiểm tra trạng thái."); return;
+                    }
+                    boolean busy = status.optBoolean("busy",false);
+                    showMessage(status.optString("last_message",busy ? "Đang xử lý…" : "Hoàn tất."));
+                    if (busy && remaining > 0) mainHandler.postDelayed(() -> pollJob(remaining-1, session, controlToken, jobId),850);
+                    else if (busy) showMessage("Thiết bị vẫn đang xử lý. Hãy làm mới trạng thái.");
                 });
-            } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
-            }
+            } catch(Exception error) { onControl(controlToken, () -> showMessage(errorMessage(error))); }
         });
     }
 
@@ -1253,19 +1616,43 @@ public final class MainActivity extends Activity {
         info.setOnClickListener(v -> readChipInfo());
         chipCard.addView(info, fullParams(0, 10, 0, 0));
         content.addView(chipCard, fullParams(0, 12, 0, 0));
+        LinearLayout about = card();
+        addSectionTitle(about, "MS51 Connect");
+        addHelp(about, "Phiên bản 2.2 • Kết nối trong mạng nội bộ");
+        addHelp(about, "NTC 10k chưa được firmware hiện tại hỗ trợ.");
+        Button license = neutralButton("Giấy phép nguồn mở");
+        license.setOnClickListener(v -> {
+            try (InputStream stream = getAssets().open("LICENSE.txt")) {
+                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                byte[] buffer = new byte[1024];
+                int count;
+                while ((count = stream.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                new AlertDialog.Builder(this).setTitle("esp32c5-ms51-icp • MIT")
+                        .setMessage(new String(bytes.toByteArray(), StandardCharsets.UTF_8))
+                        .setPositiveButton("Đóng", null).show();
+            } catch (IOException error) { showMessage(errorMessage(error)); }
+        });
+        about.addView(license, fullParams(0, 12, 0, 0));
+        Button exit = neutralButton("Danh sách thiết bị");
+        exit.setOnClickListener(v -> showDevices());
+        about.addView(exit, fullParams(0, 12, 0, 0));
+        content.addView(about, fullParams(0, 16, 0, 0));
     }
 
     private void refreshDeviceStatus() {
         showMessage("Đang làm mới trạng thái…");
+        final int controlToken = controlEpoch;
+        final EspApi session = api.snapshot(15000);
         io.execute(() -> {
+            if (!currentControl(controlToken)) return;
             try {
-                JSONObject status = api.get("/api/status");
-                runOnUiThread(() -> {
+                JSONObject status = session.get("/api/status");
+                onControl(controlToken, () -> {
                     rememberStatus(status);
                     showControl(Tab.DEVICE);
                 });
             } catch (Exception error) {
-                runOnUiThread(() -> showMessage(errorMessage(error)));
+                onControl(controlToken, () -> showMessage(errorMessage(error)));
             }
         });
     }
@@ -1275,64 +1662,91 @@ public final class MainActivity extends Activity {
     // -------------------------------------------------------------------------
 
     private LinearLayout createPage(String eyebrow, String title, String subtitle) {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.rgb(8, 21, 36));
-        root.setPadding(dp(16), dp(18), dp(16), 0);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(0, 0, 0, dp(24));
-
-        TextView eyebrowView = new TextView(this);
-        eyebrowView.setText(eyebrow);
-        eyebrowView.setTextColor(Color.rgb(52, 211, 153));
-        eyebrowView.setTextSize(11);
-        eyebrowView.setTypeface(Typeface.DEFAULT_BOLD);
-        eyebrowView.setLetterSpacing(0.12f);
-        content.addView(eyebrowView, fullParams(0, 0, 0, 3));
-
-        TextView titleView = new TextView(this);
-        titleView.setText(title);
-        titleView.setTextColor(Color.rgb(235, 243, 252));
-        titleView.setTextSize(26);
-        titleView.setTypeface(Typeface.DEFAULT_BOLD);
-        content.addView(titleView, fullParams(0, 0, 0, 4));
-
-        TextView subtitleView = bodyText(subtitle);
-        content.addView(subtitleView, fullParams(0, 0, 0, 12));
-
-        messageView = new TextView(this);
-        messageView.setText(lastUiMessage);
-        messageView.setTextColor(Color.rgb(192, 211, 232));
-        messageView.setTextSize(13);
-        messageView.setPadding(dp(12), dp(10), dp(12), dp(10));
-        messageView.setBackground(rounded(Color.rgb(15, 36, 58), dp(10)));
-        content.addView(messageView, fullParams(0, 0, 0, 12));
-
-        scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-        setContentView(root);
+        pageRoot = new LinearLayout(this);
+        pageRoot.setOrientation(LinearLayout.VERTICAL); pageRoot.setBackgroundColor(Design.BG);
+        pageRoot.setOnApplyWindowInsetsListener((view, insets) -> {
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.ime());
+                view.setPadding(bars.left,bars.top,bars.right,bars.bottom);
+            } else view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
+            return insets;
+        });
+        LinearLayout brand = new LinearLayout(this); brand.setGravity(Gravity.CENTER_VERTICAL);
+        brand.setPadding(dp(22),dp(16),dp(22),dp(14));
+        ImageView logo=icon("chip",Design.TEAL,25);
+        brand.addView(logo,new LinearLayout.LayoutParams(dp(27),dp(27)));
+        TextView wordmark=valueText("MS51"); wordmark.setTextSize(19); wordmark.setLetterSpacing(.04f);
+        brand.addView(wordmark,wrapParams(10,0,0,0));
+        TextView connect=bodyText(" / connect"); connect.setTextSize(16);
+        brand.addView(connect,new LinearLayout.LayoutParams(0,-2,1));
+        ImageView shield=icon("shield",Design.TEAL,22);
+        shield.setContentDescription(screen == Screen.HOME ? "Tài khoản" : "Kết nối nội bộ");
+        if (screen == Screen.HOME) {
+            shield.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+            shield.setPadding(dp(10),dp(10),dp(10),dp(10));
+            shield.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(username)
+                    .setMessage("Tài khoản và thiết bị được lưu trên điện thoại này.")
+                    .setNegativeButton("Đóng", null).setPositiveButton("Đăng xuất", (d,w) -> logout()).show());
+        }
+        brand.addView(shield,new LinearLayout.LayoutParams(dp(44),dp(44)));
+        pageRoot.addView(brand);
+        if(demoMode){
+            TextView demo=mutedText("XEM THỬ  •  DỮ LIỆU MINH HỌA");
+            demo.setTextColor(Design.TEAL); demo.setGravity(Gravity.CENTER);
+            demo.setPadding(dp(12),dp(8),dp(12),dp(8)); demo.setBackgroundColor(0xFFE0F4EC);
+            pageRoot.addView(demo,fullParams(0,0,0,0));
+        }
+        ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true);
+        scroll.setClipToPadding(false); scroll.setVerticalScrollBarEnabled(false);
+        LinearLayout content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(22),dp(12),dp(22),dp(28));
+        TextView eyebrowView=mutedText(eyebrow); eyebrowView.setTextColor(Design.TEAL);
+        eyebrowView.setTextSize(10); eyebrowView.setLetterSpacing(.12f);
+        content.addView(eyebrowView,fullParams(0,0,0,7));
+        TextView heading=valueText(title); heading.setTextSize(29);
+        heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+        content.addView(heading,fullParams(0,0,0,5));
+        content.addView(bodyText(subtitle),fullParams(0,0,0,22));
+        messageView=bodyText(lastUiMessage); messageView.setTextSize(12);
+        messageView.setPadding(dp(14),dp(12),dp(14),dp(12));
+        messageView.setBackground(rounded(0xFFE8F2F1,dp(12)));
+        messageView.setTextColor(Design.TEAL);
+        messageView.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        messageView.setVisibility(lastUiMessage.isEmpty() || demoMode ? View.GONE : View.VISIBLE);
+        content.addView(messageView,fullParams(0,0,0,16));
+        scroll.addView(content,new ScrollView.LayoutParams(-1,-2));
+        pageRoot.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        setContentView(pageRoot); pageRoot.requestApplyInsets();
         return content;
     }
 
+    private ImageView icon(String name, int color, int size) {
+        ImageView view=new ImageView(this); view.setImageDrawable(new Design.Icon(name,color));
+        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        return view;
+    }
+
+    private static String friendlyMode(String mode) {
+        if(mode==null || "null".equals(mode)) return "Đang chờ dữ liệu";
+        switch(mode.toUpperCase(Locale.US)) {
+            case "COOL": case "COOLING": return "Đang làm lạnh";
+            case "DEFROST": case "ICE_FLUSH": return "Đang xả đá";
+            case "IDLE": case "STOP": return "Đang chờ";
+            default: return mode;
+        }
+    }
+
     private LinearLayout card() {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(14), dp(14), dp(14), dp(14));
-        card.setBackground(rounded(Color.rgb(16, 34, 56), dp(14)));
-        return card;
+        LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(18),dp(19),dp(18),dp(19));
+        GradientDrawable bg=rounded(Color.WHITE,dp(20)); bg.setStroke(dp(1),0xFFE9EFF4);
+        card.setBackground(bg); return card;
     }
 
     private void addSectionTitle(LinearLayout parent, String title) {
-        TextView view = new TextView(this);
-        view.setText(title);
-        view.setTextColor(Color.rgb(235, 243, 252));
-        view.setTextSize(18);
-        view.setTypeface(Typeface.DEFAULT_BOLD);
-        parent.addView(view, fullParams(0, 0, 0, 5));
+        TextView view=valueText(title); view.setTextSize(17);
+        parent.addView(view,fullParams(0,0,0,7));
     }
 
     private void addHelp(LinearLayout parent, String text) {
@@ -1354,7 +1768,7 @@ public final class MainActivity extends Activity {
     private TextView bodyText(String text) {
         TextView view = new TextView(this);
         view.setText(text);
-        view.setTextColor(Color.rgb(162, 184, 211));
+        view.setTextColor(Design.MUTED);
         view.setTextSize(14);
         view.setLineSpacing(dp(3), 1f);
         return view;
@@ -1363,21 +1777,21 @@ public final class MainActivity extends Activity {
     private TextView mutedText(String text) {
         TextView view = bodyText(text);
         view.setTextSize(12);
-        view.setTextColor(Color.rgb(145, 170, 200));
+        view.setTextColor(Design.MUTED);
         return view;
     }
 
     private TextView valueText(String text) {
         TextView view = bodyText(text);
-        view.setTextColor(Color.rgb(232, 240, 250));
-        view.setTypeface(Typeface.DEFAULT_BOLD);
+        view.setTextColor(Design.INK);
+        view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         return view;
     }
 
     private TextView monospaceText(String text) {
         TextView view = bodyText(text);
         view.setTypeface(Typeface.MONOSPACE);
-        view.setTextColor(Color.rgb(218, 229, 243));
+        view.setTextColor(Design.INK);
         view.setTextSize(12);
         view.setTextIsSelectable(true);
         view.setPadding(dp(2), dp(3), dp(2), dp(3));
@@ -1388,11 +1802,13 @@ public final class MainActivity extends Activity {
         EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setTextSize(15);
-        input.setTextColor(Color.rgb(240, 247, 255));
-        input.setHintTextColor(Color.rgb(126, 152, 181));
+        input.setTextColor(Design.INK);
+        input.setHintTextColor(Design.MUTED);
         input.setHint(hint);
-        input.setPadding(dp(12), dp(8), dp(12), dp(8));
-        input.setBackground(rounded(Color.rgb(9, 25, 42), dp(9)));
+        input.setPadding(dp(14), dp(12), dp(14), dp(12));
+        input.setMinHeight(dp(52));
+        input.setContentDescription(hint);
+        input.setBackground(rounded(0xFFF0F4F7, dp(12)));
         input.setInputType(password
                 ? InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD
                 : InputType.TYPE_CLASS_TEXT);
@@ -1409,8 +1825,9 @@ public final class MainActivity extends Activity {
         Spinner spinner = new Spinner(this);
         ArrayAdapter<Choice> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, values);
         spinner.setAdapter(adapter);
-        spinner.setBackground(rounded(Color.rgb(9, 25, 42), dp(8)));
-        spinner.setPadding(dp(8), 0, dp(8), 0);
+        spinner.setBackground(rounded(0xFFF0F4F7, dp(12)));
+        spinner.setPadding(dp(12), 0, dp(12), 0);
+        spinner.setMinimumHeight(dp(52));
         return spinner;
     }
 
@@ -1425,20 +1842,18 @@ public final class MainActivity extends Activity {
         spinner.setSelection(0);
     }
 
-    private Button primaryButton(String text) { return button(text, Color.rgb(16, 117, 83)); }
-    private Button neutralButton(String text) { return button(text, Color.rgb(28, 57, 85)); }
-    private Button dangerButton(String text) { return button(text, Color.rgb(125, 45, 61)); }
+    private Button primaryButton(String text) { return button(text, Design.TEAL); }
+    private Button neutralButton(String text) { return button(text, 0xFFEDF3F6); }
+    private Button dangerButton(String text) { return button(text, 0xFFFFEEF0); }
 
     private Button button(String text, int color) {
-        Button button = new Button(this);
-        button.setText(text);
-        button.setTextColor(Color.WHITE);
-        button.setTextSize(14);
-        button.setAllCaps(false);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
-        button.setMinHeight(dp(46));
-        button.setPadding(dp(10), dp(8), dp(10), dp(8));
-        button.setBackground(rounded(color, dp(9)));
+        Button button=new Button(this); button.setText(text);
+        button.setTextColor(color==Design.TEAL ? Color.WHITE : color==0xFFFFEEF0 ? 0xFFAA354A : Design.INK);
+        button.setTextSize(14); button.setAllCaps(false);
+        button.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+        button.setMinHeight(dp(52)); button.setMinimumHeight(dp(52));
+        button.setPadding(dp(14),dp(12),dp(14),dp(12)); button.setStateListAnimator(null);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2200776C),rounded(color,dp(14)),null));
         return button;
     }
 
@@ -1467,71 +1882,10 @@ public final class MainActivity extends Activity {
 
     private void showMessage(String message) {
         lastUiMessage = message == null || message.trim().isEmpty() ? "Đã xong." : message;
-        if (messageView != null) messageView.setText(lastUiMessage);
-    }
-
-    private void openWifiSettings() {
-        if (screen == Screen.SWITCH_PHONE) {
-            // The prior AP connection is local-only. Release it before showing
-            // Android's Wi-Fi chooser so the selected Internet Wi-Fi becomes
-            // the route used by the verification step after returning.
-            releaseRequestedNetwork();
-            if (!uplinkIp.isEmpty()) api.setBaseUrl("http://" + uplinkIp);
+        if (messageView != null) {
+            messageView.setText(lastUiMessage); messageView.setVisibility(View.VISIBLE);
+            if (screen == Screen.CONTROL) Toast.makeText(this,lastUiMessage,Toast.LENGTH_SHORT).show();
         }
-        waitingForWifiSettingsReturn = true;
-        try {
-            Intent intent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                    ? new Intent(Settings.Panel.ACTION_WIFI)
-                    : new Intent(Settings.ACTION_WIFI_SETTINGS);
-            startActivityForResult(intent, WIFI_SETTINGS_REQUEST);
-        } catch (ActivityNotFoundException error) {
-            waitingForWifiSettingsReturn = false;
-            Toast.makeText(this, "Không mở được cài đặt Wi‑Fi trên máy này.", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    /**
-     * Settings.Panel is an Android-owned screen. When it closes, verify the
-     * selected Wi-Fi immediately instead of leaving the user at a dead end.
-     */
-    private void verifyManualWifiAfterSettings() {
-        if (manualWifiVerificationQueued) return;
-        if (screen != Screen.CONNECT_DEVICE && screen != Screen.SWITCH_PHONE) return;
-        manualWifiVerificationQueued = true;
-        if (activeNetwork == null) {
-            api.setNetwork(null);
-            connectivityManager.bindProcessToNetwork(null);
-        }
-        if (screen == Screen.CONNECT_DEVICE) {
-            api.setBaseUrl(EspApi.DEVICE_BASE_URL);
-            showMessage("Đang kiểm tra bộ điều khiển sau khi đổi Wi‑Fi…");
-        } else {
-            if (uplinkIp.isEmpty()) {
-                manualWifiVerificationQueued = false;
-                showMessage("Chưa có IP Wi‑Fi mới của thiết bị.");
-                return;
-            }
-            api.setBaseUrl("http://" + uplinkIp);
-            showMessage("Đang kiểm tra IP " + uplinkIp + " sau khi đổi Wi‑Fi…");
-        }
-        io.execute(() -> {
-            try {
-                JSONObject status = api.get("/api/status");
-                runOnUiThread(() -> {
-                    manualWifiVerificationQueued = false;
-                    if (screen == Screen.CONNECT_DEVICE) showWifiSetup(status);
-                    else if (screen == Screen.SWITCH_PHONE) {
-                        rememberStatus(status);
-                        showControl(Tab.OVERVIEW);
-                    }
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> {
-                    manualWifiVerificationQueued = false;
-                    showMessage("Chưa thấy thiết bị trên Wi‑Fi đang chọn: " + errorMessage(error));
-                });
-            }
-        });
     }
 
     private void rememberStatus(JSONObject status) {
@@ -1665,6 +2019,7 @@ public final class MainActivity extends Activity {
     }
 
     private void stopDashboard() {
+        dashboardEpoch++;
         mainHandler.removeCallbacks(dashboardRefresh);
         dashboardBusy = false;
     }
@@ -1678,6 +2033,7 @@ public final class MainActivity extends Activity {
             return;
         }
         if (requestCode != FIRMWARE_FILE_REQUEST || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (!currentControl(filePickerEpoch)) return;
         selectedFirmwareUri = data.getData();
         selectedFirmwareName = displayName(selectedFirmwareUri);
         if (firmwareFileInfo != null) firmwareFileInfo.setText("Đã chọn: " + selectedFirmwareName);
@@ -1687,6 +2043,12 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        foreground = true;
+        if (screen == Screen.HOME) restartHomeChecks();
+        if (screen == Screen.CONTROL && tab == Tab.OVERVIEW) {
+            mainHandler.removeCallbacks(dashboardRefresh);
+            mainHandler.post(dashboardRefresh);
+        }
         if (waitingForWifiSettingsReturn) {
             waitingForWifiSettingsReturn = false;
             mainHandler.postDelayed(this::verifyManualWifiAfterSettings, 400);
@@ -1694,16 +2056,43 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        foreground = false;
+        stopHome();
+        stopDashboard();
+        super.onPause();
+    }
+
+    @Override
     public void onBackPressed() {
+        if (screen == Screen.AUTH) {
+            if (authBusy) return;
+            if (registerMode) { showAuth(false); return; }
+            super.onBackPressed(); return;
+        }
+        if (screen != Screen.CONTROL && setupBusy) {
+            showMessage("Đang xử lý, vui lòng chờ xong bước này.");
+            return;
+        }
+        if (screen == Screen.WIFI_PASSWORD) { showWifiSetup(lastStatus); return; }
+        if (screen == Screen.CONFIGURE_WIFI || screen == Screen.SWITCH_PHONE) {
+            releaseRequestedNetwork(); showConnectDevice(changingWifi); return;
+        }
         if (screen == Screen.CONTROL && tab != Tab.OVERVIEW) {
             showControl(Tab.OVERVIEW);
             return;
+        }
+        if (screen == Screen.CONTROL || screen == Screen.CONNECT_DEVICE) {
+            if (screen == Screen.CONNECT_DEVICE) releaseRequestedNetwork();
+            showDevices(); return;
         }
         super.onBackPressed();
     }
 
     @Override
     protected void onDestroy() {
+        ++setupEpoch; ++authEpoch; ++controlEpoch; stopHome();
+        presenceIo.shutdownNow();
         stopDashboard();
         releaseRequestedNetwork();
         io.shutdownNow();
