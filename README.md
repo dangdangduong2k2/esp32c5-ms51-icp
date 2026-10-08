@@ -15,9 +15,9 @@
 | Android MS51 Connect | [mobile/android](mobile/android/README.md) |
 | Firmware mô phỏng trên ESP32-C5 | [firmware/esp32c5_simulator](firmware/esp32c5_simulator/README.md) |
 | Kết quả kiểm thử app 2.2 | [16 nhóm tình huống trên emulator](docs/ms51-connect-2.2/test-results.json) |
-| Firmware ICP dùng MS51 thật | Project ESP-IDF ở thư mục gốc, hướng dẫn bên dưới |
+| Firmware ICP dùng MS51 thật | Project ESP-IDF target ESP32-C5 ở thư mục gốc, hướng dẫn bên dưới |
 
-**Trạng thái kiểm thử:** APK đã build, lint không có lỗi, chạy qua 16 nhóm kiểm thử trên emulator API 35 với hai ESP mô phỏng qua HTTP. Firmware C5 2.2 đã build nhưng chưa nạp bo; ghép qua sóng 5 GHz, nhiều bo vật lý và kiểm tra Internet trên bo vẫn cần thử thực tế. APK 2.2 cần firmware hỗ trợ MAC để ghép mới. Chưa hỗ trợ đọc NTC 10k.
+**Trạng thái kiểm thử:** APK đã build, lint không có lỗi, chạy qua 16 nhóm kiểm thử trên emulator API 35 với hai ESP mô phỏng qua HTTP. Ngày 08/10/2026 đã nạp simulator 2.2 lên ESP32-C5 rev1.0, xác minh flash và API qua USB; tên AP/MAC đúng, đọc được dữ liệu mô phỏng và quét thấy 7 mạng 2.4 GHz + 8 mạng 5 GHz. Bo hiện chưa kết nối Internet. Ghép bằng APK trên điện thoại thật, nhiều bo vật lý và kết quả Internet online vẫn cần thử thực tế. [Báo cáo trên bo](docs/ms51-connect-2.2/hardware-test-2026-10-08.json). APK 2.2 cần firmware hỗ trợ MAC để ghép mới. Chưa hỗ trợ đọc NTC 10k.
 
 Tài khoản chỉ lưu trên điện thoại, chưa có máy chủ hoặc điều khiển từ xa. Trạng thái không liên lạc được không đồng nghĩa thiết bị mất Internet. APK được ký debug để cài thử.
 
@@ -25,12 +25,12 @@ Tài khoản chỉ lưu trên điện thoại, chưa có máy chủ hoặc đi�
 |---|---|
 | ![Tạo tài khoản](docs/ms51-connect-2.2/02-tao-tai-khoan.png) | ![Danh sách thiết bị](docs/ms51-connect-2.2/04-danh-sach-thiet-bi.png) |
 
-## Firmware nạp ICP gốc (ESP32-S3)
+## Firmware nạp ICP gốc (ESP32-C5)
 
-Project ESP-IDF này dùng ESP32-S3 để nhận dạng, xóa, ghi và kiểm tra APROM của
+Project ESP-IDF này dùng ESP32-C5 để nhận dạng, xóa, ghi và kiểm tra APROM của
 MS51FC0AE qua ba chân nạp ICP:
 
-| ESP32-S3 | MS51FC0AE TSSOP20 | Chức năng |
+| ESP32-C5 | MS51FC0AE TSSOP20 | Chức năng |
 |---|---|---|
 | GPIO4 | pin 4, `P2.0/nRESET` | reset/đi vào ICP |
 | GPIO5 | pin 18, `P0.2/ICE_CLK` | clock ICP |
@@ -43,19 +43,19 @@ MS51FC0AE qua ba chân nạp ICP:
 của Nuvoton, chỉ có hình thức clock/data hai dây giống I²C. Vì vậy project dùng
 GPIO bit-bang và không dùng peripheral I²C của ESP32.
 
-- Nên cấp MS51 bằng **3,3 V** khi nối trực tiếp. GPIO ESP32-S3 không chịu được
+- Nên cấp MS51 bằng **3,3 V** khi nối trực tiếp. GPIO ESP32-C5 không chịu được
   tín hiệu 5 V. Nếu MS51 chạy 5 V, phải dùng mạch chuyển mức phù hợp cho DAT hai
   chiều và cho cả CLK/RST; không nối thẳng.
 - Nối GND của hai mạch với nhau.
 - Theo datasheet Nuvoton, có thể dùng pull-up 100 kΩ tại ICE_DAT/ICE_CLK và điện
   trở nối tiếp 100 Ω để lọc nhiễu. nRESET nên có pull-up ngoài; tải hoặc tụ quá
   lớn trên ba đường ICP có thể làm chuỗi vào chế độ nạp thất bại.
-- GPIO4/GPIO5/GPIO6 là GPIO thông dụng của ESP32-S3. Kiểm tra board S3 không
-  dùng ba chân này cho thiết bị khác; không được ép sai mức lúc ESP32 reset.
+- GPIO4/GPIO5/GPIO6 là ánh xạ ICP mặc định trong project. Kiểm tra sơ đồ bo C5
+  trước khi đấu MS51 thật, gồm chức năng chân và các mức cần giữ khi reset.
 
 ## Dùng trang web để nạp MS51
 
-Sau khi ESP32-S3 khởi động, kết nối điện thoại hoặc máy tính vào:
+Sau khi ESP32-C5 khởi động, kết nối điện thoại hoặc máy tính vào:
 
 - Wi-Fi: `MS51-PROGRAMMER-<MAC 12 ký tự>`
 - Mật khẩu: `12345678`
@@ -92,16 +92,21 @@ giá trị `0xFF`. Không đưa file Intel HEX dạng text trực tiếp vào đ
 đang dành 4/3/2/1 KB cho LDROM thì kích thước APROM khả dụng tương ứng là
 28/29/30/31 KB; project đọc CONFIG thực tế và từ chối image quá lớn.
 
-## Build và nạp ESP32-S3
+## Build và nạp ESP32-C5
 
-Project cần ESP-IDF 6.0 hoặc mới hơn có target `esp32s3`:
+Project cần ESP-IDF 6.0 hoặc mới hơn có target `esp32c5`:
 
 ```powershell
 $env:IDF_TOOLS_PATH='C:\Espressif'
-. 'C:\idfsetup\v6.0\esp-idf\export.ps1'
+. 'C:\idf\v6.0\esp-idf\export.ps1'
+idf.py set-target esp32c5
 idf.py build
 idf.py -p COMx flash monitor
 ```
+
+Khi chưa có MS51, build và nạp project mô phỏng riêng trong
+`firmware/esp32c5_simulator`; project ở thư mục gốc dành cho MS51 thật.
+Bản mô phỏng không truy cập chân GPIO/UART của MS51.
 
 Mặc định project **không tự nạp khi khởi động**. Có thể dùng ngay trang web ở trên; hoặc sau
 khi mở monitor, dùng lệnh
@@ -159,4 +164,4 @@ Nguồn tham khảo:
 - [MS51 32K Technical Reference Manual](https://www.nuvoton.com/resource-files/TRM_MS51_32KBFlash_Series_EN_Rev1.00.pdf)
 - [MS51FC0AE product page](https://www.nuvoton.com/products/microcontrollers/8bit-8051-mcus/industrial-8051-series/ms51fc0ae/)
 - [NuMicro-8051-prog](https://github.com/nikitalita/NuMicro-8051-prog)
-- [ESP32-S3 datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf)
+- [ESP32-C5 datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-c5_datasheet_en.pdf)

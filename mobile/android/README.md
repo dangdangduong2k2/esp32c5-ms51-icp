@@ -50,4 +50,4 @@ Instrumentation dùng Activity/HTTP client thật trên emulator API 35, mô ph�
 
 Fixture nghe localhost:80; emulator truy cập 10.0.2.2. Bản source có dữ liệu config trong tests/config.hex. Báo cáo kết quả và ảnh thực tế từ emulator nằm ở gói accounts-2.2.
 
-Firmware 2.2 đã build cho C5, chưa nạp trong đợt này do người dùng chưa tiện đưa bo vào chế độ nạp. APK cần firmware 2.2 để ghép theo MAC. Chưa xác nhận RF 5 GHz, nhiều bo vật lý, hoặc trạng thái HTTP 204 thực trên bo với phiên bản này.
+Cập nhật 08/10/2026: đã nạp firmware simulator 2.2 lên C5 và kiểm tra API trên bo qua USB; quét thấy cả mạng 2.4 và 5 GHz. APK cần firmware 2.2 để ghép theo MAC. Chưa xác nhận ghép bằng điện thoại thật, nhiều bo vật lý hoặc kết quả HTTP 204 online. Xem docs/ms51-connect-2.2/hardware-test-2026-10-08.json ở thư mục gốc repo.

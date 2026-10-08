@@ -463,7 +463,7 @@ void app_main(void)
     ESP_ERROR_CHECK(ms51_programmer_init());
     ESP_ERROR_CHECK(ms51_storage_init());
 
-    ESP_LOGI(TAG, "ESP32-S3 -> MS51FC0AE ICP programmer");
+    ESP_LOGI(TAG, "ESP32-C5 -> MS51FC0AE ICP programmer");
     ESP_LOGI(TAG, "Pins: GPIO%d=nRESET, GPIO%d=ICP_CLK, GPIO%d=ICP_DAT",
              CONFIG_MS51_RST_GPIO, CONFIG_MS51_CLK_GPIO, CONFIG_MS51_DAT_GPIO);
     ESP_LOGW(TAG, "ICP_DAT/ICP_CLK are not an I2C bus; target and ESP32 must use safe 3.3 V levels");

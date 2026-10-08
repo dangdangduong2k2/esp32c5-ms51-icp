@@ -25,18 +25,18 @@ menu "MS51FC0AE ICP programmer"
             reduces Wi-Fi range.
 
     config MS51_RST_GPIO
-        int "ESP32-S3 GPIO connected to MS51 nRESET"
-        range 0 48
+        int "ESP32-C5 GPIO connected to MS51 nRESET"
+        range 0 28
         default 4
 
     config MS51_CLK_GPIO
-        int "ESP32-S3 GPIO connected to MS51 ICE_CLK/ICP_CLK"
-        range 0 48
+        int "ESP32-C5 GPIO connected to MS51 ICE_CLK/ICP_CLK"
+        range 0 28
         default 5
 
     config MS51_DAT_GPIO
-        int "ESP32-S3 GPIO connected to MS51 ICE_DAT/ICP_DAT"
-        range 0 48
+        int "ESP32-C5 GPIO connected to MS51 ICE_DAT/ICP_DAT"
+        range 0 28
         default 6
 
     config MS51_DEBUG_UART_ENABLE

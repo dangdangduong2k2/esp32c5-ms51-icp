@@ -16,5 +16,5 @@ dependencies:
 direct_dependencies:
 - espressif/mdns
 manifest_hash: 8a411aa9655f87b4f73fed29b7238653e14d632212e9d7dd1fc726ee9d98179f
-target: esp32s3
+target: esp32c5
 version: 3.0.0

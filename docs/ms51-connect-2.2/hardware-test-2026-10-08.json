@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-08",
+  "result": "PASS",
+  "chip": "ESP32-C5 rev1.0",
+  "port": "COM49",
+  "mac": "38:44:be:1f:e4:e0",
+  "flash_size": 16777216,
+  "firmware_sha256": "441750f4b18eed076e3789232fa8fc9962cb31b71f62b16f1fa04329a6072a39",
+  "flashed_app_offset": "0x10000",
+  "flash_hash_verified": true,
+  "ap_ssid": "MS51-PROGRAMMER-3844BE1FE4E0",
+  "device_id": "ms51-3844be1fe4e0",
+  "hostname": "ms51-3844be1fe4e0.local",
+  "internet_state": "offline",
+  "uplink_state": "failed",
+  "checks": [
+    "device status and MAC identity",
+    "MAC-based AP SSID and mDNS hostname",
+    "Internet status telemetry present",
+    "simulated uptime advances",
+    "217-byte runtime config read",
+    "simulated MS51 info",
+    "on-device Wi-Fi scan via HTTP"
+  ],
+  "limits": [
+    "MS51 is still simulated; no physical target attached",
+    "APK pairing on a physical phone and multiple boards not tested in this check"
+  ],
+  "scan": {
+    "result": "PASS",
+    "total": 15,
+    "band_2_4ghz": 7,
+    "band_5ghz": 8
+  },
+  "internet_state_after_check": "offline",
+  "api_alive_after_scan": true,
+  "native_project_build": {
+    "target": "esp32c5",
+    "project": "esp32c5_ms51_icp",
+    "result": "PASS",
+    "flashed": false,
+    "app_size": 1320864
+  }
+}

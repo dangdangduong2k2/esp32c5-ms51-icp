@@ -39,7 +39,13 @@ Wi-Fi credentials. Failure is reported as unverified, not proof of an outage.
 X-MS51-Device, when supplied by the Android app, must match before an API
 handler runs. This routing guard is not password authentication.
 
-This 2.2 build has compiled successfully but has NOT been flashed or tested on
-physical hardware in this revision: the user deferred flashing. Earlier serial
-API reports refer to 2.1. RF 5 GHz, real multi-board pairing, and the new Internet
-probe still need hardware validation. USB API diagnostic timeout is now 25s.
+On 2026-10-08, simulator 2.2 was flashed successfully to the ESP32-C5 rev1.0
+with 16 MiB flash. Flash hash verification passed. On-device HTTP checks over
+USB verified MAC-based AP/mDNS identity, status, changing simulated timers,
+217-byte runtime config, simulated chip info, and Wi-Fi scan (7 networks on
+2.4 GHz, 8 on 5 GHz). Internet state was offline because STA was not connected.
+The public report is docs/ms51-connect-2.2/hardware-test-2026-10-08.json in the
+repository root. Physical phone pairing, multiple physical boards and a
+positive Internet probe remain unverified. USB API diagnostic timeout is 25s.
+The native programmer in the repository root now also targets ESP32-C5, but
+only this simulator was flashed while the MS51 target is absent.
