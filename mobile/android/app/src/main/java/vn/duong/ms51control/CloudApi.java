@@ -1,5 +1,9 @@
 package vn.duong.ms51control;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -7,6 +11,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -14,7 +21,24 @@ import java.util.UUID;
 final class CloudApi {
     static final String BASE = "https://142-91-99-63.sslip.io/ms51/connect/v1";
     private final String token;
-    CloudApi(String token) { this.token = token; }
+    interface Connections { HttpURLConnection open(URL url) throws IOException; }
+    private final Connections connections;
+    CloudApi(Context context, String token) {
+        this(token, currentNetwork((ConnectivityManager)context.getSystemService(Context.CONNECTIVITY_SERVICE)));
+    }
+    CloudApi(String token, Connections connections) { this.token = token; this.connections = connections; }
+
+    private static Connections currentNetwork(ConnectivityManager manager) {
+        return url -> {
+            // Resolve DNS and open sockets on the current Internet network for EACH request.
+            // Never inherit a provisioning network or a connection pooled on the old default.
+            Network network=manager.getActiveNetwork();
+            NetworkCapabilities caps=network==null?null:manager.getNetworkCapabilities(network);
+            if(caps==null || !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+                throw new IOException("Điện thoại chưa có kết nối Internet. Chờ Wi-Fi hoặc 4G/5G kết nối rồi thử lại.");
+            return (HttpURLConnection)network.openConnection(url);
+        };
+    }
 
     JSONObject get(String path) throws Exception { return request(path, "GET", null, null, null); }
     JSONObject post(String path, JSONObject body) throws Exception {
@@ -30,7 +54,15 @@ final class CloudApi {
     }
     private static String requestId() { return UUID.randomUUID().toString().replace("-",""); }
     private JSONObject request(String path,String method,byte[] body,String filename,String id) throws Exception {
-        HttpURLConnection http = (HttpURLConnection) new URL(BASE + path).openConnection();
+        try { return send(path,method,body,filename,id); }
+        catch(UnknownHostException error) {
+            throw new IOException("Điện thoại chưa tìm được địa chỉ máy chủ trên mạng hiện tại. Thử lại sau khi Wi-Fi hoặc 4G/5G ổn định.",error);
+        } catch(SocketTimeoutException | SocketException error) {
+            throw new IOException("Điện thoại chưa kết nối được máy chủ qua mạng hiện tại. Kiểm tra Internet rồi thử lại. Nếu vừa gửi lệnh, kiểm tra trạng thái trước khi gửi lại lệnh.",error);
+        }
+    }
+    private JSONObject send(String path,String method,byte[] body,String filename,String id) throws Exception {
+        HttpURLConnection http = connections.open(new URL(BASE + path));
         http.setConnectTimeout(10000); http.setReadTimeout(45000);
         http.setInstanceFollowRedirects(false); http.setUseCaches(false); http.setRequestMethod(method);
         http.setRequestProperty("Accept","application/json");

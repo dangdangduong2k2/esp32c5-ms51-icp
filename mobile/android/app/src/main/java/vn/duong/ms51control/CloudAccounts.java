@@ -17,8 +17,12 @@ import javax.crypto.spec.GCMParameterSpec;
 final class CloudAccounts {
     private static final String ALIAS = "ms51_connect_session_v1";
     private final SharedPreferences prefs;
+    private final Context context;
     private String token = "";
-    CloudAccounts(Context context) { prefs=context.getSharedPreferences("cloud_session_v1",Context.MODE_PRIVATE); }
+    CloudAccounts(Context context) {
+        this.context=context.getApplicationContext();
+        prefs=this.context.getSharedPreferences("cloud_session_v1",Context.MODE_PRIVATE);
+    }
     private SecretKey key() throws Exception {
         KeyStore store=KeyStore.getInstance("AndroidKeyStore"); store.load(null);
         if (!store.containsAlias(ALIAS)) {
@@ -45,7 +49,7 @@ final class CloudAccounts {
         name=name.trim().toLowerCase(java.util.Locale.ROOT);
         if(!name.matches("[a-z0-9._-]{3,32}")) throw new IllegalArgumentException("Tên đăng nhập cần 3–32 chữ không dấu, số, dấu chấm, gạch ngang hoặc gạch dưới.");
         if(password.length<8 || password.length>128) throw new IllegalArgumentException("Mật khẩu cần từ 8 đến 128 ký tự.");
-        JSONObject response=new CloudApi("").post("/auth/"+action,new JSONObject().put("username",name).put("password",new String(password)));
+        JSONObject response=new CloudApi(context,"").post("/auth/"+action,new JSONObject().put("username",name).put("password",new String(password)));
         synchronized(this) {
             Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding"); cipher.init(Cipher.ENCRYPT_MODE,key());
             byte[] encrypted=cipher.doFinal(response.toString().getBytes(StandardCharsets.UTF_8));
@@ -56,6 +60,6 @@ final class CloudAccounts {
         }
         return response.getJSONObject("user");
     }
-    synchronized CloudApi api() { return new CloudApi(token); }
+    synchronized CloudApi api() { return new CloudApi(context,token); }
     synchronized void logout() { token=""; prefs.edit().clear().commit(); }
 }

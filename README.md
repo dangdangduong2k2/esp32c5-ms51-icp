@@ -1,8 +1,10 @@
 # MS51 Connect · ESP32-C5 / MS51
 
-## Bản thử nghiệm 3.0.1 · Tài khoản máy chủ & MQTT
+## Bản thử nghiệm 3.0.2 · Tài khoản máy chủ & MQTT
 
-[Tải MS51 Connect 3.0.1 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.0.1/MS51-Connect-3.0.1.apk) · [Tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v3.0.1)
+[Tải MS51 Connect 3.0.2 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.0.2/MS51-Connect-3.0.2.apk) · [Tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v3.0.2)
+
+**Bản vá 3.0.2:** mỗi yêu cầu tới máy chủ dùng mạng Internet hiện tại của Android, tự cập nhật trạng thái khi đổi Wi-Fi/4G/5G hoặc nối mạng trở lại. Lỗi Internet trên điện thoại được giải thích rõ; lệnh ghi không tự gửi lại khi mất phản hồi. Cài đè bản 3.0/3.0.1, giữ tài khoản và thiết bị đã ghép; **không cần nạp C5 hoặc ghép lại**. Đã thử chuyển mạng trên emulator với HTTPS công khai; vẫn cần xác nhận trên điện thoại thực tế. [Kiểm thử 3.0.2](docs/ms51-connect-3.0.2/test-results.json).
 
 **Bản vá 3.0.1:** sửa bước tìm C5 sau khi chuyển điện thoại sang Wi-Fi nhà: dò theo MAC bằng NSD/mDNS, dự phòng dò trong mạng nội bộ khi mất IP, kiểm tra đúng MAC/SSID và giữ kết nối Internet bình thường của điện thoại. Cài đè APK 3.0, giữ tài khoản đã đăng nhập; **không cần nạp lại firmware 3.0**. [Kiểm thử bản vá](docs/ms51-connect-3.0.1/test-results.json).
 

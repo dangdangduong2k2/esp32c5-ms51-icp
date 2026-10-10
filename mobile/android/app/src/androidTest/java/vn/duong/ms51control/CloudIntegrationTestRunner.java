@@ -27,6 +27,7 @@ public final class CloudIntegrationTestRunner extends Instrumentation {
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments=args; live="true".equals(args.getString("live")); start(); }
     @Override public void onStart() {
         if("discovery".equals(arguments.getString("mode"))) { DiscoveryChecks.run(this,arguments); return; }
+        if("network".equals(arguments.getString("mode"))) { NetworkChecks.run(this,arguments); return; }
         Bundle report=new Bundle(); CloudApi cloud=null; String device=""; int resultCode=0;
         if(!live) { report.putString("stream","Live test requires -e live true and the documented USB adapter."); finish(0,report); return; }
         try {

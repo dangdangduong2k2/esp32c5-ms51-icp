@@ -73,8 +73,8 @@ public final class MainActivity extends Activity {
     private LinearLayout pageRoot;
     private boolean demoMode;
     private boolean configLoaded;
-    private int dashboardEpoch;
-    private boolean foreground;
+    private volatile int dashboardEpoch;
+    private volatile boolean foreground;
 
     private enum Screen { AUTH, HOME, CONNECT_DEVICE, CONFIGURE_WIFI, WIFI_PASSWORD, SWITCH_PHONE, CONTROL }
     private enum Tab { OVERVIEW, SETTINGS, FIRMWARE, DEVICE }
@@ -89,6 +89,10 @@ public final class MainActivity extends Activity {
 
     private ConnectivityManager connectivityManager;
     private ConnectivityManager.NetworkCallback networkCallback;
+    private ConnectivityManager.NetworkCallback internetCallback;
+    private Network observedInternet;
+    private boolean observedInternetAvailable;
+    private final Runnable internetChanged = this::refreshAfterInternetChange;
     private Network activeNetwork;
     private int requestToken;
     private int pendingRole;
@@ -139,9 +143,40 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
                 | (Build.VERSION.SDK_INT >= 26 ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
         connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        connectivityManager.bindProcessToNetwork(null);
         accounts = new CloudAccounts(this); deviceStore = new DeviceStore(this);
         JSONObject user = accounts.session();
         if (user == null) showAuth(false); else { acceptAccount(user); showDevices(); }
+        watchInternet();
+    }
+
+    private void watchInternet() {
+        internetCallback=new ConnectivityManager.NetworkCallback() {
+            private void changed() {
+                mainHandler.removeCallbacks(internetChanged);
+                mainHandler.postDelayed(internetChanged,300);
+            }
+            @Override public void onAvailable(Network network) { changed(); }
+            @Override public void onLost(Network network) { changed(); }
+            @Override public void onCapabilitiesChanged(Network network,NetworkCapabilities caps) { changed(); }
+        };
+        connectivityManager.registerDefaultNetworkCallback(internetCallback);
+    }
+
+    private void refreshAfterInternetChange() {
+        if(isDestroyed())return;
+        Network network=connectivityManager.getActiveNetwork();
+        NetworkCapabilities caps=network==null?null:connectivityManager.getNetworkCapabilities(network);
+        boolean available=caps!=null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        if(java.util.Objects.equals(network,observedInternet) && available==observedInternetAvailable)return;
+        observedInternet=network; observedInternetAvailable=available;
+        if(!foreground)return;
+        // Refresh reads only. Never replay a file transfer, reset or programming command.
+        if(screen==Screen.HOME)restartHomeChecks();
+        else if(screen==Screen.CONTROL && tab==Tab.OVERVIEW) {
+            stopDashboard();
+            mainHandler.post(dashboardRefresh);
+        }
     }
 
     // Cloud account and multi-device home. The ESP MAC is the durable device identity.
@@ -1080,12 +1115,13 @@ public final class MainActivity extends Activity {
         final int controlToken = controlEpoch;
         final EspApi session = api.snapshot(15000);
         io.execute(() -> {
-            if (!currentControl(controlToken)) return;
+            if (!currentControl(controlToken) || epoch!=dashboardEpoch || !foreground) return;
             JSONObject status = null;
             JSONObject debug = null;
             Exception failure = null;
             try {
                 status = session.get("/api/status");
+                if(epoch!=dashboardEpoch || !foreground)return;
                 debug = session.get("/api/debug");
             } catch (Exception error) {
                 failure = error;
@@ -1657,7 +1693,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.0.1 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.0.2 • Kết nối qua Internet");
         addHelp(about, "NTC 10k chưa được firmware hiện tại hỗ trợ.");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {
@@ -2130,6 +2166,8 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        mainHandler.removeCallbacks(internetChanged);
+        if(internetCallback!=null)connectivityManager.unregisterNetworkCallback(internetCallback);
         ++setupEpoch; ++authEpoch; ++controlEpoch; stopHome();
         presenceIo.shutdownNow();
         stopDashboard();

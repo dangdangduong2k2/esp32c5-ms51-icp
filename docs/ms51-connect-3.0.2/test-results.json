@@ -1,0 +1,37 @@
+{
+  "version": "3.0.2",
+  "date": "2026-10-10",
+  "status": "passed_with_documented_limits",
+  "change": "Use current Android Internet network per HTTPS request; observe default-network changes and refresh reads",
+  "passed": [
+    "Verified HTTPS health on emulator Wi-Fi with Android certificate validation",
+    "Stale default-bound transport fails; current-network HTTPS succeeds after Wi-Fi to mobile handoff",
+    "Loss of both networks fails promptly and identifies the phone Internet connection",
+    "Same cloud session recovers on a new Wi-Fi network handle without restarting the app",
+    "Activity default-network observer follows Wi-Fi, mobile, offline and restored Wi-Fi",
+    "Lost command response is not retried and asks the user to verify state before resending"
+  ],
+  "android": {
+    "api": 35,
+    "version_code": 10,
+    "lint_errors": 0,
+    "lint_warnings": 21,
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "upgrade_installed": true
+  },
+  "network": "Public HTTPS health through Android Wi-Fi and cellular Network transports; radios changed only in emulator and restored",
+  "fixtures": "Deliberate stale process binding reproduces a route failure; synthetic lost command response tests no automatic resend",
+  "hardware": "Physical C5 inspected read-only over LAN: cloud configured and online; no firmware or server changes",
+  "limits": [
+    "Physical phone network handoff still needs user verification",
+    "Both emulator network transports share the host Internet uplink, not physical SIM carriers",
+    "Stale binding was fault-injected, not confirmed as the exact original phone cause",
+    "No user-account takeover, pairing change or live mutation RPC in this regression test"
+  ],
+  "assets": {
+    "MS51-Connect-3.0.2.apk": {
+      "bytes": 97443,
+      "sha256": "ad7a13f515aa87cabbf54af0118fabb208d6a7cf3741cbbd05b6e8957bf53355"
+    }
+  }
+}
