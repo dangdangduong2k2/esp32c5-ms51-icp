@@ -1,6 +1,6 @@
 # MS51FC0AE telemetry demo
 
-This is a minimal standalone firmware for checking the ESP32-S3 web debug
+This is a minimal standalone firmware for checking the ESP32-C5 web debug
 screen. It does not depend on an LED, sensor, or any unknown board wiring.
 
 After reset, it sends one log line and then sends three variables once each
@@ -15,9 +15,9 @@ second:
 
 ## Wiring and UART settings
 
-| MS51FC0AE | ESP32-S3 programmer | Purpose |
+| MS51FC0AE | ESP32-C5 programmer | Purpose |
 | --- | --- | --- |
-| P1.6 / ICE_DAT | GPIO6 | UART1 TX telemetry at 115200 baud |
+| P1.6 / ICE_DAT | GPIO1 | UART1 TX telemetry at 115200 baud |
 | GND | GND | Shared reference |
 
 The source deliberately enables **only UART1 TX**. It leaves the ICE clock

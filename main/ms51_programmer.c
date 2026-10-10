@@ -60,7 +60,7 @@ static void unlock_programmer(void)
 }
 
 /* The existing hardware multiplexes the two ICP wires as UART1 while MS51
- * runs: GPIO5/P0.2 is RXD and GPIO6/P1.6 is TXD.  There is never a
+ * runs: GPIO0/P0.2 is RXD and GPIO1/P1.6 is TXD.  There is never a
  * simultaneous owner: before ICP both GPIO matrix routes are detached and the
  * MS51 is held in reset before ESP32 drives CLK or DAT. */
 static esp_err_t open_icp_session(ms51_icp_identity_t *identity)

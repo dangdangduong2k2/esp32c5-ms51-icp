@@ -27,26 +27,26 @@ menu "MS51FC0AE ICP programmer"
     config MS51_RST_GPIO
         int "ESP32-C5 GPIO connected to MS51 nRESET"
         range 0 28
-        default 4
+        default 3
 
     config MS51_CLK_GPIO
         int "ESP32-C5 GPIO connected to MS51 ICE_CLK/ICP_CLK"
         range 0 28
-        default 5
+        default 0
 
     config MS51_DAT_GPIO
         int "ESP32-C5 GPIO connected to MS51 ICE_DAT/ICP_DAT"
         range 0 28
-        default 6
+        default 1
 
     config MS51_DEBUG_UART_ENABLE
         bool "Enable MS51 runtime UART/debug over shared ICP wires"
         default y
         help
-            While MS51 runs normally, P1.6 / ICE_DAT is UART1 TXD to ESP32
-            GPIO6 and P0.2 / ICE_CLK is UART1 RXD from ESP32 GPIO5. This
-            supports telemetry plus runtime EEPROM configuration. Before every
-            ICP session the UART driver is removed and both GPIO5/GPIO6 are
+            While MS51 runs normally, P1.6 / ICE_DAT is UART1 TXD to the
+            ESP32 DAT GPIO; P0.2 / ICE_CLK is UART1 RXD from the CLK GPIO.
+            This supports telemetry plus runtime EEPROM configuration. Before every
+            ICP session the UART driver is removed and both CLK/DAT pins are
             reset to floating inputs; ICP then owns CLK and DAT exclusively.
 
     config MS51_DEBUG_UART_BAUD

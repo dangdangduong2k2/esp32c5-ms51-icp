@@ -49,8 +49,8 @@ typedef struct {
     ms51_debug_log_line_t logs[MS51_DEBUG_MAX_LOG_LINES];
 } ms51_debug_uart_snapshot_t;
 
-/** Start UART1 over the existing runtime wiring: GPIO5 TX -> P0.2 and
- * GPIO6 RX <- P1.6.  Both pins are detached before ICP takes ownership. */
+/** Start UART1 over the existing runtime wiring: GPIO0 TX -> P0.2 and
+ * GPIO1 RX <- P1.6.  Both pins are detached before ICP takes ownership. */
 esp_err_t ms51_debug_uart_init(void);
 
 /** Stop and detach runtime UART TX/RX before the shared CLK/DAT pins enter ICP mode. */

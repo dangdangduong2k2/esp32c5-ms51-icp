@@ -4,11 +4,17 @@
 #include <string.h>
 
 #include "esp_console.h"
+#include "esp_check.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "sdkconfig.h"
+
+#if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
+#include "driver/usb_serial_jtag.h"
+#endif
 
 #include "ms51_firmware.h"
 #include "ms51_debug_uart.h"
@@ -434,32 +440,66 @@ static esp_err_t register_commands(void)
     return ESP_OK;
 }
 
-static void start_console(void)
+static esp_err_t start_console(void)
 {
     esp_console_repl_t *repl = NULL;
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = "ms51> ";
     repl_config.max_cmdline_length = 128;
 
-    ESP_ERROR_CHECK(esp_console_register_help_command());
-    ESP_ERROR_CHECK(register_commands());
+    ESP_RETURN_ON_ERROR(esp_console_register_help_command(), TAG, "console help failed");
+    ESP_RETURN_ON_ERROR(register_commands(), TAG, "console commands failed");
 
 #if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
     esp_console_dev_usb_serial_jtag_config_t device_config =
         ESP_CONSOLE_DEV_USB_SERIAL_JTAG_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&device_config, &repl_config, &repl));
+    ESP_RETURN_ON_ERROR(esp_console_new_repl_usb_serial_jtag(&device_config, &repl_config, &repl),
+                        TAG, "USB console creation failed");
 #elif defined(CONFIG_ESP_CONSOLE_UART_DEFAULT) || defined(CONFIG_ESP_CONSOLE_UART_CUSTOM)
     esp_console_dev_uart_config_t device_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_console_new_repl_uart(&device_config, &repl_config, &repl));
+    ESP_RETURN_ON_ERROR(esp_console_new_repl_uart(&device_config, &repl_config, &repl),
+                        TAG, "UART console creation failed");
 #else
 #error "Select USB Serial/JTAG or UART as the primary ESP-IDF console"
 #endif
 
-    ESP_ERROR_CHECK(esp_console_start_repl(repl));
+    return esp_console_start_repl(repl);
+}
+
+#if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
+static int usb_log_vprintf(const char *format, va_list arguments)
+{
+    /* Diagnostics must never hold up standalone operation waiting for a host. */
+    if (!usb_serial_jtag_is_connected()) {
+        return 0;
+    }
+    return vprintf(format, arguments);
+}
+#endif
+
+static void console_task(void *unused)
+{
+    (void)unused;
+#if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
+    /* Install the interrupt-driven USB console only after a host is present.
+     * This optional task starts after the runtime UART and network services;
+     * powering the board without a USB host must not delay either service. */
+    while (!usb_serial_jtag_is_connected()) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
+#endif
+    const esp_err_t error = start_console();
+    if (error != ESP_OK) {
+        ESP_LOGE(TAG, "Diagnostic console unavailable: %s", esp_err_to_name(error));
+    }
+    vTaskDelete(NULL);
 }
 
 void app_main(void)
 {
+#if defined(CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG)
+    esp_log_set_vprintf(usb_log_vprintf);
+#endif
     ESP_ERROR_CHECK(ms51_programmer_init());
     ESP_ERROR_CHECK(ms51_storage_init());
 
@@ -472,9 +512,12 @@ void app_main(void)
              "both pins are released during ICP",
              CONFIG_MS51_CLK_GPIO, CONFIG_MS51_DAT_GPIO);
 
-    /* Keep the programmer and web UI available even if optional runtime UART
-     * cannot attach to the shared ICP pins on a particular board. */
-    start_console();
+    /* Initialize target communication independently of USB and Wi-Fi startup. */
+    const esp_err_t debug_error = ms51_debug_uart_init();
+    if (debug_error != ESP_OK) {
+        ESP_LOGE(TAG, "MS51 runtime UART unavailable: %s; ICP programming remains available",
+                 esp_err_to_name(debug_error));
+    }
 
     const esp_err_t web_error = ms51_web_start();
     if (web_error != ESP_OK) {
@@ -482,10 +525,8 @@ void app_main(void)
                  esp_err_to_name(web_error));
     }
 
-    const esp_err_t debug_error = ms51_debug_uart_init();
-    if (debug_error != ESP_OK) {
-        ESP_LOGE(TAG, "MS51 runtime UART unavailable: %s; ICP programming remains available",
-                 esp_err_to_name(debug_error));
+    if (xTaskCreate(console_task, "console_start", 4096, NULL, 1, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Could not start diagnostic console task");
     }
 
 #if CONFIG_MS51_AUTO_PROGRAM

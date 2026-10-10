@@ -93,7 +93,7 @@ typedef struct {
 
 static ms51_debug_uart_state_t s_state;
 
-/* GPIO5 and GPIO6 are shared with ICP_CLK and ICP_DAT.  Resetting the GPIO
+/* GPIO0 and GPIO1 are shared with ICP_CLK and ICP_DAT.  Resetting the GPIO
  * matrix on both pins is essential before another peripheral assumes either
  * signal; changing just the direction can leave a UART route active. */
 static esp_err_t release_runtime_uart_pins(void)
@@ -401,7 +401,7 @@ static esp_err_t attach_receiver_locked(void)
         error = uart_param_config(MS51_DEBUG_UART_PORT, &config);
     }
     if (error == ESP_OK) {
-        /* Runtime UART: ESP GPIO5 -> MS51 P0.2 RXD1; MS51 P1.6 TXD1 -> GPIO6. */
+        /* Runtime UART: ESP GPIO0 -> MS51 P0.2 RXD1; MS51 P1.6 TXD1 -> GPIO1. */
         error = uart_set_pin(MS51_DEBUG_UART_PORT, CONFIG_MS51_CLK_GPIO,
                              CONFIG_MS51_DAT_GPIO, UART_PIN_NO_CHANGE,
                              UART_PIN_NO_CHANGE);
@@ -460,9 +460,11 @@ static void receiver_task(void *argument)
         }
         xSemaphoreGive(s_state.mutex);
 
-        if (received <= 0) {
-            vTaskDelay(pdMS_TO_TICKS(5));
-        }
+        /* Let lower-priority ICP/HTTP callers acquire the mutex between reads.
+         * At 100 Hz, pdMS_TO_TICKS(5) is zero; yielding without blocking can
+         * immediately reacquire it and starve those callers indefinitely.
+         * Continuous UART input must also leave a handoff opportunity. */
+        vTaskDelay(1);
     }
 }
 

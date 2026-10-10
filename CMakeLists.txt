@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-# This project targets ESP32-C5. GPIO4/5/6 are used for the MS51 ICP interface;
+# This project targets ESP32-C5. GPIO0=CLK, GPIO1=DAT, GPIO3=nRESET are the default ICP pins;
 # the USB Serial/JTAG console remains available for ESP diagnostics.
 set(IDF_TARGET "esp32c5" CACHE STRING "ESP-IDF target" FORCE)
 

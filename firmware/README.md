@@ -13,7 +13,7 @@ Use `program-full CONFIRM` only when those trailing bytes should be erased.
 ## Runtime debug telemetry
 
 A runnable MS51FC0AE example is in [`ms51_debug_app/`](ms51_debug_app/). It
-uses UART1 TX on P1.6 / ICE_DAT to send a heartbeat to ESP GPIO6.
+uses UART1 TX on P1.6 / ICE_DAT to send a heartbeat to ESP GPIO1.
 
 `ms51_debug_telemetry.c` and `.h` are source files to add to the MS51
 firmware project; they are not compiled into ESP32. Configure UART1 TX on
@@ -30,7 +30,7 @@ ms51_debug_var_u8("state", app_state);
 ~~~
 
 It produces ASCII lines such as `@var,adc_raw,812` and `@log,boot`. The
-ESP32 web page receives them on its GPIO6/DAT wire and shows recent values and
+ESP32 web page receives them on its GPIO1/DAT wire and shows recent values and
 logs. Names may use letters, digits, `_`, `-`, `.`, `[` and `]`.
 
 This telemetry works only while MS51 is running normally. ESP32 detaches its

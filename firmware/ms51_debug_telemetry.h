@@ -12,7 +12,7 @@
  *   @var,state,3
  *   @log,boot complete
  *
- * ESP32-S3 receives the lines on GPIO6 and shows them in its web interface.
+ * ESP32-C5 receives the lines on GPIO1 and shows them in its web interface.
  */
 
 /*

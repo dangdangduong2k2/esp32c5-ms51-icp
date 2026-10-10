@@ -33,10 +33,14 @@ MS51FC0AE qua ba chân nạp ICP:
 
 | ESP32-C5 | MS51FC0AE TSSOP20 | Chức năng |
 |---|---|---|
-| GPIO4 | pin 4, `P2.0/nRESET` | reset/đi vào ICP |
-| GPIO5 | pin 18, `P0.2/ICE_CLK` | clock ICP |
-| GPIO6 | pin 8, `P1.6/ICE_DAT` | data ICP hai chiều |
+| GPIO0 | pin 18, `P0.2/ICE_CLK` | clock ICP / TX 3.3 khi chạy UART |
+| GPIO1 | pin 8, `P1.6/ICE_DAT` | data ICP hai chiều / RX 3.3 khi chạy UART |
+| GPIO3 | pin 4, `P2.0/nRESET` | reset/đi vào ICP / Rs 3.3 |
 | GND | pin 7, `VSS` | mass chung |
+
+Ánh xạ đã chốt theo [ảnh sơ đồ và kiểm tra RS ngày 2026-10-10](docs/hardware/README.md). GPIO4/5/6 dành cho AIN2/AIN3/AIN1 trên sơ đồ. Bản mô phỏng không điều khiển các chân target.
+
+Nếu đã có `sdkconfig`, cập nhật cả `CONFIG_MS51_CLK_GPIO=0`, `CONFIG_MS51_DAT_GPIO=1`, `CONFIG_MS51_RST_GPIO=3` trong cấu hình đang build; `sdkconfig.defaults` không ghi đè giá trị đã lưu.
 
 ## Điều phải lưu ý trước khi đấu dây
 
@@ -51,7 +55,7 @@ GPIO bit-bang và không dùng peripheral I²C của ESP32.
 - Theo datasheet Nuvoton, có thể dùng pull-up 100 kΩ tại ICE_DAT/ICE_CLK và điện
   trở nối tiếp 100 Ω để lọc nhiễu. nRESET nên có pull-up ngoài; tải hoặc tụ quá
   lớn trên ba đường ICP có thể làm chuỗi vào chế độ nạp thất bại.
-- GPIO4/GPIO5/GPIO6 là ánh xạ ICP mặc định trong project. Kiểm tra sơ đồ bo C5
+- GPIO0/GPIO1/GPIO3 là ánh xạ ICP mặc định trong project. Kiểm tra sơ đồ bo C5
   trước khi đấu MS51 thật, gồm chức năng chân và các mức cần giữ khi reset.
 
 ## Dùng trang web để nạp MS51
@@ -156,7 +160,7 @@ sản xuất được Nuvoton hỗ trợ chính thức, dùng Nu-Link; hoặc pr
 ISP-I²C vào LDROM một lần rồi dùng giao thức ISP công khai.
 
 Với phương án ISP-I²C chính thức, bootloader MS51 phải bật `I2CPX=1` để remap
-I²C sang chính `P0.2=SCL` và `P1.6=SDA`; ESP vẫn có thể giữ sơ đồ GPIO5/GPIO6 ở
+I²C sang chính `P0.2=SCL` và `P1.6=SDA`; ESP vẫn có thể giữ sơ đồ GPIO0/GPIO1 ở
 trên và giao tiếp địa chỉ 7-bit `0x60`. Tuy nhiên chip xuất xưởng mặc định không
 có bootloader/LDROM hoạt động, nên vẫn cần Nu-Link nạp và cấu hình lần đầu.
 
