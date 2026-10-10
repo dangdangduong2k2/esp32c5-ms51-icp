@@ -1,5 +1,30 @@
 # MS51 Connect server (protocol 1)
 
+## Admin console
+
+Open **https://142-91-99-63.sslip.io/ms51/connect/v1/admin/**. The Vietnamese navy/teal console works on desktop and phones. It lists existing mobile accounts, searches account/device names and IDs, shows each account's paired devices and fresh online/offline status, and edits usernames, resets passwords or renames devices. Status refreshes every 15 seconds; a heartbeat older than 45 seconds is offline. Broker/API failures show an unknown status instead of claiming a device is online.
+
+Existing passwords are salted Argon2id hashes and cannot be displayed. Changing a user's name or password invalidates all their mobile sessions while preserving paired devices, firmware, and MQTT credentials. A no-op edit does not log them out. There are no account deletion, unpair, or hardware-control actions in this console.
+
+Admin identities are separate from mobile accounts. Deploy `admin.py`, `admin_cli.py` and the entire `admin_web/` directory alongside `app.py`; restart only `ms51-connect`. No nginx change or new service is needed. Schema changes only add `administrators`, `admin_sessions` and `admin_audit` tables, retaining all existing data. Provision/reset an administrator from the trusted server shell:
+
+```sh
+sudo -u ms51-connect /opt/ms51-connect/.venv/bin/python /opt/ms51-connect/admin_cli.py admin
+```
+
+Enter a unique password of 12–128 characters at the hidden prompt. There is no default password and no public administrator registration endpoint. `--password-stdin` is available for secure deployment automation; never put passwords in command arguments or source control. Provisioning resets existing admin sessions. The administrator can subsequently change their own password in the console.
+
+Admin sessions expire after eight hours and use a hashed random token with a Secure, HttpOnly, SameSite=Strict cookie scoped to `/ms51/connect/v1/admin/`. Writes require both the configured origin and a session CSRF token. Login is rate-limited. Responses use no-store and a same-origin CSP. Audit entries contain action/target identifiers, never passwords. All account/device JSON fields are explicitly selected; password hashes, mobile sessions and MQTT secrets are never returned. Host defaults to `https://` plus `MS51_HOST`; if changing the hostname, set `MS51_ADMIN_ORIGIN` to its exact HTTPS origin. Production must remain behind TLS and loopback-only uvicorn.
+
+Isolated tests (install `httpx` in the test environment):
+
+```powershell
+$env:MS51_TEST_WORK='D:\Codex\Documents\ms51-admin-tests\work'
+python server/test_admin.py
+```
+
+The suite creates its own SQLite database and never starts MQTT. It covers administrator/mobile separation, CSRF, cookie attributes, session revocation, duplicate-name rollback, device ownership, presence/search/pagination, password-reset/login races and existing mobile login/register behavior. Back up the live database using SQLite's backup API before deployment; do not copy only the main file while WAL is active.
+
 Android calls `https://142-91-99-63.sslip.io/ms51/connect/v1/`. The service bridges authorized requests to an isolated Mosquitto listener on TLS port **8884**. Existing MQTT on 8883 and unrelated applications are preserved. No domain purchase is needed for this deployment; sslip.io resolves the IP-based hostname, and the existing Let's Encrypt certificate authenticates it.
 
 ## Deployment on the existing Ubuntu VPS

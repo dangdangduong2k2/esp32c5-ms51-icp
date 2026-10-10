@@ -338,7 +338,11 @@ def login(data: Credentials, request: Request):
         fail(401, "Tên đăng nhập hoặc mật khẩu chưa đúng.")
     if not user:
         fail(401, "Tên đăng nhập hoặc mật khẩu chưa đúng.")
-    return session(user)
+    with lock:
+        current = db.execute("SELECT username,hash FROM users WHERE id=?", (user["id"],)).fetchone()
+        if not current or current["hash"] != user["hash"] or current["username"] != user["username"]:
+            fail(401, "Thông tin đăng nhập vừa thay đổi. Vui lòng đăng nhập lại.")
+        return session(user)
 
 
 @app.post("/auth/logout")
@@ -527,3 +531,9 @@ def transfer(upload_id: str, request: Request):
     if not item or item[0] < time.time() or not bearer.startswith("Bearer ") or not secrets.compare_digest(item[1], digest(bearer[7:])):
         fail(404, "Tệp đã hết hạn.")
     return Response(item[2], media_type="application/octet-stream", headers={"Cache-Control": "no-store"})
+
+
+# Install after the mobile routes; admin identities and cookies are independent.
+import sys
+from admin import install as install_admin
+install_admin(app, sys.modules[__name__])
