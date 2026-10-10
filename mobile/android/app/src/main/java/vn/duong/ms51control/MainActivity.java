@@ -727,6 +727,15 @@ public final class MainActivity extends Activity {
 
     private void requestWifi(String ssid, String password, int role, String stationIp) {
         pendingRole = role; pendingSsid = ssid; pendingPassword = password; pendingStationIp = stationIp;
+        if(role==ROLE_PHONE) {
+            // The household network must remain a normal Internet network. A Wi-Fi
+            // specifier creates a local-only connection and can hide Internet/DNS.
+            releaseRequestedNetwork();
+            Network home=internetWifiNetwork();
+            if(home!=null) { activeNetwork=home; api.setNetwork(home); verifyPhoneOnLan(); }
+            else openWifiSettings();
+            return;
+        }
         if (Build.VERSION.SDK_INT < 29) { openWifiSettings(); return; }
         if (!hasWifiPermission()) {
             String[] permissions = Build.VERSION.SDK_INT >= 33 ? new String[]{Manifest.permission.NEARBY_WIFI_DEVICES}
@@ -766,7 +775,7 @@ public final class MainActivity extends Activity {
         if (role == ROLE_DEVICE && screen != Screen.CONNECT_DEVICE) return;
         if (role == ROLE_PHONE && screen != Screen.SWITCH_PHONE) return;
         if (activeNetwork != null && activeNetwork.equals(network)) return;
-        activeNetwork = network; api.setNetwork(network); connectivityManager.bindProcessToNetwork(network);
+        activeNetwork = network; api.setNetwork(network);
         if (role == ROLE_DEVICE) { api.setBaseUrl(EspApi.DEVICE_BASE_URL); verifyDeviceConnection(); }
         else verifyPhoneOnLan();
     }
@@ -811,21 +820,19 @@ public final class MainActivity extends Activity {
     private void verifyPhoneOnLan() {
         final int token=setupEpoch;
         final String expectedSsid=uplinkSsid, knownIp=uplinkIp, device=pairingDeviceId, owner=accountId;
-        final CloudApi cloud=accounts.api(); EspApi session=api.snapshot(6000);
+        final CloudApi cloud=accounts.api(); final EspApi source=api.snapshot(6000);
+        final Network selectedNetwork=activeNetwork;
+        final List<String> neighbors=LocalDeviceDiscovery.neighbors(selectedNetwork==null?null:connectivityManager.getLinkProperties(selectedNetwork));
         io.execute(() -> {
-            JSONObject status=null;
-            String[] hosts=isPrivateIpv4(knownIp) ? new String[]{knownIp,pairingHostname} : new String[]{pairingHostname};
-            for(String host:hosts) {
-                if(token!=setupEpoch || Thread.currentThread().isInterrupted()) return;
-                try {
-                    session.setBaseUrl("http://"+host); JSONObject candidate=session.get("/api/status"), uplink=getUplink(candidate);
-                    if(!"connected".equals(uplink.optString("state")) || !expectedSsid.equals(uplink.optString("ssid")) ||
-                            !isPrivateIpv4(uplink.optString("ip"))) continue;
-                    status=candidate; break;
-                } catch(Exception ignored) { }
-            }
-            if(status==null) { runOnUiThread(() -> finishSetup(token,"Chưa thấy thiết bị trên "+expectedSsid+". Kiểm tra điện thoại cùng mạng rồi thử lại.")); return; }
             try {
+                LocalDeviceDiscovery.Found found=LocalDeviceDiscovery.find(this,selectedNetwork,source,device,expectedSsid,knownIp,neighbors,
+                        () -> token==setupEpoch && !Thread.currentThread().isInterrupted(),35000);
+                if(token!=setupEpoch) return;
+                if(found==null) {
+                    runOnUiThread(() -> { manualConnection=true; finishSetup(token,"Chưa liên lạc được với thiết bị. Bấm Tiếp tục để chọn lại "+expectedSsid+"; tránh mạng khách có chặn thiết bị nội bộ."); });
+                    return;
+                }
+                EspApi session=found.session;
                 if(token!=setupEpoch) return;
                 runOnUiThread(() -> { if(currentSetup(token)) showMessage("Đang ghép thiết bị với tài khoản…"); });
                 JSONObject claim=cloud.post("/pair/start",new JSONObject().put("device",device));
@@ -862,6 +869,21 @@ public final class MainActivity extends Activity {
         activeNetwork = null; api.setNetwork(null); connectivityManager.bindProcessToNetwork(null);
     }
 
+    private Network internetWifiNetwork() {
+        Network primary=connectivityManager.getActiveNetwork();
+        if(primary!=null) {
+            NetworkCapabilities caps=connectivityManager.getNetworkCapabilities(primary);
+            if(caps!=null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))return primary;
+        }
+        for(Network network:connectivityManager.getAllNetworks()) {
+            NetworkCapabilities caps=connectivityManager.getNetworkCapabilities(network);
+            if(caps!=null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+                    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))return network;
+        }
+        return null;
+    }
+
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode != WIFI_PERMISSION_REQUEST || !setupBusy
@@ -889,8 +911,9 @@ public final class MainActivity extends Activity {
         if (manualWifiVerificationQueued || !setupBusy) return;
         if (screen != Screen.CONNECT_DEVICE && screen != Screen.SWITCH_PHONE) return;
         manualWifiVerificationQueued = true; waitingForWifiSettingsReturn = false;
-        Network wifi = null;
+        Network wifi = screen==Screen.SWITCH_PHONE?internetWifiNetwork():null;
         for (Network candidate : connectivityManager.getAllNetworks()) {
+            if(wifi!=null || screen==Screen.SWITCH_PHONE)break;
             NetworkCapabilities caps = connectivityManager.getNetworkCapabilities(candidate);
             if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) { wifi = candidate; break; }
         }
@@ -1634,7 +1657,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.0 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.0.1 • Kết nối qua Internet");
         addHelp(about, "NTC 10k chưa được firmware hiện tại hỗ trợ.");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {

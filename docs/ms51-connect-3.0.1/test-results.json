@@ -1,0 +1,35 @@
+{
+  "version": "3.0.1",
+  "date": "2026-10-10",
+  "status": "passed_with_documented_limits",
+  "change": "Recover discovery after Wi-Fi handoff loses station IP; use normal Internet Wi-Fi for household network",
+  "passed": [
+    "Real C5 reached over LAN from Android; MAC and selected SSID verified",
+    "Missing/stale IP recovers through bounded LAN discovery without .local DNS or USB",
+    "Wrong MAC and wrong target Wi-Fi are rejected before pairing credentials can be sent",
+    "Cancelled work stops; public subnets are excluded and smaller subnet masks respected",
+    "Temporary connection failure retries successfully within a bounded deadline",
+    "Android NSD discovers and resolves the matching MAC service without a saved IP"
+  ],
+  "android": {
+    "api": 35,
+    "version_code": 9,
+    "lint_errors": 0,
+    "lint_warnings": 21,
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "upgrade_over_3_0_installed": true
+  },
+  "hardware": "Read-only HTTP access from Android emulator to physical ESP32-C5 on the real LAN; no USB gateway",
+  "fixtures": "Delayed HTTP and NSD service hosted on the emulator; temporary emulator-only unprivileged port 80 enabled for fixture",
+  "limits": [
+    "Physical phone Wi-Fi chooser still requires user verification",
+    "LAN fallback test supplies physical /24 because the emulator has its own NAT subnet",
+    "Only one physical C5; firmware and VPS unchanged from 3.0.0"
+  ],
+  "assets": {
+    "MS51-Connect-3.0.1.apk": {
+      "bytes": 95927,
+      "sha256": "aded237febf4b0241259f1e865c8a60331f9ede3a0bfabdddafded9b52248065"
+    }
+  }
+}

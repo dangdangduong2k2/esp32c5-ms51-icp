@@ -133,7 +133,7 @@ final class EspApi {
         }
         HttpURLConnection connection = (HttpURLConnection) rawConnection;
         connection.setRequestMethod(method);
-        connection.setConnectTimeout(5000);
+        connection.setConnectTimeout(Math.min(5000, readTimeoutMs));
         connection.setReadTimeout(readTimeoutMs);
         connection.setUseCaches(false);
         connection.setInstanceFollowRedirects(false);
@@ -181,7 +181,10 @@ final class EspApi {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(source, StandardCharsets.UTF_8))) {
             char[] buffer = new char[1024];
             int count;
-            while ((count = reader.read(buffer)) >= 0) output.append(buffer, 0, count);
+            while ((count = reader.read(buffer)) >= 0) {
+                output.append(buffer, 0, count);
+                if(output.length()>262144) throw new IOException("Phản hồi thiết bị quá lớn.");
+            }
         }
         return output.toString();
     }

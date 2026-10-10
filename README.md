@@ -1,8 +1,10 @@
 # MS51 Connect · ESP32-C5 / MS51
 
-## Bản thử nghiệm 3.0.0 · Tài khoản máy chủ & MQTT
+## Bản thử nghiệm 3.0.1 · Tài khoản máy chủ & MQTT
 
-[Tải MS51 Connect 3.0 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.0.0/MS51-Connect-3.0.apk) · [Tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v3.0.0)
+[Tải MS51 Connect 3.0.1 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.0.1/MS51-Connect-3.0.1.apk) · [Tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v3.0.1)
+
+**Bản vá 3.0.1:** sửa bước tìm C5 sau khi chuyển điện thoại sang Wi-Fi nhà: dò theo MAC bằng NSD/mDNS, dự phòng dò trong mạng nội bộ khi mất IP, kiểm tra đúng MAC/SSID và giữ kết nối Internet bình thường của điện thoại. Cài đè APK 3.0, giữ tài khoản đã đăng nhập; **không cần nạp lại firmware 3.0**. [Kiểm thử bản vá](docs/ms51-connect-3.0.1/test-results.json).
 
 - Tài khoản và danh sách nhiều thiết bị được lưu trên VPS; đăng nhập trên điện thoại khác vẫn thấy cùng danh sách.
 - Điều khiển qua Internet bằng HTTPS → MQTT TLS → ESP32-C5. Sau lần ghép đầu tiên, điện thoại có thể dùng 4G/5G hoặc Wi-Fi khác.
