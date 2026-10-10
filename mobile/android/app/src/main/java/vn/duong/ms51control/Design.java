@@ -17,6 +17,9 @@ final class Design {
         private final Paint paint = new Paint(3);
         @Override public void draw(Canvas canvas) {
             Rect b = getBounds();
+            // Decorative circles leave a low alpha on this reused Paint.
+            // Restore opacity before every background redraw.
+            paint.setAlpha(255);
             paint.setShader(new LinearGradient(0, 0, b.width(), b.height(),
                     new int[]{NAVY, Color.rgb(20, 62, 76)}, null, Shader.TileMode.CLAMP));
             canvas.drawRoundRect(new RectF(b), 26, 26, paint);

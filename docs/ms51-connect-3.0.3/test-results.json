@@ -1,0 +1,25 @@
+{
+  "version": "3.0.3",
+  "version_code": 11,
+  "date": "2026-10-10",
+  "status": "passed",
+  "change": "Reset hero Paint alpha before every gradient draw; decoration alpha must not leak into the next frame.",
+  "regression_before": "First draw center ff133245; next draw ffdde4e9 (gray). Android instrumentation failed as expected.",
+  "regression_after": "60 redraws across 360px and 720px widths identical; center opaque.",
+  "upgrade_installed": true,
+  "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+  "lint": {
+    "errors": 0,
+    "warnings": 21
+  },
+  "test_command": "adb -s emulator-5556 shell am instrument -w -e mode render vn.duong.ms51connect.test/vn.duong.ms51control.CloudIntegrationTestRunner",
+  "limits": [
+    "Rendering checked on Android 35 emulator; physical phone rendering still to be confirmed."
+  ],
+  "assets": {
+    "MS51-Connect-3.0.3.apk": {
+      "sha256": "761c1ff0c68365f645cdabf8125281566beb65244103753f914b47e072c57b93",
+      "size": 97447
+    }
+  }
+}

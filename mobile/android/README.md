@@ -1,6 +1,8 @@
-# MS51 Connect 3.0.2
+# MS51 Connect 3.0.3
 
-Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 10, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 11, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+
+3.0.3 sửa nền thẻ trạng thái “Đang làm lạnh / Đang xả đá” bị xám khi vẽ lại. Khôi phục alpha trước khi vẽ gradient; kiểm thử Android xác nhận màu giữ nguyên qua 60 lần vẽ ở hai kích thước. APK cùng chữ ký với 3.0.2, cài đè giữ phiên đăng nhập và danh sách thiết bị.
 
 3.0.2 mở HTTPS qua `ConnectivityManager.getActiveNetwork()` và `Network.openConnection()` ở **từng yêu cầu**, kể cả khi dùng lại phiên tài khoản sau đổi mạng. DNS/socket đi theo mạng hiện tại, độc lập với kết nối AP thiết lập. `registerDefaultNetworkCallback` làm mới các lần đọc ở trang chủ/tổng quan khi mạng thay đổi; phản hồi cũ không ghi đè trạng thái mới. Không tự gửi lại lệnh ghi khi mất phản hồi, không hạ xác thực TLS. Lỗi mất Internet trên điện thoại được hiển thị riêng với trạng thái thiết bị. [Android Network.openConnection](https://developer.android.com/reference/android/net/Network#openConnection(java.net.URL)) · [Theo dõi mạng mặc định](https://developer.android.com/develop/connectivity/network-ops/reading-network-state).
 
@@ -10,7 +12,7 @@ Wi-Fi nhà dùng kết nối Internet thông thường của Android/cài đặt
 
 ## Sử dụng
 
-1. Cài APK 3.0.2, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.0/3.0.1 giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
+1. Cài APK 3.0.3, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.0/3.0.1 giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
 2. Trang đầu hiển thị các thiết bị đã ghép, với trạng thái MQTT hiện tại. Tài khoản dùng được trên nhiều điện thoại.
 3. Bấm **Thêm thiết bị** → **Tìm Wi-Fi thiết bị** → chọn AP `MS51-PROGRAMMER-<MAC>` → **Quét Wi-Fi** → chọn mạng → nhập mật khẩu. Có nút con mắt và hỗ trợ 5 GHz trên C5.
 4. Bấm **Tiếp tục** để điện thoại vào mạng đích. App kiểm tra MAC/SSID rồi yêu cầu bo chứng minh kết nối MQTT trước khi ghi vào tài khoản.
@@ -52,3 +54,7 @@ Kiểm thử tìm thiết bị ở 3.0.1 chỉ đọc C5 thật, không đăng k
     adb -s emulator-5556 shell am instrument -w -e mode discovery -e device_ip 192.168.1.51 -e device_id ms51-001122334455 vn.duong.ms51connect.test/vn.duong.ms51control.CloudIntegrationTestRunner
 
 Runner kiểm tra IP mất/cũ, sai MAC/SSID, hủy thao tác, phạm vi dò mạng, phản hồi đến chậm và NSD bằng một HTTP fixture trên emulator. Fixture cần cổng 80: trên emulator thử nghiệm có `adb root`, tạm đặt `adb shell sysctl -w net.ipv4.ip_unprivileged_port_start=0`, rồi trả về giá trị ban đầu khi xong; không đổi cấu hình này trên điện thoại người dùng. Phần dò LAN dùng dải mạng thử nghiệm truyền vào thuật toán vì subnet của emulator khác LAN vật lý; đây không thay thế kiểm thử chọn Wi-Fi trên điện thoại thật.
+
+Kiểm thử nền thẻ trạng thái (offline, không gọi server hoặc điều khiển C5):
+
+    adb -s emulator-5556 shell am instrument -w -e mode render vn.duong.ms51connect.test/vn.duong.ms51control.CloudIntegrationTestRunner
