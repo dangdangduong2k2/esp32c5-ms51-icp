@@ -2,6 +2,8 @@
 
 ## Admin console
 
+The short entry URL **https://142-91-99-63.sslip.io/** redirects to the console; `/admin` and `/admin/` do the same. Install these exact-match HTTPS redirects on the existing VPS with `sudo python3 /opt/ms51-connect/configure_admin_entry.py`. The helper backs up the virtual host, validates nginx, then reloads it. Unknown routes still return 404; existing API and firmware-download routes are retained.
+
 Open **https://142-91-99-63.sslip.io/ms51/connect/v1/admin/**. The Vietnamese navy/teal console works on desktop and phones. It lists existing mobile accounts, searches account/device names and IDs, shows each account's paired devices and fresh online/offline status, and edits usernames, resets passwords or renames devices. Status refreshes every 15 seconds; a heartbeat older than 45 seconds is offline. Broker/API failures show an unknown status instead of claiming a device is online.
 
 Existing passwords are salted Argon2id hashes and cannot be displayed. Changing a user's name or password invalidates all their mobile sessions while preserving paired devices, firmware, and MQTT credentials. A no-op edit does not log them out. There are no account deletion, unpair, or hardware-control actions in this console.
