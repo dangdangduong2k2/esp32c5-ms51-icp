@@ -1,5 +1,6 @@
 #include "ms51_web.h"
 #include "ms51_presence.h"
+#include "ms51_cloud.h"
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -700,7 +701,7 @@ static esp_err_t status_handler(httpd_req_t *request)
     char presence[384];
     ms51_presence_json(presence,sizeof(presence));
     size_t used=strlen(payload);
-    if(used>0)snprintf(payload+used-1,sizeof(payload)-used+1,"%s}",presence);
+    if(used>0)snprintf(payload+used-1,sizeof(payload)-used+1,"%s,\"cloud\":{\"protocol\":1,\"configured\":%s,\"online\":%s,\"clock_ready\":%s}}",presence,ms51_cloud_configured()?"true":"false",ms51_cloud_online()?"true":"false",ms51_cloud_clock_ready()?"true":"false");
     return send_json(request, payload, NULL);
 }
 
@@ -1235,6 +1236,16 @@ static esp_err_t upload_handler_legacy(httpd_req_t *request)
 
 #endif
 
+static int upload_read(void *context, uint8_t *buffer, size_t maximum)
+{
+    httpd_req_t *request=context;
+    for(int retry=0;retry<3;retry++) {
+        int count=httpd_req_recv(request,(char*)buffer,maximum);
+        if(count!=HTTPD_SOCK_ERR_TIMEOUT) return count;
+    }
+    return -1;
+}
+
 static esp_err_t upload_handler(httpd_req_t *request)
 {
     if(wrong_device(request))return ESP_OK;
@@ -1271,45 +1282,8 @@ static esp_err_t upload_handler(httpd_req_t *request)
         return send_error_json(request, "409 Conflict", "Programmer is busy.", error);
     }
 
-    uint8_t *source = heap_caps_malloc(request->content_len, MALLOC_CAP_8BIT);
-    if (source == NULL) {
-        ms51_operation_unlock();
-        return send_error_json(request, "503 Service Unavailable",
-                               "ESP32 does not have enough memory for this upload.",
-                               ESP_ERR_NO_MEM);
-    }
-
-    size_t received_total = 0;
-    unsigned timeout_count = 0;
-    while (received_total < request->content_len) {
-        size_t wanted = request->content_len - received_total;
-        if (wanted > HTTP_UPLOAD_BUFFER_SIZE) {
-            wanted = HTTP_UPLOAD_BUFFER_SIZE;
-        }
-        const int received = httpd_req_recv(request, (char *)source + received_total, wanted);
-        if (received == HTTPD_SOCK_ERR_TIMEOUT) {
-            if (++timeout_count <= 3) {
-                continue;
-            }
-            error = ESP_ERR_TIMEOUT;
-            break;
-        }
-        if (received <= 0) {
-            ESP_LOGW(TAG, "firmware upload connection ended after %u/%u byte(s)",
-                     (unsigned)received_total, (unsigned)request->content_len);
-            error = ESP_ERR_INVALID_RESPONSE;
-            break;
-        }
-        timeout_count = 0;
-        received_total += (size_t)received;
-    }
-
-    ms51_image_t image;
-    memset(&image, 0, sizeof(image));
-    if (error == ESP_OK) {
-        error = ms51_image_parse_upload(source, received_total, filename, &image);
-    }
-    heap_caps_free(source);
+    ms51_image_t image={0};
+    error=ms51_image_parse_stream(upload_read,request,request->content_len,filename,&image);
 
     ms51_storage_info_t info;
     if (error == ESP_OK) {
@@ -2111,11 +2085,25 @@ static void release_web_resources(void)
     }
 }
 
+static esp_err_t cloud_pair_handler(httpd_req_t *request)
+{
+    if(wrong_device(request))return ESP_OK;
+    char body[HTTP_JSON_BODY_SIZE];
+    if(receive_json(request,body,sizeof(body))!=ESP_OK)
+        return send_error_json(request,"400 Bad Request","Yeu cau ghep noi khong hop le.",ESP_ERR_INVALID_ARG);
+    esp_err_t result=ms51_cloud_pair(body);
+    memset(body,0,sizeof(body));
+    if(result!=ESP_OK)
+        return send_error_json(request,"409 Conflict", result==ESP_ERR_INVALID_STATE ?
+            "Thiet bi da duoc ghep noi. Go thiet bi tu tai khoan cu truoc." : "Thong tin ghep noi khong hop le.",result);
+    return send_json(request,"{\"ok\":true}",NULL);
+}
+
 static esp_err_t start_http_server(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
-    config.max_uri_handlers = 14;
+    config.max_uri_handlers = 15;
     config.max_open_sockets = 4;
     config.lru_purge_enable = true;
     config.recv_wait_timeout = 20;
@@ -2126,6 +2114,7 @@ static esp_err_t start_http_server(void)
                         "HTTP server start failed");
 
     const httpd_uri_t handlers[] = {
+        {.uri = "/api/cloud/pair", .method = HTTP_POST, .handler = cloud_pair_handler},
         {.uri = "/api/status", .method = HTTP_GET, .handler = status_handler},
         {.uri = "/api/debug", .method = HTTP_GET, .handler = debug_handler},
         {.uri = "/api/runtime-config", .method = HTTP_GET,
@@ -2193,6 +2182,7 @@ esp_err_t ms51_web_start(void)
     }
     error = start_http_server();
     if (error == ESP_OK) error = ms51_presence_start();
+    if (error == ESP_OK) error = ms51_cloud_start();
     if (error != ESP_OK) {
         release_web_resources();
         return error;

@@ -1,5 +1,12 @@
 # Third-party notices
 
+The cloud firmware uses Espressif ESP-MQTT 1.1.0 under the
+[Apache License 2.0](licenses/ESP-MQTT-Apache-2.0.txt), and cJSON 1.7.19
+(copyright Dave Gamble and cJSON contributors) under the
+[MIT License](licenses/cJSON-MIT.txt). ESP-IDF's managed dependency lockfiles
+record the exact component versions. Server dependency versions are recorded
+in `server/requirements.lock` and retain their upstream licenses.
+
 The ICP framing, entry/exit sequence, command values, and timing model in
 `main/ms51_icp.c` are derived from:
 

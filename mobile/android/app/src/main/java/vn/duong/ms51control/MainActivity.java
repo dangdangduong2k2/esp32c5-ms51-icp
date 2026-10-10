@@ -139,13 +139,13 @@ public final class MainActivity extends Activity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
                 | (Build.VERSION.SDK_INT >= 26 ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0));
         connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
-        accounts = new LocalAccounts(this); deviceStore = new DeviceStore(this);
+        accounts = new CloudAccounts(this); deviceStore = new DeviceStore(this);
         JSONObject user = accounts.session();
         if (user == null) showAuth(false); else { acceptAccount(user); showDevices(); }
     }
 
-    // Local account and multi-device home. The ESP MAC is the durable device identity.
-    private LocalAccounts accounts;
+    // Cloud account and multi-device home. The ESP MAC is the durable device identity.
+    private CloudAccounts accounts;
     private DeviceStore deviceStore;
     private String accountId = "", username = "";
     private DeviceStore.Device activeDevice;
@@ -213,7 +213,7 @@ public final class MainActivity extends Activity {
         });
         alternate.setOnClickListener(v -> { if (!authBusy) showAuth(!register); });
         content.addView(submit,fullParams(0,20,0,8)); content.addView(alternate);
-        addHelp(content,"Tài khoản chỉ lưu trên điện thoại này. Mật khẩu tối thiểu 8 ký tự.");
+        addHelp(content,"Tài khoản được lưu trên máy chủ. Mật khẩu tối thiểu 8 ký tự. Tài khoản cũ trên điện thoại cần đăng ký lại một lần.");
     }
 
     private EditText accountSecret(LinearLayout content, String hint) {
@@ -238,17 +238,13 @@ public final class MainActivity extends Activity {
 
     private void acceptAccount(JSONObject user) {
         accountId = user.optString("id"); username = user.optString("username");
-        // Version 2.1 had no MAC identity. Preserve its record, but require a local re-pair.
-        android.content.SharedPreferences old = getPreferences(MODE_PRIVATE);
-        String oldIp = old.getString("paired_ip","");
-        if (!old.getBoolean("legacy_migrated",false) && !oldIp.isEmpty()) {
-            deviceStore.save(accountId,new DeviceStore.Device("legacy-v21","Thiết bị từ bản 2.1",oldIp,"",old.getString("paired_ssid","")));
-            old.edit().putBoolean("legacy_migrated",true).apply();
-        }
+
     }
 
     private void logout() {
-        ++controlEpoch; ++setupEpoch; releaseRequestedNetwork(); accounts.logout();
+        ++controlEpoch; ++setupEpoch; releaseRequestedNetwork();
+        CloudApi previous = accounts.api(); accounts.logout();
+        io.execute(() -> { try { previous.post("/auth/logout",new JSONObject()); } catch(Exception ignored) { } });
         accountId = ""; username = ""; activeDevice = null; clearDeviceState();
         showAuth(false);
     }
@@ -270,7 +266,7 @@ public final class MainActivity extends Activity {
     private void showDevices() {
         ++controlEpoch; ++setupEpoch; stopDashboard(); stopHome();
         screen = Screen.HOME; setupBusy = false; openingDevice = false; activeDevice = null;
-        clearDeviceState(); api.setExpectedDeviceId(""); lastUiMessage = "";
+        clearDeviceState(); api.setExpectedDeviceId(""); api.setCloud(null,""); lastUiMessage = "";
         LinearLayout content = createPage("THIẾT BỊ CỦA BẠN", "Xin chào, " + username,
                 "Mọi thiết bị, trong một không gian.");
         List<DeviceStore.Device> devices = deviceStore.list(accountId);
@@ -300,7 +296,7 @@ public final class MainActivity extends Activity {
                 content.addView(card,fullParams(0,12,0,0));
             }
             addHelp(content,"Chạm để mở · Giữ để đổi tên hoặc bỏ ghép nối.");
-            addHelp(content,"Trạng thái Internet do thiết bị kiểm tra. Điện thoại cần ở cùng mạng để cập nhật.");
+            addHelp(content,"Điều khiển qua Internet · Dùng được bằng Wi-Fi hoặc 4G/5G.");
         }
         mainHandler.post(homeRefresh);
     }
@@ -319,17 +315,32 @@ public final class MainActivity extends Activity {
                     if (!owner.equals(accountId) || screen != Screen.HOME) { edit.dismiss(); return; }
                     String value = name.getText().toString().trim(); if (value.isEmpty()) { name.setError("Nhập tên thiết bị."); return; }
                     DeviceStore.Device latest = findDevice(device.id); if (latest == null) { edit.dismiss(); return; }
-                    deviceStore.save(owner,new DeviceStore.Device(latest.id,value,latest.ip,latest.hostname,latest.ssid)); edit.dismiss(); showDevices();
+                    edit.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+                    CloudApi cloud = accounts.api(); final int token = homeEpoch;
+                    io.execute(() -> {
+                        try { cloud.post("/devices/"+device.id+"/name",new JSONObject().put("name",value));
+                            runOnUiThread(() -> { if(currentHome(token) && owner.equals(accountId)) { edit.dismiss(); refreshDevices(); } });
+                        } catch(Exception error) { runOnUiThread(() -> {
+                            if(currentHome(token)) { edit.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true); showMessage(errorMessage(error)); }
+                        }); }
+                    });
                 })); edit.show();
             } else new AlertDialog.Builder(this).setTitle("Bỏ ghép nối " + device.name + "?")
-                    .setMessage("Thiết bị sẽ được gỡ khỏi tài khoản này trên điện thoại.")
+                    .setMessage("Thiết bị sẽ được gỡ khỏi tài khoản trên mọi điện thoại. Quyền điều khiển từ xa sẽ bị thu hồi.")
                     .setNegativeButton("Hủy",null).setPositiveButton("Bỏ ghép nối",(d,w) -> {
-                        if (owner.equals(accountId) && screen == Screen.HOME) { deviceStore.remove(owner,device.id); showDevices(); }
+                        if (owner.equals(accountId) && screen == Screen.HOME) {
+                            CloudApi cloud=accounts.api(); final int token=homeEpoch;
+                            io.execute(() -> {
+                                try { cloud.post("/devices/"+device.id+"/remove",new JSONObject());
+                                    runOnUiThread(() -> { if(currentHome(token) && owner.equals(accountId)) refreshDevices(); });
+                                } catch(Exception error) { runOnUiThread(() -> { if(currentHome(token)) showMessage(errorMessage(error)); }); }
+                            });
+                        }
                     }).show();
         }).show();
     }
 
-    private void stopHome() { ++homeEpoch; checkingDevices.clear(); mainHandler.removeCallbacks(homeRefresh); }
+    private void stopHome() { homeLoading=false; ++homeEpoch; checkingDevices.clear(); mainHandler.removeCallbacks(homeRefresh); }
     private void restartHomeChecks() {
         stopHome(); openingDevice = false;
         for (Map.Entry<String,TextView> item : deviceLabels.entrySet()) {
@@ -350,17 +361,11 @@ public final class MainActivity extends Activity {
         return null;
     }
     private EspApi deviceSession(DeviceStore.Device device, Network network) {
-        EspApi session = new EspApi(); session.setNetwork(network); session.setExpectedDeviceId(device.id);
-        session.setBaseUrl("http://" + device.ip); return session.snapshot(4000);
+        EspApi session = new EspApi(); session.setExpectedDeviceId(device.id);
+        session.setCloud(accounts.api(),device.id); return session;
     }
     private JSONObject resolveDevice(DeviceStore.Device device, EspApi session) throws Exception {
-        Exception failure = new IOException("Không liên lạc được với thiết bị.");
-        for (String host : new String[]{device.ip,device.hostname}) {
-            if (host.isEmpty()) continue;
-            try { session.setBaseUrl("http://" + host); return session.get("/api/status"); }
-            catch(Exception error) { failure = error; }
-        }
-        throw failure;
+        return session.get("/api/status");
     }
     private DeviceStore.Device updateAddress(DeviceStore.Device device, JSONObject status) {
         JSONObject uplink = getUplink(status); String ip = uplink.optString("ip",device.ip);
@@ -371,54 +376,53 @@ public final class MainActivity extends Activity {
         if (!updated.ip.equals(current.ip) || !updated.ssid.equals(current.ssid)) deviceStore.save(accountId,updated);
         return updated;
     }
+    private boolean homeLoading;
     private void refreshDevices() {
-        final int token = homeEpoch;
-        final Network network = wifiNetwork();
-        for (DeviceStore.Device device : deviceStore.list(accountId)) {
-            if (device.legacy() || checkingDevices.contains(device.id)) continue;
-            TextView label = deviceLabels.get(device.id); if (label == null) continue;
-            if (network == null) { label.setText("Không liên lạc được · Điện thoại chưa vào Wi-Fi"); label.setTextColor(Design.MUTED); continue; }
-            checkingDevices.add(device.id);
-            EspApi session = deviceSession(device,network);
-            presenceIo.execute(() -> {
-                if (token != homeEpoch) return;
-                try {
-                    JSONObject status = resolveDevice(device,session);
-                    runOnUiThread(() -> {
-                        if (!currentHome(token)) return;
-                        checkingDevices.remove(device.id); updateAddress(device,status);
-                        String value = DeviceStore.internetLabel(status); label.setText(value);
-                        label.setTextColor("Có Internet".equals(value) ? Design.TEAL : Design.MUTED);
-                    });
-                } catch (Exception error) {
-                    runOnUiThread(() -> {
-                        if (!currentHome(token)) return;
-                        checkingDevices.remove(device.id); label.setText("Không liên lạc được"); label.setTextColor(Design.MUTED);
-                    });
-                }
-            });
-        }
-    }
-    private void openDevice(DeviceStore.Device device) {
-        if (screen != Screen.HOME || openingDevice) return;
-        if (device.legacy()) { legacyPairingId = device.id; releaseRequestedNetwork(); showConnectDevice(false); return; }
-        Network network = wifiNetwork();
-        if (network == null) { showMessage("Kết nối điện thoại vào " + device.ssid + " để mở thiết bị."); return; }
-        openingDevice = true; int token = homeEpoch;
-        showMessage("Đang mở " + device.name + "…"); EspApi session = deviceSession(device,network);
+        if(homeLoading || screen != Screen.HOME) return;
+        final int token=homeEpoch; final String owner=accountId;
+        final CloudApi cloud=accounts.api(); homeLoading=true;
         presenceIo.execute(() -> {
-            if (token != homeEpoch) return;
             try {
-                JSONObject status = resolveDevice(device,session);
+                org.json.JSONArray rows=cloud.get("/devices").getJSONArray("devices");
                 runOnUiThread(() -> {
-                    if (!currentHome(token)) return;
-                    openingDevice = false; activeDevice = updateAddress(device,status);
-                    stopHome(); ++controlEpoch; clearDeviceState();
-                    api.setExpectedDeviceId(device.id); api.setNetwork(network); api.setBaseUrl(session.getBaseUrl());
-                    rememberStatus(status); lastUiMessage = ""; showControl(Tab.OVERVIEW);
+                    if(!currentHome(token) || !owner.equals(accountId)) return;
+                    homeLoading=false;
+                    try {
+                        if(deviceStore.replace(owner,rows)) { showDevices(); return; }
+                        for(int i=0;i<rows.length();i++) {
+                            JSONObject row=rows.getJSONObject(i); TextView label=deviceLabels.get(row.getString("id"));
+                            if(label!=null) { boolean online=row.optBoolean("online");
+                                label.setText(online ? "Đã kết nối Internet" : "Chưa kết nối Internet");
+                                label.setTextColor(online ? Design.TEAL : Design.MUTED);
+                            }
+                        }
+                    } catch(Exception error) { showMessage(errorMessage(error)); }
                 });
             } catch(Exception error) { runOnUiThread(() -> {
-                if (currentHome(token)) { openingDevice = false; showMessage("Chưa mở được " + device.name + ". Kiểm tra điện thoại cùng Wi-Fi với thiết bị."); }
+                if(!currentHome(token)) return;
+                homeLoading=false;
+                if(error instanceof CloudApi.Unauthorized) { accounts.logout(); showAuth(false); }
+                else for(TextView label:deviceLabels.values()) { label.setText("Chưa cập nhật được trạng thái"); label.setTextColor(Design.MUTED); }
+                showMessage(errorMessage(error));
+            }); }
+        });
+    }
+    private void openDevice(DeviceStore.Device device) {
+        if(screen != Screen.HOME || openingDevice) return;
+        openingDevice=true; final int token=homeEpoch;
+        final CloudApi cloud=accounts.api();
+        showMessage("Đang mở " + device.name + "…"); EspApi session=deviceSession(device,null);
+        presenceIo.execute(() -> {
+            try {
+                JSONObject status=resolveDevice(device,session);
+                runOnUiThread(() -> {
+                    if(!currentHome(token)) return;
+                    openingDevice=false; activeDevice=device; stopHome(); ++controlEpoch; clearDeviceState();
+                    releaseRequestedNetwork(); api.setExpectedDeviceId(device.id); api.setCloud(cloud,device.id);
+                    rememberStatus(status); lastUiMessage=""; showControl(Tab.OVERVIEW);
+                });
+            } catch(Exception error) { runOnUiThread(() -> {
+                if(currentHome(token)) { openingDevice=false; showMessage(errorMessage(error)); }
             }); }
         });
     }
@@ -502,7 +506,7 @@ public final class MainActivity extends Activity {
         pairingHostname = pairingDeviceId.isEmpty() ? "" : pairingDeviceId + ".local";
         newSetupPage(Screen.CONNECT_DEVICE);
         changingWifi = changing; localDeviceReady = false; manualConnection = false;
-        demoMode = false; api.setDemo(false); configLoaded = false;
+        demoMode = false; api.setDemo(false); api.setCloud(null,""); configLoaded = false;
         lastStatus = null; lastDebug = null; imageGeneration = 0;
         uplinkSsid = ""; uplinkIp = ""; uplinkPasswordForPhone = "";
         selectedSsid = ""; selectedAuth = ""; scannedNetworks = null;
@@ -773,7 +777,7 @@ public final class MainActivity extends Activity {
         if (screen == Screen.WIFI_PASSWORD && setupBusy) return; // Bounded status check owns C5 band handoff recovery.
         if (screen == Screen.HOME) { restartHomeChecks(); return; }
         if (screen == Screen.AUTH) return;
-        if (screen == Screen.CONTROL) showMessage("Mất kết nối Wi-Fi. Kết nối lại trong tab Thiết bị.");
+        if (screen == Screen.CONTROL) showMessage("Đang chuyển kết nối Internet…");
         else if (screen == Screen.SWITCH_PHONE) {
             ++setupEpoch; finishSetup(setupEpoch, "Mất kết nối. Bấm Tiếp tục để thử lại.");
         } else {
@@ -790,6 +794,8 @@ public final class MainActivity extends Activity {
                 JSONObject status = session.get("/api/status");
                 String identity = DeviceStore.identity(status);
                 if (identity.isEmpty()) throw new IOException("Thiết bị cần firmware hỗ trợ mã MAC để ghép nối.");
+                if(status.optJSONObject("cloud")==null || status.getJSONObject("cloud").optInt("protocol")!=1)
+                    throw new IOException("Cần nạp firmware MS51 Connect 3.0 lên C5 trước khi ghép tài khoản máy chủ.");
                 runOnUiThread(() -> {
                     if (!currentSetup(token) || screen != Screen.CONNECT_DEVICE) return;
                     pairingDeviceId = identity; pairingHostname = DeviceStore.hostname(status);
@@ -803,36 +809,46 @@ public final class MainActivity extends Activity {
     }
 
     private void verifyPhoneOnLan() {
-        int token = setupEpoch;
-        String expectedSsid = uplinkSsid, knownIp = uplinkIp;
-        EspApi session = api.snapshot(5000);
+        final int token=setupEpoch;
+        final String expectedSsid=uplinkSsid, knownIp=uplinkIp, device=pairingDeviceId, owner=accountId;
+        final CloudApi cloud=accounts.api(); EspApi session=api.snapshot(6000);
         io.execute(() -> {
-            String[] hosts = isPrivateIpv4(knownIp) ? new String[]{knownIp, pairingHostname} : new String[]{pairingHostname};
-            for (String host : hosts) {
-                if (token != setupEpoch || Thread.currentThread().isInterrupted()) return;
+            JSONObject status=null;
+            String[] hosts=isPrivateIpv4(knownIp) ? new String[]{knownIp,pairingHostname} : new String[]{pairingHostname};
+            for(String host:hosts) {
+                if(token!=setupEpoch || Thread.currentThread().isInterrupted()) return;
                 try {
-                    session.setBaseUrl("http://" + host);
-                    JSONObject status = session.get("/api/status"), uplink = getUplink(status);
-                    String ip = uplink.optString("ip", "");
-                    if (!"connected".equals(uplink.optString("state")) || !expectedSsid.equals(uplink.optString("ssid"))
-                            || !isPrivateIpv4(ip)) throw new IOException("Chưa xác nhận được thiết bị trên Wi-Fi đã chọn.");
-                    runOnUiThread(() -> {
-                        if (!currentSetup(token)) return;
-                        api.setBaseUrl("http://" + ip); rememberStatus(status);
-                        DeviceStore.Device existing = findDevice(pairingDeviceId);
-                        String name = existing == null ? "MS51 " + pairingDeviceId.substring(11).toUpperCase(Locale.ROOT) : existing.name;
-                        try {
-                            deviceStore.save(accountId, new DeviceStore.Device(pairingDeviceId, name, ip, pairingHostname, expectedSsid));
-                            if (!legacyPairingId.isEmpty()) deviceStore.remove(accountId, legacyPairingId);
-                            legacyPairingId = "";
-                        } catch (Exception error) { finishSetup(token, errorMessage(error)); return; }
-                        pendingPassword = ""; uplinkPasswordForPhone = "";
-                        if (setupPassword != null) setupPassword.setText("");
-                        showDevices();
-                    }); return;
-                } catch (Exception ignored) { /* Try mDNS when DHCP changed the address. */ }
+                    session.setBaseUrl("http://"+host); JSONObject candidate=session.get("/api/status"), uplink=getUplink(candidate);
+                    if(!"connected".equals(uplink.optString("state")) || !expectedSsid.equals(uplink.optString("ssid")) ||
+                            !isPrivateIpv4(uplink.optString("ip"))) continue;
+                    status=candidate; break;
+                } catch(Exception ignored) { }
             }
-            runOnUiThread(() -> finishSetup(token, "Chưa thấy thiết bị trên " + expectedSsid + ". Kiểm tra điện thoại cùng mạng rồi thử lại."));
+            if(status==null) { runOnUiThread(() -> finishSetup(token,"Chưa thấy thiết bị trên "+expectedSsid+". Kiểm tra điện thoại cùng mạng rồi thử lại.")); return; }
+            try {
+                if(token!=setupEpoch) return;
+                runOnUiThread(() -> { if(currentSetup(token)) showMessage("Đang ghép thiết bị với tài khoản…"); });
+                JSONObject claim=cloud.post("/pair/start",new JSONObject().put("device",device));
+                if(!claim.optBoolean("paired")) {
+                    if(token!=setupEpoch) return;
+                    session.post("/api/cloud/pair",claim.getJSONObject("config"));
+                    boolean paired=false;
+                    for(int attempt=0;attempt<40 && token==setupEpoch;attempt++) {
+                        JSONObject progress=cloud.get("/pair/"+claim.getString("claim_id"));
+                        if(progress.optBoolean("paired")) { paired=true; break; }
+                        if(progress.optBoolean("expired")) break;
+                        Thread.sleep(1500);
+                    }
+                    if(!paired) throw new IOException("Thiết bị đang kết nối máy chủ. Chờ một chút rồi bấm Tiếp tục để kiểm tra lại.");
+                }
+                org.json.JSONArray rows=cloud.get("/devices").getJSONArray("devices");
+                runOnUiThread(() -> {
+                    if(!currentSetup(token) || !owner.equals(accountId)) return;
+                    try { deviceStore.replace(owner,rows); } catch(Exception error) { finishSetup(token,errorMessage(error)); return; }
+                    pendingPassword=""; uplinkPasswordForPhone=""; if(setupPassword!=null) setupPassword.setText("");
+                    releaseRequestedNetwork(); showDevices();
+                });
+            } catch(Exception error) { runOnUiThread(() -> finishSetup(token,errorMessage(error))); }
         });
     }
 
@@ -1618,7 +1634,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 2.2 • Kết nối trong mạng nội bộ");
+        addHelp(about, "Phiên bản 3.0 • Kết nối qua Internet");
         addHelp(about, "NTC 10k chưa được firmware hiện tại hỗ trợ.");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {

@@ -39,6 +39,11 @@ esp_err_t ms51_image_parse_upload(const uint8_t *source, size_t source_size,
                                   const char *filename, ms51_image_t *image);
 void ms51_image_free(ms51_image_t *image);
 
+/* Bounded-memory HTTP reader: returns bytes read, or <=0 on interruption. */
+typedef int (*ms51_image_reader_t)(void *context, uint8_t *buffer, size_t maximum);
+esp_err_t ms51_image_parse_stream(ms51_image_reader_t reader, void *context,
+                                  size_t source_size, const char *filename, ms51_image_t *image);
+
 bool ms51_image_address_is_covered(const ms51_image_t *image, size_t address);
 
 #ifdef __cplusplus

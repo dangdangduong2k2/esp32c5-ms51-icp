@@ -24,6 +24,9 @@ final class EspApi {
     private volatile boolean demo;
     private volatile String expectedDeviceId = "";
     private int readTimeoutMs = 15000;
+    private CloudApi cloud;
+    private String cloudDevice = "";
+    void setCloud(CloudApi session, String device) { cloud=session; cloudDevice=device; }
 
     /** Freeze destination and network before queuing a provisioning operation. */
     EspApi snapshot(int timeoutMs) {
@@ -33,6 +36,7 @@ final class EspApi {
         copy.demo = demo;
         copy.expectedDeviceId = expectedDeviceId;
         copy.readTimeoutMs = timeoutMs;
+        copy.cloud=cloud; copy.cloudDevice=cloudDevice;
         return copy;
     }
 
@@ -78,6 +82,7 @@ final class EspApi {
 
     JSONObject get(String path) throws IOException, JSONException {
         if (demo) return demoResponse(path);
+        if (cloud != null) return remote("GET",path,null);
         HttpURLConnection connection = open(path, "GET");
         JSONObject result = executeJson(connection, null, null);
         if ("/api/status".equals(path) && !expectedDeviceId.isEmpty()
@@ -88,6 +93,7 @@ final class EspApi {
 
     JSONObject post(String path, JSONObject body) throws IOException, JSONException {
         if (demo) throw new IOException("Chế độ xem thử: không gửi lệnh đến thiết bị.");
+        if (cloud != null) return remote("POST",path,body);
         HttpURLConnection connection = open(path, "POST");
         return executeJson(connection, body.toString().getBytes(StandardCharsets.UTF_8),
                 "application/json; charset=utf-8");
@@ -95,9 +101,24 @@ final class EspApi {
 
     JSONObject upload(String fileName, byte[] data) throws IOException, JSONException {
         if (demo) throw new IOException("Chế độ xem thử: không tải tệp lên thiết bị.");
+        if (cloud != null) {
+            try { return cloud.upload(cloudDevice,fileName,data); }
+            catch(IOException e) { throw e; }
+            catch(Exception e) { throw new IOException(e.getMessage(),e); }
+        }
         HttpURLConnection connection = open("/api/upload", "POST");
         connection.setRequestProperty("X-Filename", fileName == null ? "firmware.hex" : fileName);
         return executeJson(connection, data, "application/octet-stream");
+    }
+
+    private JSONObject remote(String method,String path,JSONObject body) throws IOException {
+        try {
+            JSONObject result=cloud.rpc(cloudDevice,method,path,body);
+            if ("/api/status".equals(path) && !cloudDevice.equals(DeviceStore.identity(result)))
+                throw new IOException("Mã thiết bị trả về không khớp.");
+            return result;
+        } catch(IOException e) { throw e; }
+        catch(Exception e) { throw new IOException(e.getMessage(),e); }
     }
 
     private HttpURLConnection open(String path, String method) throws IOException {

@@ -1,29 +1,26 @@
-# MS51 Connect · ESP32 / MS51
+# MS51 Connect · ESP32-C5 / MS51
 
-## Bản thử nghiệm 2.2.0
+## Bản thử nghiệm 3.0.0 · Tài khoản máy chủ & MQTT
 
-[Tải APK Android](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v2.2.0/MS51-Connect-2.2.apk) · [Tất cả tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v2.2.0)
+[Tải MS51 Connect 3.0 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.0.0/MS51-Connect-3.0.apk) · [Tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v3.0.0)
 
-- App Android native, giao diện navy/xanh ngọc; tạo tài khoản và mật khẩu lưu trên điện thoại.
-- Một tài khoản ghép nhiều thiết bị, danh sách hiển thị trạng thái Internet riêng của từng bo.
-- Thêm thiết bị theo từng bước: tìm Wi-Fi thiết bị → quét mạng → chọn mạng → nhập mật khẩu có nút con mắt → xác nhận trên mạng đích.
-- Tên AP lấy MAC chip: `MS51-PROGRAMMER-<MAC 12 ký tự>`, ví dụ `MS51-PROGRAMMER-3844BE1FE4E0`. Tên mDNS và mã thiết bị cũng riêng theo MAC.
-- ESP32-C5 hỗ trợ Wi-Fi 2.4/5 GHz; bản simulator chạy tạm khi chưa có MS51.
+- Tài khoản và danh sách nhiều thiết bị được lưu trên VPS; đăng nhập trên điện thoại khác vẫn thấy cùng danh sách.
+- Điều khiển qua Internet bằng HTTPS → MQTT TLS → ESP32-C5. Sau lần ghép đầu tiên, điện thoại có thể dùng 4G/5G hoặc Wi-Fi khác.
+- Giữ giao diện navy/xanh ngọc và luồng từng bước: tìm Wi-Fi thiết bị → quét → chọn mạng 2.4/5 GHz → nhập mật khẩu có con mắt → ghép tài khoản.
+- AP theo MAC: `MS51-PROGRAMMER-<12 ký tự MAC>`. Mỗi bo có tài khoản MQTT và quyền theo topic riêng.
+- Giữ các tab Tổng quan/Cài đặt/Firmware/Thiết bị, codec 217 byte, đọc chip, upload BIN/HEX, program/verify/reset và xác nhận `CONFIRM` cho thao tác xóa/ghi toàn bộ.
+
+**Nâng cấp:** APK 3.0 cần firmware 3.0. Tài khoản cục bộ 2.2 không tự chuyển thành tài khoản máy chủ: đăng ký một lần và thêm lại thiết bị. Dữ liệu cục bộ cũ được giữ. APK thử nghiệm ký debug, package `vn.duong.ms51connect`; đừng cài nhầm APK `MS51-Control-v1.1.2.apk` cũ ở thư mục gốc.
 
 | Thành phần | Mã nguồn / hướng dẫn |
 |---|---|
 | Android MS51 Connect | [mobile/android](mobile/android/README.md) |
+| Tài khoản, phân quyền, MQTT trên VPS | [server](server/README.md) |
 | Firmware mô phỏng trên ESP32-C5 | [firmware/esp32c5_simulator](firmware/esp32c5_simulator/README.md) |
-| Kết quả kiểm thử app 2.2 | [16 nhóm tình huống trên emulator](docs/ms51-connect-2.2/test-results.json) |
-| Firmware ICP dùng MS51 thật | Project ESP-IDF target ESP32-C5 ở thư mục gốc, hướng dẫn bên dưới |
+| Firmware ICP cho MS51 thật | Project ESP-IDF ở thư mục gốc |
+| Kiểm thử phiên bản 3.0 | [Báo cáo](docs/ms51-connect-3.0/test-results.json) |
 
-**Trạng thái kiểm thử:** APK đã build, lint không có lỗi, chạy qua 16 nhóm kiểm thử trên emulator API 35 với hai ESP mô phỏng qua HTTP. Ngày 08/10/2026 đã nạp simulator 2.2 lên ESP32-C5 rev1.0, xác minh flash và API qua USB; tên AP/MAC đúng, đọc được dữ liệu mô phỏng và quét thấy 7 mạng 2.4 GHz + 8 mạng 5 GHz. Bo hiện chưa kết nối Internet. Ghép bằng APK trên điện thoại thật, nhiều bo vật lý và kết quả Internet online vẫn cần thử thực tế. [Báo cáo trên bo](docs/ms51-connect-2.2/hardware-test-2026-10-08.json). APK 2.2 cần firmware hỗ trợ MAC để ghép mới. Chưa hỗ trợ đọc NTC 10k.
-
-Tài khoản chỉ lưu trên điện thoại, chưa có máy chủ hoặc điều khiển từ xa. Trạng thái không liên lạc được không đồng nghĩa thiết bị mất Internet. APK được ký debug để cài thử.
-
-| Tài khoản | Danh sách thiết bị |
-|---|---|
-| ![Tạo tài khoản](docs/ms51-connect-2.2/02-tao-tai-khoan.png) | ![Danh sách thiết bị](docs/ms51-connect-2.2/04-danh-sach-thiet-bi.png) |
+MS51 trên bo thử nghiệm vẫn được mô phỏng bằng C5; **chưa hỗ trợ NTC 10k**. API Wi-Fi nội bộ vẫn dùng mô hình truy cập cũ; xem phạm vi bảo vệ và cách vận hành trong hướng dẫn server. Bản 2.2 và báo cáo lịch sử vẫn ở [release 2.2](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v2.2.0).
 
 ## Firmware nạp ICP gốc (ESP32-C5)
 

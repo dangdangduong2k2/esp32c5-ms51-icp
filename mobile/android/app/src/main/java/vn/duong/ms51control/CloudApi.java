@@ -1,0 +1,65 @@
+package vn.duong.ms51control;
+
+import org.json.JSONObject;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+
+/** Immutable authenticated session. Android verifies the public TLS certificate. */
+final class CloudApi {
+    static final String BASE = "https://142-91-99-63.sslip.io/ms51/connect/v1";
+    private final String token;
+    CloudApi(String token) { this.token = token; }
+
+    JSONObject get(String path) throws Exception { return request(path, "GET", null, null, null); }
+    JSONObject post(String path, JSONObject body) throws Exception {
+        return request(path,"POST",body.toString().getBytes(StandardCharsets.UTF_8),null,null);
+    }
+    JSONObject rpc(String device, String method, String path, JSONObject body) throws Exception {
+        return post("/devices/" + device + "/request", new JSONObject().put("id",requestId())
+                .put("method",method).put("path",path).put("body",body == null ? new JSONObject() : body));
+    }
+    JSONObject upload(String device, String name, byte[] bytes) throws Exception {
+        String filename = (name == null ? "firmware.hex" : name).replaceAll("[^A-Za-z0-9._ -]","_");
+        return request("/devices/" + device + "/upload","POST",bytes,filename,requestId());
+    }
+    private static String requestId() { return UUID.randomUUID().toString().replace("-",""); }
+    private JSONObject request(String path,String method,byte[] body,String filename,String id) throws Exception {
+        HttpURLConnection http = (HttpURLConnection) new URL(BASE + path).openConnection();
+        http.setConnectTimeout(10000); http.setReadTimeout(45000);
+        http.setInstanceFollowRedirects(false); http.setUseCaches(false); http.setRequestMethod(method);
+        http.setRequestProperty("Accept","application/json");
+        if (!token.isEmpty()) http.setRequestProperty("Authorization","Bearer " + token);
+        try {
+            if (body != null) {
+                http.setDoOutput(true); http.setFixedLengthStreamingMode(body.length);
+                http.setRequestProperty("Content-Type",filename == null ? "application/json; charset=utf-8" : "application/octet-stream");
+                if (filename != null) { http.setRequestProperty("X-Filename",filename); http.setRequestProperty("X-Request-ID",id); }
+                try (OutputStream stream = http.getOutputStream()) { stream.write(body); }
+            }
+            int code = http.getResponseCode();
+            InputStream input = code >= 200 && code < 300 ? http.getInputStream() : http.getErrorStream();
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            if (input != null) try (InputStream stream = input) {
+                byte[] buffer = new byte[4096]; int count;
+                while ((count = stream.read(buffer)) != -1) {
+                    bytes.write(buffer,0,count);
+                    if (bytes.size() > 262144) throw new IOException("Phản hồi máy chủ quá lớn.");
+                }
+            }
+            JSONObject result;
+            try { result = new JSONObject(bytes.toString(StandardCharsets.UTF_8.name())); }
+            catch (Exception invalid) { throw new IOException("Máy chủ chưa trả về dữ liệu hợp lệ (HTTP " + code + ")."); }
+            if (code == 401) throw new Unauthorized(result.optString("message","Vui lòng đăng nhập lại."));
+            if (code < 200 || code >= 300 || !result.optBoolean("ok"))
+                throw new IOException(result.optString("message", code == 422 ? "Kiểm tra thông tin đã nhập." : "Máy chủ báo lỗi (HTTP " + code + ")."));
+            return result;
+        } finally { http.disconnect(); }
+    }
+    static final class Unauthorized extends IOException { Unauthorized(String message) { super(message); } }
+}

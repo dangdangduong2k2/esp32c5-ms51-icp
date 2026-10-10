@@ -1,3 +1,15 @@
+# C5 simulator 3.0 và MQTT
+
+Bản 3.0 dùng chung `main/ms51_cloud.c` với project gốc, nên build từ bản clone đầy đủ repository. MQTT TLS và tài khoản server được mô tả ở [server](../../server/README.md). Firmware vẫn mô phỏng MS51, không truy cập chân ICP/UART target và chưa đọc NTC.
+
+Build ESP-IDF 6.0 từ thư mục này: `idf.py build`. Cần Internet để tải các component đã pin phiên bản. Thư viện MQTT/cJSON được ESP-IDF Component Manager quản lý. Để cập nhật bo đã có bố cục phân vùng hiện tại, chỉ ghi app vào `0x10000`; giữ NVS để giữ cấu hình Wi-Fi. Đặt bo ở BOOT trước khi dùng `--before no-reset`, sau nạp dùng `--after watchdog-reset`.
+
+Ví dụ: `python -m esptool --chip esp32c5 --port COM49 --before no-reset --after watchdog-reset write-flash 0x10000 build/ms51_c5_simulator.bin`.
+
+Sau khởi động, C5 đồng bộ giờ khi có IP rồi mới mở MQTT TLS. Bỏ ghép trên app thu hồi thông tin MQTT; bo tự xóa ghép khi server từ chối xác thực. Không xóa cấu hình chỉ vì mất Internet. Khi truyền tệp từ xa, MQTT được nối lại sau download để giảm RAM; file được đọc từng đoạn và giữ kiểm tra BIN/HEX/A-B như trước.
+
+## Hướng dẫn mô phỏng ban đầu
+
 # ESP32-C5 MS51 simulator
 
 Temporary test firmware for the MS51 Connect Android APK. Based on

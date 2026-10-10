@@ -37,6 +37,18 @@ final class DeviceStore {
     synchronized void remove(String user,String id) {
         List<Device> devices=list(user);devices.removeIf(d->d.id.equals(id));write(user,devices);
     }
+    synchronized boolean replace(String user,JSONArray array) throws Exception {
+        List<Device> devices=new ArrayList<>();
+        JSONArray canonical=new JSONArray();
+        for(int i=0;i<array.length();i++) {
+            JSONObject o=array.getJSONObject(i);
+            Device d=new Device(o.getString("id"),o.getString("name"),o.optString("ip"),o.optString("hostname"),o.optString("ssid"));
+            devices.add(d); canonical.put(d.json());
+        }
+        boolean changed=!canonical.toString().equals(prefs.getString(user,"[]"));
+        if(changed) write(user,devices);
+        return changed;
+    }
     private void write(String user,List<Device> devices) {
         try {
             JSONArray array=new JSONArray();for(Device device:devices)array.put(device.json());

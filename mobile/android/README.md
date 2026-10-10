@@ -1,53 +1,36 @@
-# MS51 Connect 2.2
+# MS51 Connect 3.0
 
-Ứng dụng Android native Java, giao diện navy và xanh ngọc. Nguồn gốc: dangdangduong2k2/esp32c5-ms51-icp (MIT).
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 8, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
 
-## Tài khoản và thiết bị
+## Sử dụng
 
-- Tạo tài khoản/đăng nhập trên điện thoại; không có máy chủ, đồng bộ hoặc khôi phục mật khẩu qua email. Giữ phiên đăng nhập đến khi Đăng xuất ở biểu tượng tài khoản góc phải.
-- Tên đăng nhập 3–32 ký tự không dấu; mật khẩu 8–128 ký tự, lưu bằng PBKDF2 với salt riêng. Không lưu mật khẩu tài khoản dạng rõ. Mật khẩu Wi-Fi chỉ dùng trong quá trình ghép nối, không lưu vào danh sách thiết bị.
-- Mỗi tài khoản có danh sách riêng, nhiều thiết bị được phép dùng cùng một Wi-Fi. Khóa nhận diện là MAC gốc của ESP, không phải IP hoặc SSID router. Ghép lại cùng MAC cập nhật bản ghi, không nhân đôi.
-- Trang đầu hiển thị danh sách. Chạm thẻ mở điều khiển; giữ thẻ để đổi tên/bỏ ghép nối. Bỏ ghép chỉ xóa bản ghi thuộc tài khoản đang dùng.
-- Dữ liệu chỉ nằm trên điện thoại, tắt sao lưu/di chuyển dữ liệu của Android. Xóa dữ liệu hoặc gỡ app sẽ mất tài khoản và danh sách. Tài khoản là lớp quản lý của app; chưa có xác thực tài khoản trên API ESP.
-- Khi nâng cấp từ 2.1, thiết bị cũ được chuyển vào tài khoản đầu tiên và yêu cầu ghép lại để lấy MAC; không tin IP cũ có thể đã cấp cho bo khác.
+1. Cài APK 3.0, đăng ký tài khoản hoặc đăng nhập. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
+2. Trang đầu hiển thị các thiết bị đã ghép, với trạng thái MQTT hiện tại. Tài khoản dùng được trên nhiều điện thoại.
+3. Bấm **Thêm thiết bị** → **Tìm Wi-Fi thiết bị** → chọn AP `MS51-PROGRAMMER-<MAC>` → **Quét Wi-Fi** → chọn mạng → nhập mật khẩu. Có nút con mắt và hỗ trợ 5 GHz trên C5.
+4. Bấm **Tiếp tục** để điện thoại vào mạng đích. App kiểm tra MAC/SSID rồi yêu cầu bo chứng minh kết nối MQTT trước khi ghi vào tài khoản.
+5. Sau khi ghép, dùng Wi-Fi bất kỳ hoặc 4G/5G để mở bo. Giữ thẻ để đổi tên hoặc bỏ ghép; thay đổi áp dụng cho mọi điện thoại cùng tài khoản.
 
-## Luồng Thêm thiết bị
+APK nhận biết firmware thiếu protocol 1 ngay ở bước kết nối bo, thay vì tiếp tục đến một API không có rồi báo HTTP 405. Luồng Wi-Fi giữ một hành động chính mỗi trang, khóa thao tác đang xử lý và bỏ phản hồi từ phiên cũ.
 
-1. **Tìm Wi-Fi thiết bị**: Android cho chọn AP có dạng `MS51-PROGRAMMER-<12 ký tự MAC>`, ví dụ `MS51-PROGRAMMER-3844BE1FE4E0`. Mật khẩu AP vẫn `12345678`. App đọc được API và mã MAC trước khi đi tiếp.
-2. **Quét Wi-Fi**: chỉ quét khi bấm nút; hiển thị 2.4 GHz/5 GHz. Chạm mạng muốn dùng.
-3. Màn nhập mật khẩu riêng, có biểu tượng con mắt; sau đó **Kết nối**. Mạng mở không cần mật khẩu.
-4. **Tiếp tục** để điện thoại vào cùng mạng. Chỉ lưu thiết bị sau khi xác nhận đúng MAC, SSID và IP trên mạng đích. Trở về danh sách khi hoàn tất.
+Trang chủ lấy danh sách từ HTTPS, không dò IP LAN. “Đã kết nối Internet” nghĩa là server nhận heartbeat MQTT mới; mất kết nối server trên điện thoại được hiển thị là chưa cập nhật được trạng thái. Đổi Wi-Fi của bo vẫn cần kết nối trực tiếp khi ở gần bo.
 
-Từng bước khóa thao tác trong lúc xử lý, bỏ qua phản hồi cũ khi đổi luồng. WifiNetworkSpecifier không ép băng tần và không yêu cầu Internet. Android cũ/từ chối quyền dùng cài đặt Wi-Fi từ chính nút hiện tại.
+Giữ bốn tab Tổng quan/Cài đặt/Firmware/Thiết bị, codec 217 byte, đọc chip, upload/program/verify/reset, `CONFIRM` khi xóa hoặc ghi toàn bộ. Đích đến và phiên tài khoản được chốt trước khi xếp hàng. MQTT có mã lệnh/thời hạn, server giới hạn một yêu cầu đang xử lý mỗi bo. Nếu mất phản hồi sau một lệnh, hãy đọc trạng thái trước khi gửi lại.
 
-## Trạng thái Internet
+## Build
 
-Firmware cung cấp `/api/status` với `device.id`, `device.hostname` và `internet.state/checked_age_ms`. Mỗi 20 giây khi có IP STA, ESP thử HTTP GET tới `http://connectivitycheck.gstatic.com/generate_204`, timeout 6 giây, không theo redirect. Không gửi tên tài khoản, SSID, mật khẩu hoặc MAC trong yêu cầu. Đây là kiểm tra khả năng truy cập điểm kiểm tra, không phải chứng thực bảo mật đường truyền.
-
-- **Có Internet**: ESP nhận HTTP 204 gần đây (không quá 90 giây).
-- **Chưa có Internet**: ESP báo STA chưa kết nối/có IP.
-- **Đang kiểm tra Internet / Chưa xác nhận Internet**: chưa có kết quả, kết quả quá cũ, hoặc điểm kiểm tra không trả 204. Chặn tên miền này có thể khiến trạng thái chưa xác nhận dù Internet vẫn hoạt động.
-- **Không liên lạc được**: điện thoại chưa đọc được ESP. Không suy ra ESP mất Internet chỉ từ lỗi điện thoại.
-
-App làm mới danh sách trong lúc mở trang, qua IP đã lưu rồi tên mDNS riêng `ms51-<mac>.local`. Cần cùng mạng nội bộ; chưa theo dõi từ xa qua 4G/máy chủ.
-
-## Điều khiển và tránh nhầm bo
-
-Giữ bốn tab Tổng quan/Cài đặt/Firmware/Thiết bị, codec 217 byte, upload/program/verify/reset và CONFIRM cho xóa/ghi toàn bộ. Mỗi yêu cầu chốt URL, Network và mã bo trước khi xếp hàng. Firmware từ chối `X-MS51-Device` không khớp bằng HTTP 409; app cũng đối chiếu ID trong status. Đổi thiết bị/đăng xuất bỏ dữ liệu và callback cũ. Không gọi đây là xác thực bằng mật khẩu hoặc thay thế toàn bộ cơ chế phân quyền thiết bị.
-
-MS51 trên bản firmware thử nghiệm vẫn là mô phỏng trên C5. Chưa đọc NTC 10k, chưa điều khiển MS51 thật. Luồng này chưa bao gồm xử lý mọi xung đột điều khiển từ các client khác nhau.
-
-## Build/kiểm thử
-
-JDK 17, Android SDK 35, Gradle wrapper; minSdk 24; applicationId `vn.duong.ms51connect`; versionCode 7, versionName 2.2.0. APK ký debug, cùng khóa các bản thử nghiệm trước.
+JDK 17, Android SDK 35, Gradle wrapper:
 
     gradlew.bat assembleDebug assembleDebugAndroidTest lintDebug
 
-Instrumentation dùng Activity/HTTP client thật trên emulator API 35, mô phỏng callback radio và hai ESP HTTP; chưa phải thử hai bo vật lý. Chạy fixture từ thư mục source Android:
+APK ký debug bằng khóa thử nghiệm hiện có. Không đặt token, mật khẩu VPS hoặc tài khoản MQTT chung trong app. Địa chỉ HTTPS được cấu hình tại `CloudApi.BASE` và khớp firmware/server.
 
-    python tests/accounts_mock.py
-    adb shell am instrument -w vn.duong.ms51connect.test/vn.duong.ms51control.AccountsDevicesTestRunner
+## Kiểm thử
 
-Fixture nghe localhost:80; emulator truy cập 10.0.2.2. Bản source có dữ liệu config trong tests/config.hex. Báo cáo kết quả và ảnh thực tế từ emulator nằm ở gói accounts-2.2.
+`CloudIntegrationTestRunner` là bài kiểm thử **live được gọi rõ ràng**: tạo tài khoản tạm trên VPS, ghép C5 thật, đọc/ghi cấu hình, kiểm tra truyền tệp và program/verify trên MS51 mô phỏng. Chỉ chạy trên emulator/bo thử nghiệm; nó thay tệp firmware đang lưu trên C5 bằng fixture kiểm thử và bỏ ghép khi xong.
 
-Cập nhật 08/10/2026: đã nạp firmware simulator 2.2 lên C5 và kiểm tra API trên bo qua USB; quét thấy cả mạng 2.4 và 5 GHz. APK cần firmware 2.2 để ghép theo MAC. Chưa xác nhận ghép bằng điện thoại thật, nhiều bo vật lý hoặc kết quả HTTP 204 online. Xem docs/ms51-connect-2.2/hardware-test-2026-10-08.json ở thư mục gốc repo.
+    python tools/cloud_hardware_gateway.py
+    adb -s emulator-5556 shell am instrument -w -e live true vn.duong.ms51connect.test/vn.duong.ms51control.CloudIntegrationTestRunner
+
+Lệnh Python chạy từ gốc repository, cần pyserial và C5 ở COM49 (sửa cổng khi cần). Adapter localhost:80 chỉ chuyển bước xác nhận LAN/ghép nối qua USB vì emulator không tham gia được AP vật lý; điều khiển từ xa đi qua HTTPS công khai và MQTT thật. Không xem bài này là kiểm thử radio provisioning trên điện thoại thật. Runner không chạy thao tác live nếu thiếu `-e live true`. Các fixture/runner AccountsDevices cũ là kiểm thử lịch sử của 2.2.
+
+Vẫn cần thử quyền/chọn Wi-Fi của Android trên điện thoại thật và nhiều bo vật lý. NTC 10k chưa được hỗ trợ; dữ liệu MS51 trên C5 là mô phỏng.
