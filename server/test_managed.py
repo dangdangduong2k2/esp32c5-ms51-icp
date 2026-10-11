@@ -43,6 +43,35 @@ class ManagedTests(AdminTests):
             self.assertEqual(self.client.post(ADMIN+'/access', json={'visible':fields,'revision':rev}, headers=self.headers).status_code, 400)
         self.assertEqual(self.client.post(ADMIN+'/access', json={'visible':[],'revision':0}, headers=self.headers).status_code, 409)
 
+    def test_history_uint32_offsets_and_hidden_settings(self):
+        self.set_policy([])
+        raw = bytearray(217); raw[0] = 2
+        raw[0x32] = 0  # sig_index wraps: must not truncate the 30 saved slots
+        values = [0, 1, 599, 600, 601, 0xffffffff] + list(range(24))
+        for i, value in enumerate(values):
+            raw[0x33+i*4:0x37+i*4] = value.to_bytes(4, 'big')
+        with patch.object(core.bridge, 'call', return_value={'ok':True,'data':raw.hex()}) as call:
+            r = self.client.get(MOBILE+'/history', headers=self.mobile_headers)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json(), {'ok':True,'capacity':30,'tick_ms':100,'ticks':values})
+        self.assertEqual(call.call_args.args[3:6], ('GET','/api/runtime-config',{}))
+
+    def test_history_malformed_and_wrong_owner(self):
+        other = self.mobile('bob')
+        with patch.object(core.bridge, 'call') as call:
+            self.assertEqual(self.client.get(MOBILE+'/history').status_code, 401)
+            self.assertEqual(self.client.get(MOBILE+'/history', headers=other).status_code, 404)
+            call.assert_not_called()
+        for data in ('', None, '00'*217, '02'+'00'*215, '02'+'gg'*216, '02'+' 0'*216):
+            with patch.object(core.bridge, 'call', return_value={'ok':True,'data':data}):
+                self.assertEqual(self.client.get(MOBILE+'/history', headers=self.mobile_headers).status_code, 502)
+
+    def test_history_does_not_bypass_update_lock(self):
+        core.managed_locks[DEVICE] = 'active-update'
+        with patch.object(core.bridge.client, 'publish') as publish:
+            self.assertEqual(self.client.get(MOBILE+'/history', headers=self.mobile_headers).status_code, 409)
+            publish.assert_not_called()
+
     def test_hidden_settings_and_legacy_bypasses_denied(self):
         revision = self.set_policy(['coolCl'])
         with patch.object(core.bridge, 'call') as call:

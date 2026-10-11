@@ -190,6 +190,24 @@ def install(app, core, admin_identity, audit):
             db.commit()
         return {'ok': True}
 
+    @app.get('/devices/{device}/history')
+    def history(device: str, request: Request):
+        user = core.owner(request)
+        core.limited(request, 'history', 30)
+        row = core.device_for(user['id'], device)
+        # Read the existing UART G response; never write EEPROM or reset the MCU.
+        # History remains readable even when every setting is hidden. Return only
+        # sig_count, never the configuration bytes (which include PINs).
+        fresh = call(row, user['id'], None, 'GET', '/api/runtime-config')
+        encoded = fresh.get('data')
+        if not isinstance(encoded, str) or not re.fullmatch(r'[0-9a-fA-F]{434}', encoded):
+            core.fail(502, 'Nhật ký MS51 trả về không hợp lệ.')
+        raw = bytes.fromhex(encoded)
+        if raw[0] != 2:
+            core.fail(502, 'Phiên bản nhật ký MS51 chưa được hỗ trợ.')
+        return {'ok': True, 'capacity': 30, 'tick_ms': 100,
+                'ticks': [int.from_bytes(raw[i:i+4], 'big') for i in range(0x33, 0xAB, 4)]}
+
     @app.get('/devices/{device}/access')
     def access(device: str, request: Request):
         user = core.owner(request)

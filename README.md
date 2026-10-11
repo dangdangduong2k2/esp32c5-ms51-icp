@@ -1,6 +1,14 @@
 # MS51 Connect · ESP32-C5 / MS51
 
-## Bản thử nghiệm 3.0.2 · Tài khoản máy chủ & MQTT
+## Bản thử nghiệm 3.1.1 · Nhật ký thời lượng MS51
+
+[Tải MS51 Connect 3.1.1 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.1/MS51-Connect-3.1.1.apk) · [Kiểm thử](docs/ms51-connect-3.1.1/test-results.json)
+
+Nhật ký trong Tổng quan hiển thị thời lượng MS51 đã lưu ở L00–L29, thay các dòng trạng thái UART. Nguồn hiện tại có **30 vị trí**, mỗi đơn vị là 100 ms; app hiển thị phút/giây, giữ số L để đối chiếu với mạch và ẩn vị trí bằng 0. Đây là thời lượng, không phải ngày giờ xảy ra. Làm mới mỗi 15 giây khi mở Tổng quan; dữ liệu cũ được đánh dấu nếu mất kết nối. Cài đè 3.1.0, không cần ghép lại hay nạp firmware C5/MS51 đang dùng trên bo thật. Máy chủ phải có endpoint lịch sử mới. [Chi tiết giao thức](docs/ms51-connect-3.1.1/history.md).
+
+Giữ tính năng 3.1.0: admin cấp quyền từng mục cài đặt và cấp tệp HEX riêng cho thiết bị; app chỉ hiện nút **Cập nhật** khi có bản được cấp. Mã nguồn đầy đủ ở `mobile/android`, `server`, `main` và `MS51_code`.
+
+## Lịch sử bản thử nghiệm 3.0.2 · Tài khoản máy chủ & MQTT
 
 [Tải MS51 Connect 3.0.2 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.0.2/MS51-Connect-3.0.2.apk) · [Tệp phát hành](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v3.0.2)
 

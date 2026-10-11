@@ -1,0 +1,37 @@
+{
+  "version": "3.1.1",
+  "version_code": 13,
+  "apk_sha256": "de2a18f766722c4fbff8a05120b904a9d40854487da2f8718441104bf4c6c1d8",
+  "backend_tests": {
+    "passed": 26,
+    "environments": [
+      "local isolated fixtures",
+      "VPS isolated fixtures"
+    ]
+  },
+  "android_tests": {
+    "ok": true,
+    "platform": "Android 35 emulator",
+    "checks": [
+      "managed permissions and firmware regression",
+      "30 history slots and uint32 decoding",
+      "L29 preserved after index wrap",
+      "sub-minute duration precision",
+      "raw status logs excluded",
+      "empty and stale history",
+      "device-switch cache reset",
+      "same signing key, upgrade installation"
+    ]
+  },
+  "live_history": {
+    "transport": "verified HTTPS to VPS, MQTT to C5, UART to MS51",
+    "slots": 30,
+    "nonzero": 0
+  },
+  "firmware_changed": false,
+  "accounts_and_ownership_unchanged": true,
+  "limitations": [
+    "Physical board history was empty at verification; nonempty durations tested using fixtures.",
+    "Values are durations, not wall-clock event timestamps."
+  ]
+}

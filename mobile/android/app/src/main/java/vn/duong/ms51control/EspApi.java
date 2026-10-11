@@ -80,6 +80,13 @@ final class EspApi {
         network = value;
     }
 
+    long[] history() throws Exception {
+        JSONObject response = cloud != null && !demo
+                ? cloud.get("/devices/" + cloudDevice + "/history")
+                : DeviceHistory.fromConfig(get("/api/runtime-config").getString("data"));
+        return DeviceHistory.decode(response);
+    }
+
     JSONObject get(String path) throws IOException, JSONException {
         if (demo) return demoResponse(path);
         if (cloud != null) return remote("GET",path,null);

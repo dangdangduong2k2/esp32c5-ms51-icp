@@ -49,10 +49,36 @@ final class ManagedChecks {
                     set(a,"managedUpdateStarting",true);
                     invoke(a,"clearDeviceState",new Class[]{});
                     check(!(boolean)get(a,"managedUpdateStarting"),"Device switch clears pending UI flag");
+                    byte[] raw=RuntimeConfigCodec.defaults().raw;
+                    long[] durations={1,599,600,601,0xffffffffL};
+                    for(int i=0;i<durations.length;i++)for(int b=0;b<4;b++)raw[0x33+i*4+b]=(byte)(durations[i] >>> (24-b*8));
+                    // Last slot must survive sig_index wrap and intervening empty slots.
+                    raw[0x32]=0; raw[0xAA]=10;
+                    JSONObject response=DeviceHistory.fromConfig(RuntimeConfigCodec.toHex(raw));
+                    long[] decoded=DeviceHistory.decode(response);
+                    check(decoded.length==30 && decoded[4]==0xffffffffL && decoded[29]==10,"History offsets, uint32 and last slot");
+                    check(DeviceHistory.format(599).equals("0 phút 59,9 giây"),"Sub-minute precision");
+                    check(DeviceHistory.format(600).equals("1 phút"),"Minute conversion");
+                    check(DeviceHistory.text(decoded).contains("L29    0 phút 1 giây"),"Original history index retained");
+                    check(!DeviceHistory.text(decoded).contains("L05"),"Unused slots hidden");
+                    try { DeviceHistory.decode(new JSONObject().put("ok",true).put("capacity",30).put("tick_ms",100).put("ticks",new JSONArray())); throw new AssertionError("Partial snapshot accepted"); }
+                    catch(org.json.JSONException|IllegalArgumentException expected) { }
+                    LinearLayout overview=new LinearLayout(a);
+                    set(a,"lastHistory",decoded);
+                    invoke(a,"buildOverview",new Class[]{LinearLayout.class},overview);
+                    String historyText=((TextView)get(a,"dashboardLogs")).getText().toString();
+                    check(historyText.contains("L00") && historyText.contains("L29"),"History appears without debug status");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},null,new JSONObject().put("enabled",true).put("logs",new JSONArray().put(new JSONObject().put("text","STATUS_SHOULD_NOT_APPEAR"))));
+                    check(((TextView)get(a,"dashboardLogs")).getText().toString().equals(historyText),"Status logs never replace saved history");
+                    set(a,"historyError","Mất kết nối");invoke(a,"renderHistory",new Class[]{});
+                    check(((TextView)get(a,"dashboardLogs")).getText().toString().contains("Dữ liệu lần đọc trước"),"Stale history labelled");
+                    invoke(a,"clearDeviceState",new Class[]{});
+                    check(get(a,"lastHistory")==null && ((long)get(a,"nextHistoryRead"))==0,"Device switch clears history");
+                    check(DeviceHistory.text(new long[30]).contains("Chưa có"),"Empty history explicit");
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: field-level visibility, independent range limits, hidden PIN controls, firmware available/empty/running/unknown/success states and device-switch guard.");
+            result.putString("stream","PASS: managed settings/firmware regression; history uint32 decoding, all 30 slots, duration precision, empty/stale/device-switch states, no status logs.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}

@@ -108,6 +108,9 @@ public final class MainActivity extends Activity {
     private TextView dashboardMode;
     private TextView dashboardVariables;
     private TextView dashboardLogs;
+    private long[] lastHistory;
+    private long nextHistoryRead;
+    private String historyError = "";
     private TextView[] relayViews = new TextView[3];
     private SevenSegmentView greenDisplay;
     private SevenSegmentView redDisplay;
@@ -292,6 +295,7 @@ public final class MainActivity extends Activity {
         deviceAccess = new JSONObject(); managedUpdateStarting = false; ++accessViewEpoch;
         configLoaded = false; runtimeConfig = RuntimeConfigCodec.defaults();
         lastStatus = null; lastDebug = null; imageGeneration = 0;
+        lastHistory = null; nextHistoryRead = 0; historyError = "";
         selectedFirmwareUri = null; selectedFirmwareName = "";
         configInputs.clear(); configChoices.clear(); configChecks.clear(); pinDependentViews.clear();
         firmwareInfo = null; firmwareFileInfo = null; deviceInfo = null;
@@ -1069,7 +1073,7 @@ public final class MainActivity extends Activity {
         content.addView(hero, fullParams(0, 0, 0, 18));
 
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-        addQuickAction(actions, "Làm mới", "refresh", this::refreshDashboard);
+        addQuickAction(actions, "Làm mới", "refresh", () -> { nextHistoryRead = 0; refreshDashboard(); });
         addQuickAction(actions, "Cài đặt", "settings", () -> showControl(Tab.SETTINGS));
         addQuickAction(actions, "Nạp tệp", "upload", () -> showControl(Tab.FIRMWARE));
         addQuickAction(actions, "Kết nối", "wifi", () -> showControl(Tab.DEVICE));
@@ -1101,10 +1105,13 @@ public final class MainActivity extends Activity {
         variables.addView(dashboardVariables,fullParams(0,8,0,0));
         content.addView(variables,fullParams(0,0,0,16));
         LinearLayout logs = card(); addSectionTitle(logs,"Nhật ký thiết bị");
+        addHelp(logs, "Thời lượng đã lưu trên MS51 · 30 vị trí L00–L29\nL00 là lần lưu gần nhất. Vị trí trống được ẩn.");
         dashboardLogs=monospaceText("Đang chờ dữ liệu…");
+        dashboardLogs.setLineSpacing(dp(10), 1f);
         logs.addView(dashboardLogs,fullParams(0,8,0,0));
         content.addView(logs);
         renderDashboard(lastStatus,lastDebug);
+        renderHistory();
     }
 
     private LinearLayout timerCard(String label, String channel, int color) {
@@ -1124,25 +1131,41 @@ public final class MainActivity extends Activity {
         final int epoch = dashboardEpoch;
         final int controlToken = controlEpoch;
         final EspApi session = api.snapshot(15000);
+        final boolean readHistory = android.os.SystemClock.elapsedRealtime() >= nextHistoryRead;
         io.execute(() -> {
             if (!currentControl(controlToken) || epoch!=dashboardEpoch || !foreground) return;
             JSONObject status = null;
             JSONObject debug = null;
             Exception failure = null;
+            long[] history = null;
+            Exception historyFailure = null;
             try {
                 status = session.get("/api/status");
                 if(epoch!=dashboardEpoch || !foreground)return;
                 debug = session.get("/api/debug");
+                if (readHistory && currentControl(controlToken) && epoch == dashboardEpoch && foreground) {
+                    try { history = session.history(); }
+                    catch (Exception error) { historyFailure = error; }
+                }
             } catch (Exception error) {
                 failure = error;
             }
             JSONObject finalStatus = status;
             JSONObject finalDebug = debug;
             Exception finalFailure = failure;
+            long[] finalHistory = history;
+            Exception finalHistoryFailure = historyFailure;
             onControl(controlToken, () -> {
                 if (epoch != dashboardEpoch || !foreground) return;
                 dashboardBusy = false;
                 if (screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
+                if (readHistory) {
+                    nextHistoryRead = android.os.SystemClock.elapsedRealtime() + 15000;
+                    if (finalHistory != null) { lastHistory = finalHistory; historyError = ""; }
+                    else historyError = finalHistoryFailure == null ? "Mất kết nối thiết bị." : errorMessage(finalHistoryFailure);
+                }
+                if (finalFailure != null) historyError = "Mất kết nối thiết bị.";
+                renderHistory();
                 if (finalFailure == null) {
                     rememberStatus(finalStatus);
                     lastDebug = finalDebug;
@@ -1170,7 +1193,6 @@ public final class MainActivity extends Activity {
             greenDisplay.setValue(null); redDisplay.setValue(null);
             for (int index = 0; index < relayViews.length; index++) setRelay(relayViews[index], index + 1, null);
             dashboardVariables.setText("Chưa có biến nào từ MS51.");
-            dashboardLogs.setText("Đang chờ dữ liệu UART…");
             return;
         }
         JSONArray variables = debug.optJSONArray("variables");
@@ -1188,7 +1210,6 @@ public final class MainActivity extends Activity {
                 list.append(name).append("   ").append(value);
             }
         }
-        String age = debug.isNull("last_rx_age_ms") ? "" : " · " + debug.optLong("last_rx_age_ms", 0) + " ms";
         String mode = values.get("mode");
         dashboardMode.setText(friendlyMode(mode));
         greenDisplay.setValue(values.get("green_min"));
@@ -1198,19 +1219,14 @@ public final class MainActivity extends Activity {
         setRelay(relayViews[2], 3, values.get("relay3"));
         dashboardVariables.setText(list.length() == 0 ? "Chưa có biến nào từ MS51." : list.toString());
 
-        JSONArray logs = debug.optJSONArray("logs");
-        StringBuilder logText = new StringBuilder();
-        if (logs != null) {
-            for (int index = 0; index < logs.length(); index++) {
-                JSONObject log = logs.optJSONObject(index);
-                if (log == null) continue;
-                String text = log.optString("text", "");
-                if (text.isEmpty()) continue;
-                if (logText.length() > 0) logText.append('\n');
-                logText.append(text);
-            }
-        }
-        dashboardLogs.setText(logText.length() == 0 ? "Đang nhận dữ liệu" + age : logText.toString());
+    }
+
+    private void renderHistory() {
+        if (dashboardLogs == null) return;
+        String text = DeviceHistory.text(lastHistory);
+        if (!historyError.isEmpty()) text = (lastHistory == null ? "Chưa đọc được nhật ký." : "Dữ liệu lần đọc trước:\n" + text)
+                + "\n\nChưa làm mới: " + historyError;
+        dashboardLogs.setText(text);
     }
 
     private void setRelay(TextView relay, int number, String rawValue) {
