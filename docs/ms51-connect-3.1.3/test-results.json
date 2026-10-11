@@ -1,0 +1,50 @@
+{
+  "version": "3.1.3",
+  "version_code": 15,
+  "apk_sha256": "b5b7d40724e79cc72a13ec999ddf4d3d29962156ab9833b431a21536724788e1",
+  "android_tests": {
+    "ok": true,
+    "platform": "Android 35 emulator",
+    "checks": [
+      "managed settings and update regression",
+      "saved history regression",
+      "temperature normal, negative, zero and upper limit",
+      "open, short and out-of-range hide numeric value",
+      "stale, null and old-firmware states",
+      "temperature independent of MS51 debug data",
+      "same signing certificate as released 3.x",
+      "actual Android overview screenshot inspected"
+    ],
+    "lint_errors": 0
+  },
+  "firmware": {
+    "idf": "6.0",
+    "target": "esp32c5",
+    "pins": {
+      "DAT": 2,
+      "CLK": 3,
+      "RS": 4,
+      "NTC": 1
+    },
+    "build": true,
+    "image_checksum_valid": true,
+    "image_hash_valid": true,
+    "app_bytes": 1460160,
+    "factory_partition_bytes": 1572864,
+    "hardware_tested": false
+  },
+  "circuit": {
+    "supply_mv": 3300,
+    "pullup_ohms": 10000,
+    "ntc_ohms_at_25_c": 10000,
+    "beta_kelvin": 3950,
+    "ntc_to": "GND"
+  },
+  "preview": "overview-preview.png (illustrative data, not measured on hardware)",
+  "server_changed": false,
+  "ms51_changed": false,
+  "limitations": [
+    "No physical ADC accuracy, sensor disconnect or radio/MQTT test on new pin variant in this task",
+    "Temperature assumes actual divider supply is 3.3 V; resistor, NTC and ADC tolerances affect accuracy"
+  ]
+}

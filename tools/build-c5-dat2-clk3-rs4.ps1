@@ -23,6 +23,7 @@ $seed = Get-Content -LiteralPath "$repo\sdkconfig.defaults" -Raw
 $seed = $seed.Replace('CONFIG_MS51_RST_GPIO=3', 'CONFIG_MS51_RST_GPIO=4')
 $seed = $seed.Replace('CONFIG_MS51_CLK_GPIO=0', 'CONFIG_MS51_CLK_GPIO=3')
 $seed = $seed.Replace('CONFIG_MS51_DAT_GPIO=1', 'CONFIG_MS51_DAT_GPIO=2')
+$seed += "`nCONFIG_MS51_ANALOG_IO1=y`n"
 $seed = $seed.Replace('CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y', 'CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y')
 $seed = $seed.Replace('# Connected ESP32-C5 board has 16 MiB external flash.', '# Variant supports ESP32-C5 with at least 4 MiB flash.')
 foreach ($required in @('CONFIG_MS51_RST_GPIO=4', 'CONFIG_MS51_CLK_GPIO=3', 'CONFIG_MS51_DAT_GPIO=2', 'CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y')) {

@@ -18,6 +18,7 @@
 
 #include "ms51_firmware.h"
 #include "ms51_debug_uart.h"
+#include "ms51_analog.h"
 #include "ms51_operation.h"
 #include "ms51_programmer.h"
 #include "ms51_storage.h"
@@ -519,6 +520,8 @@ void app_main(void)
                  esp_err_to_name(debug_error));
     }
 
+    const esp_err_t analog_error = ms51_analog_init();
+    if (analog_error != ESP_OK) ESP_LOGW(TAG, "Analog input unavailable: %s", esp_err_to_name(analog_error));
     const esp_err_t web_error = ms51_web_start();
     if (web_error != ESP_OK) {
         ESP_LOGE(TAG, "Wi-Fi/web disabled: %s; USB console remains available",

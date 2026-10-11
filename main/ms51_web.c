@@ -1,6 +1,7 @@
 #include "ms51_web.h"
 #include "ms51_presence.h"
 #include "ms51_cloud.h"
+#include "ms51_analog.h"
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -698,6 +699,13 @@ static esp_err_t status_handler(httpd_req_t *request)
                  uplink.nat_enabled ? "true" : "false", MDNS_HOSTNAME_FQDN,
                  s_mdns_started ? "true" : "false");
     }
+    char analog[192];
+    ms51_analog_json(analog, sizeof(analog));
+    size_t analog_used = strlen(payload);
+    int added = snprintf(payload + analog_used - 1, sizeof(payload) - analog_used + 1,
+                         ",\"analog\":%s}", analog);
+    if (added < 0 || (size_t)added >= sizeof(payload) - analog_used + 1)
+        return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR, "Status too large");
     char presence[384];
     ms51_presence_json(presence,sizeof(presence));
     size_t used=strlen(payload);

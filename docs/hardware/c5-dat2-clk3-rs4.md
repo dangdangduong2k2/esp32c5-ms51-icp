@@ -7,11 +7,16 @@ Additional pin variant; the default DAT 1 / CLK 0 / RS 3 build is unchanged.
 | DAT / ICE_DAT | GPIO2 |
 | CLK / ICE_CLK | GPIO3 |
 | RS / nRESET | GPIO4 |
+| NTC divider midpoint | GPIO1 |
 | Ground | GND |
 
 ICP and runtime data both use this mapping. This is the native ESP32-C5
 programmer with the existing Internet connection and application support,
 not the simulated MS51 controller. Automatic programming at boot is disabled.
+
+## IO1 temperature (3.1.3)
+
+Connect 3.3 V → fixed 10 kΩ → IO1 → NTC 10 kΩ B3950 → GND. The variant build now enables calibrated ADC1 channel 0 and sends temperature through the existing status/MQTT path. Install Android 3.1.3 to display it. Do not apply this wiring to the default DAT1 variant. See [conversion, error states and preview](../ms51-connect-3.1.3/README.md).
 
 ## Flash with the Espressif website
 
@@ -20,13 +25,13 @@ connected to the board. Click Connect and select the board's USB port. If it
 does not enter download mode automatically, hold BOOT, press/release RESET,
 then release BOOT and reconnect.
 
-Add these three files at these exact addresses:
+Download `ESP32-C5-DAT2-CLK3-RS4-NTC-IO1.zip` from [release 3.1.3](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v3.1.3). Add these three files at these exact addresses:
 
 | Flash address | File |
 |---|---|
 | `0x2000` | `bootloader.bin` |
 | `0x8000` | `partition-table.bin` |
-| `0x10000` | `esp32c5-dat2-clk3-rs4.bin` |
+| `0x10000` | `esp32c5-dat2-clk3-rs4-ntc-io1.bin` |
 
 Use DIO, 80 MHz, 4 MB. ESP-IDF 6.0 images target ESP32-C5 revision 1.x. The application and data partitions fit below 2 MiB;
 the 4 MB image header supports the C5-WROOM-1-N4 as well as C5 boards with

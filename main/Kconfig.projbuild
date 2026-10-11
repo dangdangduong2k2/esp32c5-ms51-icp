@@ -39,6 +39,14 @@ menu "MS51FC0AE ICP programmer"
         range 0 28
         default 1
 
+    config MS51_ANALOG_IO1
+        bool "Read GPIO1 analog voltage"
+        depends on IDF_TARGET_ESP32C5 && MS51_DAT_GPIO != 1 && MS51_CLK_GPIO != 1 && MS51_RST_GPIO != 1
+        default n
+        help
+            Read calibrated ADC1 channel 0 at GPIO1 (0 to 3.3 V).
+            Enable only on boards where IO1 is free, e.g. DAT2/CLK3/RS4.
+
     config MS51_DEBUG_UART_ENABLE
         bool "Enable MS51 runtime UART/debug over shared ICP wires"
         default y

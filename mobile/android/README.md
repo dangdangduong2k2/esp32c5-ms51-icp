@@ -1,6 +1,8 @@
-# MS51 Connect 3.1.2
+# MS51 Connect 3.1.3
 
-Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 14, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 15, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+
+3.1.3 thêm thẻ **Nhiệt độ** cho NTC 10 kΩ B3950 ở IO1, điện trở kéo lên 3,3 V là 10 kΩ. Cần nạp C5 DAT2/CLK3/RS4 mới, không cần đổi máy chủ. [Đấu dây và preview](../../docs/ms51-connect-3.1.3/README.md).
 
 3.1.2 giản lược Tổng quan: chỉ giữ Làm mới, bỏ ba lối tắt và Dữ liệu trực tiếp. Rơ-le 1–3 có icon nguồn đổi màu theo trạng thái, luôn đi cùng chữ BẬT/TẮT/Chờ dữ liệu để không phụ thuộc màu sắc. Các nhãn UART/Firmware, thông tin chip và mạng được thay bằng ngôn ngữ thông thường. Bốn tab điều hướng vẫn có đủ Tổng quan, Cài đặt, Cập nhật và Thiết bị. Không thay đổi API hoặc dữ liệu thiết bị.
 
@@ -24,7 +26,7 @@ Wi-Fi nhà dùng kết nối Internet thông thường của Android/cài đặt
 
 ## Sử dụng
 
-1. Cài APK 3.1.2, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.x giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
+1. Cài APK 3.1.3, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.x giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
 2. Trang đầu hiển thị các thiết bị đã ghép, với trạng thái MQTT hiện tại. Tài khoản dùng được trên nhiều điện thoại.
 3. Bấm **Thêm thiết bị** → **Tìm Wi-Fi thiết bị** → chọn AP `MS51-PROGRAMMER-<MAC>` → **Quét Wi-Fi** → chọn mạng → nhập mật khẩu. Có nút con mắt và hỗ trợ 5 GHz trên C5.
 4. Bấm **Tiếp tục** để điện thoại vào mạng đích. App kiểm tra MAC/SSID rồi yêu cầu bo chứng minh kết nối MQTT trước khi ghi vào tài khoản.
@@ -55,7 +57,7 @@ APK ký debug bằng khóa thử nghiệm hiện có. Không đặt token, mật
 
 Lệnh Python chạy từ gốc repository, cần pyserial và C5 ở COM49 (sửa cổng khi cần). Adapter localhost:80 chỉ chuyển bước xác nhận LAN/ghép nối qua USB vì emulator không tham gia được AP vật lý; điều khiển từ xa đi qua HTTPS công khai và MQTT thật. Không xem bài này là kiểm thử radio provisioning trên điện thoại thật. Runner không chạy thao tác live nếu thiếu `-e live true`. Các fixture/runner AccountsDevices cũ là kiểm thử lịch sử của 2.2.
 
-Vẫn cần thử quyền/chọn Wi-Fi của Android trên điện thoại thật và nhiều bo vật lý. NTC 10k chưa được hỗ trợ; dữ liệu MS51 trên C5 là mô phỏng.
+Vẫn cần thử quyền/chọn Wi-Fi của Android trên điện thoại thật và nhiều bo vật lý. Bản mô phỏng lịch sử chưa có NTC; bản native DAT2/CLK3/RS4 từ 3.1.3 hỗ trợ NTC ở IO1. Chưa kiểm tra cảm biến thực tế trên biến thể này.
 
 Kiểm thử chuyển mạng 3.0.2 chỉ chạy khi chỉ định emulator: bật/tắt Wi-Fi và dữ liệu di động **trong emulator**, rồi phục hồi trạng thái ban đầu. Nó gọi `/health` HTTPS công khai, không tạo tài khoản, ghép lại hoặc gửi lệnh tới C5. Bài kiểm tra cố ý giữ binding Wi-Fi đã mất để chứng minh đường HTTP mặc định cũ thất bại trong khi phiên mới dùng được mạng hiện tại; đây là tình huống lỗi dựng lại, chưa phải xác nhận nguyên nhân chính xác trên điện thoại người dùng. Hai mạng emulator vẫn đi ra Internet qua máy chủ chạy emulator, không thay thế kiểm thử nhà mạng/SIM vật lý. Thử mất phản hồi của lệnh bằng fixture để xác nhận không tự gửi lại.
 

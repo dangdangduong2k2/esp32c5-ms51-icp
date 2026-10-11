@@ -107,6 +107,8 @@ public final class MainActivity extends Activity {
     private TextView dashboardConnection;
     private TextView dashboardMode;
     private TextView dashboardLogs;
+    private TextView temperatureValue;
+    private TextView temperatureNote;
     private long[] lastHistory;
     private long nextHistoryRead;
     private String historyError = "";
@@ -1084,6 +1086,19 @@ public final class MainActivity extends Activity {
         timers.addView(green,left); timers.addView(red,right);
         content.addView(timers, fullParams(0, 6, 0, 20));
 
+        LinearLayout temperature = card();
+        LinearLayout temperatureTitle = new LinearLayout(this);
+        temperatureTitle.setGravity(Gravity.CENTER_VERTICAL);
+        temperatureTitle.addView(icon("thermometer", Design.TEAL, 24), new LinearLayout.LayoutParams(dp(28),dp(28)));
+        TextView temperatureLabel = valueText("Nhiệt độ"); temperatureLabel.setTextSize(18);
+        temperatureTitle.addView(temperatureLabel, fullParams(10,0,0,0));
+        temperature.addView(temperatureTitle);
+        temperatureValue = valueText("— °C"); temperatureValue.setTextSize(38); temperatureValue.setTextColor(Design.TEAL);
+        temperature.addView(temperatureValue, fullParams(0,12,0,6));
+        temperatureNote = mutedText("Đang chờ dữ liệu");
+        temperature.addView(temperatureNote);
+        content.addView(temperature, fullParams(0,0,0,16));
+
         LinearLayout relayCard = card(); addSectionTitle(relayCard, "Trạng thái rơ-le");
         LinearLayout relays = new LinearLayout(this); relays.setOrientation(LinearLayout.HORIZONTAL);
         for (int i=0;i<3;i++) {
@@ -1103,6 +1118,7 @@ public final class MainActivity extends Activity {
         logs.addView(dashboardLogs,fullParams(0,8,0,0));
         content.addView(logs);
         renderDashboard(lastStatus,lastDebug);
+        renderTemperature(null); // wait for a fresh response, not cached device state
         renderHistory();
     }
 
@@ -1174,6 +1190,7 @@ public final class MainActivity extends Activity {
 
     private void renderDashboard(JSONObject status, JSONObject debug) {
         if (dashboardConnection == null) return;
+        renderTemperature(status);
         JSONObject uplink = getUplink(status);
         String ssid = uplink.optString("ssid", uplinkSsid);
         String network = ssid.isEmpty() ? "Chưa nhận Wi‑Fi" : ssid;
@@ -1205,6 +1222,33 @@ public final class MainActivity extends Activity {
         setRelay(relayViews[1], 2, values.get("relay2"));
         setRelay(relayViews[2], 3, values.get("relay3"));
 
+    }
+
+    private void renderTemperature(JSONObject status) {
+        if (temperatureValue == null) return;
+        temperatureValue.setText("— °C"); temperatureValue.setTextColor(Design.MUTED);
+        temperatureNote.setText("Đang chờ dữ liệu");
+        if (status == null) return;
+        JSONObject input = status.optJSONObject("analog");
+        if (input == null || !input.optBoolean("enabled")) {
+            temperatureNote.setText("Thiết bị chưa hỗ trợ cảm biến này"); return;
+        }
+        if (input.optInt("gpio", -1) != 1 || !input.optBoolean("valid") || input.isNull("age_ms")) return;
+        long age = input.optLong("age_ms", -1);
+        if (age < 0 || age > 2000) return;
+        String sensor = input.optString("sensor");
+        if ("open".equals(sensor) || "short".equals(sensor)) {
+            temperatureNote.setText("Kiểm tra dây cảm biến"); return;
+        }
+        if ("out_of_range".equals(sensor)) { temperatureNote.setText("Nhiệt độ ngoài khoảng đo"); return; }
+        if (!"ok".equals(sensor)) return;
+        Object raw = input.opt("temperature_centi");
+        if (!(raw instanceof Integer || raw instanceof Long)) return;
+        long value = ((Number)raw).longValue();
+        if (value < -5500 || value > 12500) return;
+        temperatureValue.setText(String.format(Locale.forLanguageTag("vi-VN"), "%.1f °C", value / 100.0));
+        temperatureValue.setTextColor(Design.TEAL);
+        temperatureNote.setText("Cảm biến đang kết nối");
     }
 
     private void renderHistory() {
@@ -1777,7 +1821,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.1.2 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.1.3 • Kết nối qua Internet");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {
             try (InputStream stream = getAssets().open("LICENSE.txt")) {
@@ -2186,6 +2230,7 @@ public final class MainActivity extends Activity {
     }
 
     private void stopDashboard() {
+        renderTemperature(null);
         dashboardEpoch++;
         mainHandler.removeCallbacks(dashboardRefresh);
         dashboardBusy = false;

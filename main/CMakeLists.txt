@@ -32,6 +32,8 @@ endif()
 idf_component_register(
     SRCS "ms51_cloud.c" "ms51_presence.c"
         "app_main.c"
+        "ms51_analog.c"
+        "ms51_ntc.c"
         "ms51_debug_uart.c"
         "ms51_image.c"
         "ms51_icp.c"
@@ -43,6 +45,7 @@ idf_component_register(
     INCLUDE_DIRS "."
     EMBED_TXTFILES "web/index.html"
     PRIV_REQUIRES mqtt cjson mbedtls esp_http_client
+        esp_adc
         console
         esp_driver_gpio
         esp_driver_uart

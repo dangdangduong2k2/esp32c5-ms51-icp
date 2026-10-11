@@ -1,5 +1,11 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.1.3 · Nhiệt độ NTC ở IO1
+
+[Tải APK 3.1.3](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.3/MS51-Connect-3.1.3.apk) · [Bộ ba file C5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.3/ESP32-C5-DAT2-CLK3-RS4-NTC-IO1.zip) · [Đấu dây, preview và kiểm thử](docs/ms51-connect-3.1.3/README.md)
+
+Thêm thẻ **Nhiệt độ**: nguồn 3,3 V → điện trở 10 kΩ → IO1 → NTC 10 kΩ B3950 → GND. Dùng bản **DAT2/CLK3/RS4**, cài APK và nạp C5 mới; không cần đổi VPS hoặc nạp MS51. Có xử lý hở/chập cảm biến và mất dữ liệu. Đã build và kiểm thử giao diện, chưa đo thực tế trên mạch. Bản DAT1/CLK0/RS3 mặc định không bật cảm biến IO1.
+
 ## Bản thử nghiệm 3.1.2 · Giao diện gọn hơn
 
 [Tải MS51 Connect 3.1.2 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.2/MS51-Connect-3.1.2.apk)
@@ -38,7 +44,7 @@ Giữ tính năng 3.1.0: admin cấp quyền từng mục cài đặt và cấp 
 | Firmware ICP cho MS51 thật | Project ESP-IDF ở thư mục gốc |
 | Kiểm thử phiên bản 3.0 | [Báo cáo](docs/ms51-connect-3.0/test-results.json) |
 
-MS51 trên bo thử nghiệm vẫn được mô phỏng bằng C5; **chưa hỗ trợ NTC 10k**. API Wi-Fi nội bộ vẫn dùng mô hình truy cập cũ; xem phạm vi bảo vệ và cách vận hành trong hướng dẫn server. Bản 2.2 và báo cáo lịch sử vẫn ở [release 2.2](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v2.2.0).
+Ở bản 3.0 lịch sử, MS51 được mô phỏng bằng C5 và chưa có NTC. Bản native 3.1.3 DAT2/CLK3/RS4 đã bổ sung NTC ở IO1 như mô tả phía trên. API Wi-Fi nội bộ vẫn dùng mô hình truy cập cũ; xem phạm vi bảo vệ và cách vận hành trong hướng dẫn server. Bản 2.2 và báo cáo lịch sử vẫn ở [release 2.2](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/tag/v2.2.0).
 
 ## Firmware nạp ICP gốc (ESP32-C5)
 

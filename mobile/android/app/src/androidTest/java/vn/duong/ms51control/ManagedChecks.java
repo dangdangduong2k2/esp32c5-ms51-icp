@@ -77,7 +77,11 @@ final class ManagedChecks {
                     check(DeviceHistory.text(new long[30]).contains("Chưa có"),"Empty history explicit");
                     // Save an offline preview of the actual views for visual review.
                     EspApi demo=new EspApi(); demo.setDemo(true);
-                    set(a,"lastStatus",demo.get("/api/status"));
+                    JSONObject sampleStatus=demo.get("/api/status");
+                    JSONObject sensor=new JSONObject().put("enabled",true).put("gpio",1).put("valid",true)
+                            .put("age_ms",100).put("sensor","ok").put("temperature_centi",2500);
+                    sampleStatus.put("analog",sensor);
+                    set(a,"lastStatus",sampleStatus);
                     JSONObject preview=demo.get("/api/debug");
                     preview.getJSONArray("variables").remove(5); // third relay awaits data
                     set(a,"lastDebug",preview);
@@ -87,6 +91,29 @@ final class ManagedChecks {
                     page.setPadding(32,32,32,32);page.setBackgroundColor(Design.BG);
                     invoke(a,"addNavigation",new Class[]{LinearLayout.class},page);
                     invoke(a,"buildOverview",new Class[]{LinearLayout.class},page);
+                    for(int temperature:new int[]{-1800,0,2500,12500}) {
+                        sensor.put("temperature_centi",temperature);
+                        invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,null);
+                        check(((TextView)get(a,"temperatureValue")).getText().toString().equals(String.format(java.util.Locale.forLanguageTag("vi-VN"),"%.1f °C",temperature/100.0)),"Temperature remains available without MS51 telemetry");
+                    }
+                    for(String fault:new String[]{"open","short","out_of_range"}) {
+                        sensor.put("sensor",fault);
+                        invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                        check(((TextView)get(a,"temperatureValue")).getText().toString().equals("— °C"),"Sensor fault never displays a temperature: "+fault);
+                    }
+                    sensor.put("sensor","ok").put("age_ms",2500);
+                    invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperatureValue")).getText().toString().equals("— °C"),"Stale temperature hidden");
+                    sensor.put("age_ms",100).put("temperature_centi",JSONObject.NULL);
+                    invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperatureValue")).getText().toString().equals("— °C"),"Null is not zero degrees");
+                    invoke(a,"renderTemperature",new Class[]{JSONObject.class},demo.get("/api/status"));
+                    check(((TextView)get(a,"temperatureValue")).getText().toString().equals("— °C"),"Older firmware remains usable");
+                    sensor.put("temperature_centi",2500);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    // Clearly identify preview data on the saved image.
+                    TextView previewLabel=new TextView(a);previewLabel.setText("XEM TRƯỚC · SỐ LIỆU MINH HỌA");previewLabel.setTextColor(Design.TEAL);
+                    page.addView(previewLabel,0);
                     page.measure(View.MeasureSpec.makeMeasureSpec(1080,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
                     page.layout(0,0,1080,page.getMeasuredHeight());
                     android.graphics.Bitmap shot=android.graphics.Bitmap.createBitmap(1080,page.getMeasuredHeight(),android.graphics.Bitmap.Config.ARGB_8888);
@@ -98,7 +125,7 @@ final class ManagedChecks {
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: managed settings/firmware regression; history uint32 decoding, all 30 slots, duration precision, empty/stale/device-switch states, no status logs.");
+            result.putString("stream","PASS: managed settings/updates and history regression; temperature normal/negative/zero/open/short/out-of-range/stale/null/old-firmware states, independent of MS51 telemetry.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}
