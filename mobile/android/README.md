@@ -1,6 +1,14 @@
-# MS51 Connect 3.0.3
+# MS51 Connect 3.1.0
 
-Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 11, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 12, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+
+3.1.0 thêm quyền theo từng thiết bị do admin quản lý. Mỗi mục trong 51 mục cài đặt, kể cả Min/Max, được bật/ẩn riêng. App lấy quyền khi mở Cài đặt và kiểm tra lại mỗi 15 giây; thay đổi quyền sẽ tải lại màn hình. Khi lưu, app chỉ gửi các giá trị đã sửa; server kiểm tra quyền và ghép vào cấu hình mới đọc từ MS51, giữ nguyên mục bị ẩn cùng byte dự phòng. Toàn bộ quyền tắt thì app không hiện biểu mẫu cài đặt.
+
+Firmware chỉ có nút **Cập nhật** khi admin đã cấp HEX mới cho thiết bị, hoặc thông báo không có phiên bản mới. Không còn trình chọn tệp hay nút nạp/xóa nâng cao trong màn hình firmware của người dùng. Người dùng xác nhận cập nhật rồi server tiếp tục công việc, kể cả khi đóng app. App theo dõi trạng thái; server kiểm tra CRC ảnh C5, nạp theo generation, theo dõi đúng job_id rồi đối chiếu trước khi báo thành công. Kết quả chưa rõ không tự nạp lại; admin kiểm tra thiết bị rồi cấp lại file nếu cần.
+
+Cần cập nhật máy chủ cùng bản 3.1.0. App cũ vẫn đăng nhập/xem thiết bị nhưng các lệnh firmware tự chọn và ghi cấu hình thô qua cloud bị từ chối. Cài đè APK cùng chữ ký giữ phiên tài khoản. Quyền áp dụng cho app/API cloud; giao diện local của C5 vẫn có cơ chế tin cậy LAN như trước.
+
+Kiểm thử Android không kết nối bo: `adb shell am instrument -w -e mode managed vn.duong.ms51connect.test/vn.duong.ms51control.CloudIntegrationTestRunner`. Kiểm tra ẩn từng trường, Min/Max riêng, PIN, các trạng thái firmware và chuyển thiết bị. Không chạy chế độ `live` cũ để xác minh luồng 3.1 trên bo đang dùng.
 
 3.0.3 sửa nền thẻ trạng thái “Đang làm lạnh / Đang xả đá” bị xám khi vẽ lại. Khôi phục alpha trước khi vẽ gradient; kiểm thử Android xác nhận màu giữ nguyên qua 60 lần vẽ ở hai kích thước. APK cùng chữ ký với 3.0.2, cài đè giữ phiên đăng nhập và danh sách thiết bị.
 
@@ -12,7 +20,7 @@ Wi-Fi nhà dùng kết nối Internet thông thường của Android/cài đặt
 
 ## Sử dụng
 
-1. Cài APK 3.0.3, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.0/3.0.1 giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
+1. Cài APK 3.1.0, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.0/3.0.1 giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
 2. Trang đầu hiển thị các thiết bị đã ghép, với trạng thái MQTT hiện tại. Tài khoản dùng được trên nhiều điện thoại.
 3. Bấm **Thêm thiết bị** → **Tìm Wi-Fi thiết bị** → chọn AP `MS51-PROGRAMMER-<MAC>` → **Quét Wi-Fi** → chọn mạng → nhập mật khẩu. Có nút con mắt và hỗ trợ 5 GHz trên C5.
 4. Bấm **Tiếp tục** để điện thoại vào mạng đích. App kiểm tra MAC/SSID rồi yêu cầu bo chứng minh kết nối MQTT trước khi ghi vào tài khoản.

@@ -5,7 +5,7 @@ function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.
 function icon(name) { const n = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); n.setAttribute('aria-hidden', 'true'); const u = document.createElementNS(n.namespaceURI, 'use'); u.setAttribute('href', '#i-' + name); n.append(u); return n; }
 function button(text, cls, action) { const n = el('button', cls, text); n.type = 'button'; n.addEventListener('click', action); return n; }
 function message(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(message.timer); message.timer = setTimeout(() => $('toast').hidden = true, 5000); }
-function showLogin() { state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
+function showLogin() { state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
 async function api(path, body) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
   try {
@@ -66,10 +66,12 @@ function renderDetail(data) {
   const list = el('div', 'device-list');
   for (const device of data.devices) {
     const item = el('article', 'device-item'), title = el('div', 'device-title'), text = el('div'); text.append(el('strong', '', device.name), el('small', '', device.id));
-    title.append(icon('device'), text, button('Đổi tên', 'text-button', () => editDevice(device)));
+    const open = button('', 'device-open', () => openAccess(data.user.id, device)); open.append(text);
+    title.append(icon('device'), open, button('Đổi tên', 'text-button', () => editDevice(device)));
     const status = el('div', 'device-status'), pill = el('span', 'pill' + (device.online ? '' : ' offline'));
     pill.append(el('i', 'status-dot' + (device.online ? '' : ' offline')), document.createTextNode(!data.mqtt ? 'Chưa xác minh' : device.online ? 'Trực tuyến' : 'Ngoại tuyến'));
-    status.append(pill, el('small', '', (device.online ? 'Tín hiệu: ' : 'Lần cuối: ') + seen(device.last_seen))); item.append(title, status); list.append(item);
+    status.append(pill, el('small', '', (device.online ? 'Tín hiệu: ' : 'Lần cuối: ') + seen(device.last_seen))); const accessButton = button('Cấp quyền  →', 'access-button', () => openAccess(data.user.id, device));
+    item.append(title, status, accessButton); list.append(item);
   }
   if (!data.devices.length) { const empty = el('div', 'empty'); empty.append(icon('device'), el('h3', '', 'Chưa ghép thiết bị'), el('p', '', 'Thiết bị sẽ xuất hiện khi tài khoản này hoàn tất ghép nối trong app.')); list.append(empty); }
   $('detail').replaceChildren(top, heading, list, el('p', 'device-tip', 'Trạng thái dựa trên tín hiệu gần nhất gửi về máy chủ. Thiết bị không gửi tín hiệu quá 45 giây được hiển thị ngoại tuyến.'));
@@ -119,6 +121,77 @@ $('refresh').onclick = refresh;
 $('search').addEventListener('input', () => { state.query = $('search').value.trim(); state.page = 1; clearTimeout(state.searchTimer); state.searchTimer = setTimeout(refresh, 300); });
 $('prev-page').onclick = () => { if (state.page > 1) { state.page--; refresh(); } };
 $('next-page').onclick = () => { state.page++; refresh(); };
-setInterval(() => { if (!document.hidden && !$('edit-dialog').open) refresh(); }, 15000);
+setInterval(() => { if (!document.hidden && !$('edit-dialog').open && !$('access-dialog').open) refresh(); }, 15000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 api('session').then(authenticated).catch(() => showLogin());
+
+let accessTarget = null, accessEpoch = 0;
+function accessBusy(busy) { state.pending=busy; $('access-dialog').querySelectorAll('button,input').forEach(n=>n.disabled=busy); }
+function closeAccess() { if (state.pending) return; ++accessEpoch; accessTarget=null; $('access-dialog').close(); $('permission-fields').replaceChildren(); $('firmware-hex').value=''; }
+$('close-access').onclick=closeAccess;
+$('access-dialog').addEventListener('cancel',e=>{ e.preventDefault(); closeAccess(); });
+function updateVisibleCount() { $('visible-count').textContent=$('permission-fields').querySelectorAll('input:checked').length+' / '+$('permission-fields').querySelectorAll('input').length+' mục được hiện'; }
+function showAssigned(firmware,job) {
+    $('assigned-firmware').replaceChildren();
+    if (firmware) {
+        $('assigned-firmware').append(el('strong','',firmware.filename),el('p','',firmware.id===firmware.installed?'Thiết bị đã cập nhật bản này.':'Đã cấp · Chờ người dùng cập nhật trong app.'));
+        $('assigned-firmware').append(el('small','', 'Cấp lúc '+new Date(firmware.created*1000).toLocaleString('vi-VN')));
+    } else $('assigned-firmware').append(el('p','','Chưa cấp bản cập nhật cho thiết bị này.'));
+    if (job && firmware && job.release===firmware.id) $('assigned-firmware').append(el('p','',job.message));
+    $('revoke-firmware').hidden=!firmware;
+}
+async function openAccess(uid,device) {
+    if (state.pending) return;
+    const epoch=++accessEpoch;
+    accessTarget={uid,device:device.id,revision:0};
+    $('access-device-name').textContent=device.name+' · '+device.id;
+    $('access-error').textContent=''; $('permission-fields').replaceChildren(el('p','','Đang tải quyền…'));
+    $('assigned-firmware').replaceChildren(); $('firmware-hex').value='';
+    $('access-dialog').showModal(); accessBusy(true);
+    try {
+        const data=await api(`users/${uid}/devices/${device.id}/access`);
+        if (epoch!==accessEpoch || !state.csrf) return;
+        accessTarget.revision=data.revision;
+        const groups={timing:'Thời gian hoạt động',modes:'Chế độ và hiển thị',ranges:'Giới hạn Min / Max',pin:'Mật khẩu bảo vệ'};
+        const visible=new Set(data.visible); $('permission-fields').replaceChildren();
+        for (const [group,title] of Object.entries(groups)) {
+            const box=el('fieldset','permission-group'); box.append(el('legend','',title));
+            for (const [key,field] of Object.entries(data.catalog)) if(field.group===group) {
+                const label=el('label','permission-toggle'), input=el('input');
+                input.type='checkbox'; input.value=key; input.checked=visible.has(key); input.onchange=updateVisibleCount;
+                label.append(input,el('span','',field.label)); box.append(label);
+            }
+            $('permission-fields').append(box);
+        }
+        updateVisibleCount();showAssigned(data.firmware,data.job);
+    } catch(e) { $('access-error').textContent=e.message; $('permission-fields').replaceChildren(); }
+    finally { accessBusy(false); $('save-policy').disabled=$('permission-fields').querySelectorAll('input').length===0; }
+}
+$('show-all').onclick=()=>{ $('permission-fields').querySelectorAll('input').forEach(n=>n.checked=true);updateVisibleCount(); };
+$('hide-all').onclick=()=>{ $('permission-fields').querySelectorAll('input').forEach(n=>n.checked=false);updateVisibleCount(); };
+$('policy-form').onsubmit=async e=>{
+    e.preventDefault(); if(state.pending||!accessTarget) return;
+    const target={...accessTarget};accessBusy(true);$('access-error').textContent='';
+    try {
+        const visible=[...$('permission-fields').querySelectorAll('input:checked')].map(n=>n.value);
+        const data=await api(`users/${target.uid}/devices/${target.device}/access`,{visible,revision:target.revision});
+        accessTarget.revision=data.revision;message('Đã lưu quyền. App đang mở Cài đặt sẽ cập nhật trong khoảng 15 giây.');
+    } catch(e) { $('access-error').textContent=e.message; } finally { accessBusy(false); }
+};
+$('firmware-form').onsubmit=async e=>{
+    e.preventDefault();if(state.pending||!accessTarget) return;
+    const file=$('firmware-hex').files[0], target={...accessTarget};$('access-error').textContent='';
+    if(!file || !/\.hex$/i.test(file.name) || file.size>98304 || file.size===0) { $('access-error').textContent='Chọn tệp .hex có dữ liệu, tối đa 96 KiB.';return; }
+    accessBusy(true);
+    try {
+        const response=await fetch(`api/users/${target.uid}/devices/${target.device}/firmware`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/octet-stream','X-CSRF-Token':state.csrf,'X-Filename':file.name.replace(/[^A-Za-z0-9._ -]/g,'_')},body:file,signal:AbortSignal.timeout(20000)});
+        const data=await response.json();if(!response.ok){if(response.status===401)showLogin();throw new Error(data.message||'Chưa cấp được firmware.');}
+        showAssigned(data.firmware,null);$('firmware-hex').value='';message('Đã cấp firmware cho thiết bị.');
+    }catch(e){$('access-error').textContent=e.name==='TimeoutError'?'Chưa nhận phản hồi. Đóng rồi mở lại để kiểm tra trước khi gửi lại.':e.message;}finally{accessBusy(false);}
+};
+$('revoke-firmware').onclick=async()=>{
+    if(state.pending||!accessTarget||!confirm('Gỡ bản cập nhật đang cấp cho thiết bị này? Chương trình đang chạy trên thiết bị vẫn được giữ.'))return;
+    const target={...accessTarget};accessBusy(true);$('access-error').textContent='';
+    try{await api(`users/${target.uid}/devices/${target.device}/firmware/revoke`,{});showAssigned(null,null);message('Đã gỡ bản cập nhật.');}
+    catch(e){$('access-error').textContent=e.message;}finally{accessBusy(false);}
+};

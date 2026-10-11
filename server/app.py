@@ -53,6 +53,7 @@ DUMMY = ph.hash(secrets.token_urlsafe(32))
 limits = defaultdict(deque)
 waiters = {}
 busy = set()
+managed_locks = {}
 uploads = {}
 admin_waiters = {}
 
@@ -195,9 +196,11 @@ class Bridge:
             with lock:
                 admin_waiters.pop(correlation, None)
 
-    def call(self, row, uid, rid, method, path, body):
+    def call(self, row, uid, rid, method, path, body, lease=None):
         fingerprint = digest(json.dumps([method, path, body], sort_keys=True))
         with lock:
+            if row['id'] in managed_locks and managed_locks[row['id']] != lease:
+                fail(409, 'Thiết bị đang cập nhật hoặc lưu cài đặt. Vui lòng đợi.')
             if not db.execute("SELECT 1 FROM devices WHERE id=? AND owner=? AND mqtt=?", (row["id"], uid, row["mqtt"])).fetchone():
                 fail(404, "Thiết bị đã được gỡ khỏi tài khoản.")
             previous = db.execute("SELECT * FROM requests WHERE id=?", (rid,)).fetchone()
@@ -451,7 +454,7 @@ def remove(device: str, request: Request):
     user = owner(request)
     row = device_for(user["id"], device)
     with lock:
-        if device in busy:
+        if device in busy or device in managed_locks:
             fail(409, "Thiết bị đang thực hiện một yêu cầu. Vui lòng đợi.")
         busy.add(device)
     # Revocation also works offline. The ESP clears credentials only on a TLS-authenticated
@@ -485,6 +488,12 @@ def rpc(device: str, data: Rpc, request: Request):
     user = owner(request)
     limited(request, "rpc", 180)
     row = device_for(user["id"], device)
+    if data.method == 'POST' and data.path in {'/api/runtime-config', '/api/program', '/api/program-full', '/api/verify', '/api/erase'}:
+        fail(403, 'Thao tác được quản lý bởi admin. Cập nhật app để sử dụng quyền cài đặt và firmware được cấp.')
+    if data.path == '/api/runtime-config':
+        with lock:
+            if not managed_policy(device)['visible']:
+                fail(403, 'Admin chưa cấp quyền cài đặt cho thiết bị này.')
     if not (data.method == "GET" and data.path in GET_PATHS or data.method == "POST" and data.path in POST_PATHS):
         fail(400, "Lệnh này chỉ dùng khi kết nối trực tiếp với thiết bị.")
     if len(json.dumps(data.body).encode()) > 4096:
@@ -497,30 +506,7 @@ async def upload(device: str, request: Request):
     user = owner(request)
     limited(request, "upload", 6)
     row = device_for(user["id"], device)
-    name = request.headers.get("x-filename", "")
-    if not re.fullmatch(r"[A-Za-z0-9._ -]{1,100}\.(hex|ihex|ihx|bin)", name, re.I):
-        fail(400, "Tên tệp phải kết thúc bằng .hex, .ihex, .ihx hoặc .bin.")
-    rid = request.headers.get("x-request-id", "")
-    if not re.fullmatch(r"[a-f0-9]{32}", rid):
-        fail(400, "Thiếu mã yêu cầu.")
-    maximum = 32768 if name.lower().endswith(".bin") else 98304
-    content = bytearray()
-    async for chunk in request.stream():
-        content.extend(chunk)
-        if len(content) > maximum:
-            fail(413, "Tệp vượt dung lượng MS51.")
-    if not content:
-        fail(400, "Tệp trống.")
-    token = secrets.token_urlsafe(32)
-    upload_id = secrets.token_hex(16)
-    with lock:
-        uploads[upload_id] = (time.time() + 60, digest(token), bytes(content))
-    try:
-        return await asyncio.to_thread(bridge.call, row, user["id"], rid, "POST", "/internal/upload",
-                                      dict(upload_id=upload_id, token=token, filename=name, size=len(content)))
-    finally:
-        with lock:
-            uploads.pop(upload_id, None)
+    fail(403, 'Firmware phải được cấp từ trang admin. Cập nhật app để sử dụng nút Cập nhật.')
 
 
 @app.get("/transfer/{upload_id}")

@@ -1,0 +1,33 @@
+{
+  "version": "3.1.0",
+  "version_code": 12,
+  "apk_sha256": "45884d542d17e8e1b0dc236348367e1877da90cb90187f6562ff27f38d0c1fc1",
+  "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+  "server_tests": {
+    "passed": 23,
+    "scope": "Isolated database and fake MQTT replies; includes 14 previous admin tests."
+  },
+  "android_tests": {
+    "passed": true,
+    "scope": "API 35 emulator: permitted fields, range Min/Max individually, hidden PIN, firmware states and device-switch guard; upgrade installation successful."
+  },
+  "admin_browser_tests": {
+    "ok": true,
+    "checks": [
+      "prominent account arrows",
+      "per-device access dialog",
+      "all 51 settings",
+      "save and reload subset",
+      "invalid HEX rejected",
+      "valid HEX assigned",
+      "withdraw update",
+      "390px layout"
+    ],
+    "errors": []
+  },
+  "limitations": [
+    "No new HEX was programmed into physical MS51 in this release test. Existing native C5 API is reused.",
+    "Cloud policy does not secure the existing local LAN/USB API.",
+    "Older APKs need upgrade to save settings and install assigned firmware."
+  ]
+}

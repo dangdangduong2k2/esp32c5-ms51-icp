@@ -1,0 +1,410 @@
+{
+  "coolCl": {
+    "label": "Làm lạnh CL (phút)",
+    "group": "timing",
+    "offset": 1,
+    "size": 4,
+    "min": 1,
+    "max": 999
+  },
+  "coolOp": {
+    "label": "Làm lạnh OP (phút)",
+    "group": "timing",
+    "offset": 5,
+    "size": 4,
+    "min": 1,
+    "max": 999
+  },
+  "defrostCl": {
+    "label": "Xả đá CL (phút)",
+    "group": "timing",
+    "offset": 9,
+    "size": 4,
+    "min": 1,
+    "max": 999
+  },
+  "defrostOp": {
+    "label": "Xả đá OP (phút / giây)",
+    "group": "timing",
+    "offset": 13,
+    "size": 4,
+    "min": 1,
+    "max": 999
+  },
+  "delaySt": {
+    "label": "Thời gian chờ ST (100 ms)",
+    "group": "timing",
+    "offset": 17,
+    "size": 1,
+    "min": 1,
+    "max": 255
+  },
+  "stLed": {
+    "label": "ST LED (100 ms)",
+    "group": "timing",
+    "offset": 18,
+    "size": 1,
+    "min": 0,
+    "max": 90
+  },
+  "df": {
+    "label": "Chế độ DF",
+    "group": "modes",
+    "offset": 19,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "end": {
+    "label": "Chế độ END",
+    "group": "modes",
+    "offset": 20,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "coolStart": {
+    "label": "Bắt đầu làm lạnh",
+    "group": "modes",
+    "offset": 21,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "defrostStart": {
+    "label": "Bắt đầu xả đá",
+    "group": "modes",
+    "offset": 22,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "displayMode": {
+    "label": "Kiểu màn hình",
+    "group": "modes",
+    "offset": 23,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "lockTime": {
+    "label": "Tự khóa",
+    "group": "timing",
+    "offset": 24,
+    "size": 2,
+    "min": 0,
+    "max": 999
+  },
+  "greenBrightness": {
+    "label": "Độ sáng LED xanh",
+    "group": "timing",
+    "offset": 26,
+    "size": 1,
+    "min": 0,
+    "max": 7
+  },
+  "redBrightness": {
+    "label": "Độ sáng LED đỏ",
+    "group": "timing",
+    "offset": 27,
+    "size": 1,
+    "min": 0,
+    "max": 7
+  },
+  "hcfMode": {
+    "label": "Chế độ HCF",
+    "group": "modes",
+    "offset": 28,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "hdf": {
+    "label": "Chế độ HDF",
+    "group": "modes",
+    "offset": 29,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "onTime": {
+    "label": "Tỷ lệ thời gian R1 / R2",
+    "group": "modes",
+    "offset": 30,
+    "size": 1,
+    "min": 0,
+    "max": 3
+  },
+  "touch": {
+    "label": "Số lần chạm",
+    "group": "modes",
+    "offset": 31,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "tryTime": {
+    "label": "Thời gian thử lại",
+    "group": "timing",
+    "offset": 32,
+    "size": 2,
+    "min": 0,
+    "max": 999
+  },
+  "hcfTime": {
+    "label": "Thời gian HCF OP",
+    "group": "timing",
+    "offset": 34,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "delayDf": {
+    "label": "Trễ bật xả đá",
+    "group": "timing",
+    "offset": 36,
+    "size": 2,
+    "min": 0,
+    "max": 90
+  },
+  "defrostOpSeconds": {
+    "label": "Xả đá OP tính giây",
+    "group": "modes",
+    "offset": 38,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "showDf": {
+    "label": "Hiện chế độ DF",
+    "group": "modes",
+    "offset": 39,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "showEnd": {
+    "label": "Hiện chế độ END",
+    "group": "modes",
+    "offset": 40,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "showSl": {
+    "label": "Hiện chế độ SL",
+    "group": "modes",
+    "offset": 41,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "showHcf": {
+    "label": "Hiện chế độ HCF",
+    "group": "modes",
+    "offset": 42,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "showHdf": {
+    "label": "Hiện chế độ HDF",
+    "group": "modes",
+    "offset": 43,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "tryUnit": {
+    "label": "Đơn vị thử lại",
+    "group": "timing",
+    "offset": 44,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "showSt": {
+    "label": "Hiện ST LED",
+    "group": "modes",
+    "offset": 195,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "stLcd": {
+    "label": "ST LCD (100 ms)",
+    "group": "timing",
+    "offset": 196,
+    "size": 1,
+    "min": 0,
+    "max": 90
+  },
+  "pinPassword": {
+    "label": "Mật khẩu",
+    "group": "pin",
+    "offset": 197,
+    "size": 2,
+    "min": 0,
+    "max": 999
+  },
+  "pinPeriod": {
+    "label": "Chu kỳ yêu cầu mật khẩu",
+    "group": "pin",
+    "offset": 199,
+    "size": 2,
+    "min": 0,
+    "max": 999
+  },
+  "pinBackupPassword": {
+    "label": "Mật khẩu dự phòng",
+    "group": "pin",
+    "offset": 204,
+    "size": 2,
+    "min": 0,
+    "max": 999
+  },
+  "pinBackupPeriod": {
+    "label": "Thời gian dự phòng",
+    "group": "pin",
+    "offset": 208,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "pinPeriodUnit": {
+    "label": "Đơn vị chu kỳ",
+    "group": "pin",
+    "offset": 210,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "pinBackupPeriodUnit": {
+    "label": "Đơn vị dự phòng",
+    "group": "pin",
+    "offset": 211,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "pinEnable": {
+    "label": "Bật mật khẩu",
+    "group": "pin",
+    "offset": 212,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "pinPeriodShow": {
+    "label": "Hiện phần chỉnh chu kỳ mật khẩu",
+    "group": "pin",
+    "offset": 213,
+    "size": 1,
+    "min": 0,
+    "max": 1
+  },
+  "pinWrongLimit": {
+    "label": "Số lần nhập sai tối đa",
+    "group": "pin",
+    "offset": 214,
+    "size": 1,
+    "min": 1,
+    "max": 99
+  },
+  "rangeCoolClMin": {
+    "label": "Làm lạnh CL · Min",
+    "group": "ranges",
+    "offset": 171,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeCoolClMax": {
+    "label": "Làm lạnh CL · Max",
+    "group": "ranges",
+    "offset": 183,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeCoolOpMin": {
+    "label": "Làm lạnh OP · Min",
+    "group": "ranges",
+    "offset": 173,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeCoolOpMax": {
+    "label": "Làm lạnh OP · Max",
+    "group": "ranges",
+    "offset": 185,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeDefrostClMin": {
+    "label": "Xả đá CL · Min",
+    "group": "ranges",
+    "offset": 175,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeDefrostClMax": {
+    "label": "Xả đá CL · Max",
+    "group": "ranges",
+    "offset": 187,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeDefrostOpMin": {
+    "label": "Xả đá OP · Min",
+    "group": "ranges",
+    "offset": 177,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeDefrostOpMax": {
+    "label": "Xả đá OP · Max",
+    "group": "ranges",
+    "offset": 189,
+    "size": 2,
+    "min": 1,
+    "max": 999
+  },
+  "rangeStLcdMin": {
+    "label": "ST LCD · Min",
+    "group": "ranges",
+    "offset": 179,
+    "size": 2,
+    "min": 0,
+    "max": 90
+  },
+  "rangeStLcdMax": {
+    "label": "ST LCD · Max",
+    "group": "ranges",
+    "offset": 191,
+    "size": 2,
+    "min": 0,
+    "max": 90
+  },
+  "rangeStLedMin": {
+    "label": "ST LED · Min",
+    "group": "ranges",
+    "offset": 181,
+    "size": 2,
+    "min": 0,
+    "max": 90
+  },
+  "rangeStLedMax": {
+    "label": "ST LED · Max",
+    "group": "ranges",
+    "offset": 193,
+    "size": 2,
+    "min": 0,
+    "max": 90
+  }
+}

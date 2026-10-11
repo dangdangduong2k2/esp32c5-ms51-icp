@@ -1,0 +1,160 @@
+"""Runs only isolated SQLite fixtures and mock device replies; never flashes hardware."""
+import secrets
+import time
+import unittest
+from unittest.mock import patch
+
+from test_admin import AdminTests, core, temporary
+from managed import CATALOG, parse_hex
+
+DEVICE = 'ms51-111111111111'
+ADMIN = 'admin/api/users/u1/devices/' + DEVICE
+MOBILE = 'devices/' + DEVICE
+HEX = b':0400000001020304F2\n:00000001FF\n'
+
+
+class ManagedTests(AdminTests):
+    def setUp(self):
+        super().setUp()
+        core.managed_locks.clear()
+        self.auth()
+        self.mobile_headers = self.mobile()
+
+    def set_policy(self, visible):
+        rev = self.client.get(ADMIN + '/access').json()['revision']
+        r = self.client.post(ADMIN + '/access', json={'visible': visible, 'revision': rev}, headers=self.headers)
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()['revision']
+
+    def assign(self):
+        r = self.client.post(ADMIN + '/firmware', content=HEX, headers={**self.headers, 'X-Filename': 'controller.hex'})
+        self.assertEqual(r.status_code, 200, r.text)
+        return r.json()['firmware']
+
+    def test_policy_validation_and_stale_admin(self):
+        data = self.client.get(ADMIN + '/access').json()
+        self.assertEqual(len(data['catalog']), 51)
+        self.assertEqual(len(data['visible']), 51)
+        rev = self.set_policy(['coolCl', 'rangeCoolClMin'])
+        mobile = self.client.get(MOBILE+'/access', headers=self.mobile_headers).json()
+        self.assertEqual(mobile['visible'], ['coolCl','rangeCoolClMin'])
+        self.assertEqual(mobile['revision'], rev)
+        for fields in (['unknown'], ['coolCl','coolCl']):
+            self.assertEqual(self.client.post(ADMIN+'/access', json={'visible':fields,'revision':rev}, headers=self.headers).status_code, 400)
+        self.assertEqual(self.client.post(ADMIN+'/access', json={'visible':[],'revision':0}, headers=self.headers).status_code, 409)
+
+    def test_hidden_settings_and_legacy_bypasses_denied(self):
+        revision = self.set_policy(['coolCl'])
+        with patch.object(core.bridge, 'call') as call:
+            for values in ({'pinPassword':123},{'coolCl':True},{'coolCl':1000}):
+                response=self.client.post(MOBILE+'/settings',json={'revision':revision,'values':values},headers=self.mobile_headers)
+                self.assertIn(response.status_code,(400,403))
+            for path in ['/api/runtime-config','/api/program','/api/program-full','/api/verify','/api/erase']:
+                response=self.client.post(MOBILE+'/request',json={'id':secrets.token_hex(16),'method':'POST','path':path,'body':{}},headers=self.mobile_headers)
+                self.assertEqual(response.status_code,403)
+            self.assertEqual(self.client.post(MOBILE+'/upload',content=HEX,headers=self.mobile_headers).status_code,403)
+            call.assert_not_called()
+
+    def test_settings_merge_preserves_hidden_and_reserved_bytes(self):
+        revision=self.set_policy(['coolCl'])
+        raw=bytearray(b'\x39'*217);raw[0]=2;raw[0xD4]=0
+        for stem,current in [('rangeCoolCl','coolCl'),('rangeCoolOp','coolOp'),('rangeDefrostCl','defrostCl'),('rangeDefrostOp','defrostOp'),('rangeStLcd','stLcd'),('rangeStLed','stLed')]:
+            for key,value in [(stem+'Min',0),(stem+'Max',90),(current,5)]:
+                f=CATALOG[key];raw[f['offset']:f['offset']+f['size']]=value.to_bytes(f['size'],'big')
+        calls=[]
+        def fake(row,uid,rid,method,path,body,lease=None):
+            calls.append((method,path,body))
+            return {'ok':True,'data':raw.hex()} if method=='GET' else {'ok':True,'message':'saved'}
+        with patch.object(core.bridge,'call',side_effect=fake):
+            r=self.client.post(MOBILE+'/settings',json={'revision':revision,'values':{'coolCl':9}},headers=self.mobile_headers)
+        self.assertEqual(r.status_code,200,r.text)
+        actual=bytes.fromhex(calls[-1][2]['data']);expected=raw[:];expected[1:5]=(9).to_bytes(4,'big')
+        self.assertEqual(actual,bytes(expected))
+        self.assertNotIn(DEVICE,core.managed_locks)
+
+    def test_settings_empty_stale_and_all_hidden(self):
+        rev=self.set_policy([])
+        with patch.object(core.bridge,'call') as call:
+            self.assertEqual(self.client.post(MOBILE+'/settings',json={'revision':rev,'values':{}},headers=self.mobile_headers).status_code,400)
+            self.assertEqual(self.client.post(MOBILE+'/settings',json={'revision':0,'values':{'coolCl':4}},headers=self.mobile_headers).status_code,403)
+            self.assertEqual(self.client.post(MOBILE+'/request',json={'id':secrets.token_hex(16),'method':'GET','path':'/api/runtime-config'},headers=self.mobile_headers).status_code,403)
+            call.assert_not_called()
+
+    def test_hex_rejections_and_owner_security(self):
+        for content in (b'', HEX.replace(b'F2',b'F3'),HEX.splitlines()[0],HEX+HEX,b':0100000400FB\n:00000001FF\n',b'bad'):
+            with self.assertRaises(ValueError):parse_hex(content)
+        self.assertIsInstance(parse_hex(HEX),int)
+        self.assertEqual(self.client.post(ADMIN+'/firmware',content=HEX,headers={'X-Filename':'a.hex','Origin':self.headers['origin']}).status_code,403)
+        r=self.client.post(ADMIN+'/firmware',content=b'x'*98305,headers={**self.headers,'X-Filename':'a.hex'})
+        self.assertEqual(r.status_code,413)
+        other=self.mobile('bob')
+        self.assertEqual(self.client.get(MOBILE+'/access',headers=other).status_code,404)
+        self.assertEqual(self.client.get(ADMIN.replace('/u1/','/u2/')+'/access').status_code,404)
+
+    def test_assignment_revoke_and_no_content_in_mobile_metadata(self):
+        firmware=self.assign()
+        data=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
+        self.assertTrue(data['update_available'])
+        self.assertNotIn('content',data['firmware'])
+        self.assertEqual(data['firmware']['id'],firmware['id'])
+        self.assertEqual(self.client.post(ADMIN+'/firmware/revoke',json={},headers=self.headers).status_code,200)
+        self.assertFalse(self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()['update_available'])
+
+    def start_job(self):
+        firmware=self.assign();job=secrets.token_hex(16)
+        with patch.object(core,'managed_spawn') as spawn:
+            r=self.client.post(MOBILE+'/update',json={'id':job,'release':firmware['id']},headers=self.mobile_headers)
+            self.assertEqual(r.status_code,200,r.text)
+            args=spawn.call_args.args
+        return firmware,job,args
+
+    def test_repeated_update_locked_and_idempotent(self):
+        firmware,job,args=self.start_job()
+        with patch.object(core,'managed_spawn') as spawn:
+            data={'id':job,'release':firmware['id']}
+            self.assertEqual(self.client.post(MOBILE+'/update',json=data,headers=self.mobile_headers).status_code,200)
+            data['id']=secrets.token_hex(16)
+            self.assertEqual(self.client.post(MOBILE+'/update',json=data,headers=self.mobile_headers).status_code,409)
+            self.assertEqual(self.client.post(MOBILE.replace('/devices/','/')+'/remove',json={},headers=self.mobile_headers).status_code,409)
+            self.assertEqual(self.client.post(ADMIN+'/firmware/revoke',json={},headers=self.headers).status_code,409)
+            self.assertEqual(self.client.post(ADMIN+'/access',json={'visible':[],'revision':0},headers=self.headers).status_code,409)
+            spawn.assert_not_called()
+
+    def test_worker_success_only_after_program_and_verify(self):
+        firmware,job,args=self.start_job();calls=[];device_job=0
+        def fake(row,uid,rid,method,path,body,lease=None):
+            nonlocal device_job
+            self.assertEqual(lease,job);calls.append(path)
+            image={'generation':7,'crc32':parse_hex(HEX)}
+            if path=='/internal/upload':return {'ok':True,'image':image}
+            if path in ('/api/program','/api/verify'):
+                device_job+=1;return {'ok':True,'accepted':True,'job_id':device_job}
+            return {'ok':True,'busy':False,'job_id':device_job,'image':image,'last_error':'ESP_OK'}
+        with patch.object(core.bridge,'call',side_effect=fake),patch('managed.time.sleep'):
+            core.managed_worker(*args)
+        result=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
+        self.assertEqual(result['job']['state'],'success');self.assertFalse(result['update_available'])
+        self.assertEqual(calls.count('/api/program'),1);self.assertEqual(calls.count('/api/verify'),1)
+        self.assertNotIn(DEVICE,core.managed_locks);self.assertFalse(core.uploads)
+
+    def test_worker_mismatch_never_programs_or_claims_success(self):
+        firmware,job,args=self.start_job();paths=[]
+        def fake(row,uid,rid,method,path,body,lease=None):
+            paths.append(path)
+            return {'ok':True,'busy':False,'image':{'generation':1,'crc32':0}}
+        with patch.object(core.bridge,'call',side_effect=fake):core.managed_worker(*args)
+        data=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
+        self.assertEqual(data['job']['state'],'unknown');self.assertTrue(data['update_available'])
+        self.assertNotIn('/api/program',paths)
+        self.assertEqual(self.client.post(MOBILE+'/update',json={'id':secrets.token_hex(16),'release':firmware['id']},headers=self.mobile_headers).status_code,409)
+        self.assertNotIn(DEVICE,core.managed_locks)
+
+
+if __name__=='__main__':
+    try:
+        suite=unittest.defaultTestLoader.loadTestsFromTestCase(AdminTests)
+        suite.addTests(ManagedTests(name) for name in ManagedTests.__dict__ if name.startswith('test_'))
+        result=unittest.TextTestRunner(verbosity=2).run(suite)
+    finally:
+        core.db.close();temporary.cleanup()
+    raise SystemExit(not result.wasSuccessful())

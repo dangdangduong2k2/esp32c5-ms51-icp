@@ -163,6 +163,9 @@ def install(app, core):
             db.commit()
         return {"ok": True}
 
+    from managed import install as install_managed
+    install_managed(app, core, identity, audit)
+
     def device_view(row):
         return {"id": row["id"], "name": row["name"], "online": core.online(row), "last_seen": row["seen"]}
 
