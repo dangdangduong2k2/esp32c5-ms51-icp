@@ -106,7 +106,6 @@ public final class MainActivity extends Activity {
     private TextView messageView;
     private TextView dashboardConnection;
     private TextView dashboardMode;
-    private TextView dashboardVariables;
     private TextView dashboardLogs;
     private long[] lastHistory;
     private long nextHistoryRead;
@@ -850,9 +849,9 @@ public final class MainActivity extends Activity {
             try {
                 JSONObject status = session.get("/api/status");
                 String identity = DeviceStore.identity(status);
-                if (identity.isEmpty()) throw new IOException("Thiết bị cần firmware hỗ trợ mã MAC để ghép nối.");
+                if (identity.isEmpty()) throw new IOException("Thiết bị cần được cập nhật trước khi ghép nối.");
                 if(status.optJSONObject("cloud")==null || status.getJSONObject("cloud").optInt("protocol")!=1)
-                    throw new IOException("Cần nạp firmware MS51 Connect 3.0 lên C5 trước khi ghép tài khoản máy chủ.");
+                    throw new IOException("Thiết bị cần được cập nhật để kết nối với tài khoản. Hãy liên hệ người quản lý.");
                 runOnUiThread(() -> {
                     if (!currentSetup(token) || screen != Screen.CONNECT_DEVICE) return;
                     pairingDeviceId = identity; pairingHostname = DeviceStore.hostname(status);
@@ -985,11 +984,11 @@ public final class MainActivity extends Activity {
         screen = Screen.CONTROL;
         tab = selectedTab;
         String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt vận hành"
-                : tab == Tab.FIRMWARE ? "Nạp chương trình" : "Thiết bị của bạn";
+                : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị của bạn";
         LinearLayout content = createPage("KHÔNG GIAN THIẾT BỊ", title,
                 tab == Tab.OVERVIEW ? "Theo dõi bộ điều khiển, ngay trong tầm tay."
                 : tab == Tab.SETTINGS ? "Tinh chỉnh cho từng nhu cầu vận hành."
-                : tab == Tab.FIRMWARE ? "Cập nhật và quản lý chương trình MS51."
+                : tab == Tab.FIRMWARE ? "Cập nhật phiên bản mới cho thiết bị."
                 : "Thông tin kết nối và bộ điều khiển.");
         TextView deviceName = mutedText(activeDevice == null ? "" : activeDevice.name);
         deviceName.setTextColor(Design.TEAL); content.addView(deviceName, fullParams(0,0,0,12));
@@ -1019,7 +1018,7 @@ public final class MainActivity extends Activity {
         row.setElevation(dp(12));
         addNavButton(row, Tab.OVERVIEW, "Tổng quan", "home");
         addNavButton(row, Tab.SETTINGS, "Cài đặt", "settings");
-        addNavButton(row, Tab.FIRMWARE, "Firmware", "upload");
+        addNavButton(row, Tab.FIRMWARE, "Cập nhật", "upload");
         addNavButton(row, Tab.DEVICE, "Thiết bị", "chip");
         pageRoot.addView(row, fullParams(0, 0, 0, 0));
     }
@@ -1059,7 +1058,7 @@ public final class MainActivity extends Activity {
     private void buildOverview(LinearLayout content) {
         LinearLayout hero = card(); hero.setBackground(new Design.Hero());
         hero.setPadding(dp(22), dp(22), dp(22), dp(22));
-        TextView caption = mutedText("BỘ ĐIỀU KHIỂN  /  MS51");
+        TextView caption = mutedText("BỘ ĐIỀU KHIỂN");
         caption.setTextColor(0xFFB9D0DD); caption.setLetterSpacing(.10f); hero.addView(caption);
         dashboardMode = valueText("Đang chờ dữ liệu"); dashboardMode.setTextSize(29);
         dashboardMode.setTextColor(Color.WHITE); hero.addView(dashboardMode, fullParams(0, 15, 0, 7));
@@ -1074,15 +1073,12 @@ public final class MainActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
         addQuickAction(actions, "Làm mới", "refresh", () -> { nextHistoryRead = 0; refreshDashboard(); });
-        addQuickAction(actions, "Cài đặt", "settings", () -> showControl(Tab.SETTINGS));
-        addQuickAction(actions, "Nạp tệp", "upload", () -> showControl(Tab.FIRMWARE));
-        addQuickAction(actions, "Kết nối", "wifi", () -> showControl(Tab.DEVICE));
         content.addView(actions, fullParams(0, 0, 0, 20));
 
         addSectionTitle(content, "Thời gian hiển thị");
         LinearLayout timers = new LinearLayout(this); timers.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout green = timerCard("LED XANH", "green", 0xFF008978);
-        LinearLayout red = timerCard("LED ĐỎ", "red", 0xFFCF5A68);
+        LinearLayout green = timerCard("MÀN HÌNH XANH", "green", 0xFF008978);
+        LinearLayout red = timerCard("MÀN HÌNH ĐỎ", "red", 0xFFCF5A68);
         LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -2, 1); left.setMargins(0,0,dp(6),0);
         LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, -2, 1); right.setMargins(dp(6),0,0,0);
         timers.addView(green,left); timers.addView(red,right);
@@ -1100,12 +1096,8 @@ public final class MainActivity extends Activity {
         }
         relayCard.addView(relays, fullParams(0, 10, 0, 0));
         content.addView(relayCard, fullParams(0, 0, 0, 16));
-        LinearLayout variables = card(); addSectionTitle(variables,"Dữ liệu trực tiếp");
-        dashboardVariables=monospaceText("Đang chờ dữ liệu…");
-        variables.addView(dashboardVariables,fullParams(0,8,0,0));
-        content.addView(variables,fullParams(0,0,0,16));
         LinearLayout logs = card(); addSectionTitle(logs,"Nhật ký thiết bị");
-        addHelp(logs, "Thời lượng đã lưu trên MS51 · 30 vị trí L00–L29\nL00 là lần lưu gần nhất. Vị trí trống được ẩn.");
+        addHelp(logs, "Thời gian đã lưu · Mới nhất ở L00");
         dashboardLogs=monospaceText("Đang chờ dữ liệu…");
         dashboardLogs.setLineSpacing(dp(10), 1f);
         logs.addView(dashboardLogs,fullParams(0,8,0,0));
@@ -1184,20 +1176,17 @@ public final class MainActivity extends Activity {
         if (dashboardConnection == null) return;
         JSONObject uplink = getUplink(status);
         String ssid = uplink.optString("ssid", uplinkSsid);
-        String ip = uplink.optString("ip", uplinkIp);
         String network = ssid.isEmpty() ? "Chưa nhận Wi‑Fi" : ssid;
-        dashboardConnection.setText(network + (ip.isEmpty() ? "" : "  ·  IP " + ip));
+        dashboardConnection.setText(network);
 
         if (debug == null || !debug.optBoolean("enabled", false)) {
-            dashboardMode.setText("Đang chờ dữ liệu UART");
+            dashboardMode.setText("Đang chờ dữ liệu");
             greenDisplay.setValue(null); redDisplay.setValue(null);
             for (int index = 0; index < relayViews.length; index++) setRelay(relayViews[index], index + 1, null);
-            dashboardVariables.setText("Chưa có biến nào từ MS51.");
             return;
         }
         JSONArray variables = debug.optJSONArray("variables");
         Map<String, String> values = new HashMap<>();
-        StringBuilder list = new StringBuilder();
         if (variables != null) {
             for (int index = 0; index < variables.length(); index++) {
                 JSONObject item = variables.optJSONObject(index);
@@ -1206,8 +1195,6 @@ public final class MainActivity extends Activity {
                 String value = String.valueOf(item.opt("value"));
                 if (name.isEmpty()) continue;
                 values.put(name.toLowerCase(Locale.US), value);
-                if (list.length() > 0) list.append('\n');
-                list.append(name).append("   ").append(value);
             }
         }
         String mode = values.get("mode");
@@ -1217,7 +1204,6 @@ public final class MainActivity extends Activity {
         setRelay(relayViews[0], 1, values.get("relay1"));
         setRelay(relayViews[1], 2, values.get("relay2"));
         setRelay(relayViews[2], 3, values.get("relay3"));
-        dashboardVariables.setText(list.length() == 0 ? "Chưa có biến nào từ MS51." : list.toString());
 
     }
 
@@ -1233,7 +1219,12 @@ public final class MainActivity extends Activity {
         if (relay == null) return;
         boolean known = rawValue != null && !"null".equals(rawValue);
         boolean on = known && ("on".equalsIgnoreCase(rawValue) || "1".equals(rawValue) || "true".equalsIgnoreCase(rawValue));
-        relay.setText("RL" + number + "\n" + (known ? (on ? "BẬT" : "TẮT") : "—"));
+        relay.setText("Rơ-le " + number + "\n" + (known ? (on ? "BẬT" : "TẮT") : "Chờ dữ liệu"));
+        Design.Icon symbol = new Design.Icon("power", on ? Design.TEAL : Design.MUTED);
+        symbol.setBounds(0, 0, dp(30), dp(30));
+        relay.setCompoundDrawables(null, symbol, null, null);
+        relay.setCompoundDrawablePadding(dp(10));
+        relay.setContentDescription("Rơ-le " + number + (known ? (on ? " đang bật" : " đang tắt") : " đang chờ dữ liệu"));
         relay.setTextColor(on ? Design.TEAL : Design.MUTED);
         relay.setBackground(rounded(on ? 0xFFE0F4EC : 0xFFF1F4F7, dp(14)));
     }
@@ -1249,7 +1240,7 @@ public final class MainActivity extends Activity {
         pinDependentViews.clear();
         LinearLayout intro = card();
         addSectionTitle(intro, "Cài đặt vận hành");
-        addHelp(intro, "Đọc cài đặt đang dùng trước khi sửa. Khi lưu, MS51 sẽ tự khởi động lại.");
+        addHelp(intro, "Đọc cài đặt đang dùng trước khi sửa. Khi lưu, thiết bị sẽ tự khởi động lại.");
         LinearLayout topRow = new LinearLayout(this); topRow.setOrientation(LinearLayout.HORIZONTAL);
         Button read = neutralButton("Đọc cài đặt");
         read.setOnClickListener(v -> loadRuntimeConfig());
@@ -1322,7 +1313,7 @@ public final class MainActivity extends Activity {
         CheckBox periodShow = addCheckField(pin, "Hiện phần chỉnh chu kỳ mật khẩu", "pinPeriodShow", true);
         pinDependentViews.add(periodShow);
         pinEnable.setOnCheckedChangeListener((buttonView, isChecked) -> syncPinControls());
-        addHelp(pin, "Chỉ các mục được admin cấp quyền mới có thể chỉnh sửa.");
+        addHelp(pin, "Chỉ các mục được người quản lý cấp quyền mới có thể chỉnh sửa.");
         content.addView(pin, fullParams(0, 12, 0, 0));
         for (LinearLayout section : new LinearLayout[]{timing, modes, ranges, pin}) {
             boolean hasFields = false;
@@ -1394,7 +1385,7 @@ public final class MainActivity extends Activity {
     }
 
     private void loadRuntimeConfig() {
-        showMessage("Đang đọc cài đặt từ MS51…");
+        showMessage("Đang đọc cài đặt…");
         final int controlToken = controlEpoch;
         final EspApi session = api.snapshot(15000);
         io.execute(() -> {
@@ -1406,7 +1397,7 @@ public final class MainActivity extends Activity {
                     runtimeConfig = decoded;
                     configLoaded = true;
                     applyRuntimeConfigToViews();
-                    showMessage(response.optString("message", "Đã đọc cài đặt."));
+                    showMessage("Đã đọc cài đặt.");
                 });
             } catch (Exception error) {
                 onControl(controlToken, () -> showMessage(errorMessage(error)));
@@ -1430,7 +1421,7 @@ public final class MainActivity extends Activity {
             showMessage(errorMessage(error));
             return;
         }
-        showMessage("Đang lưu cài đặt. MS51 sẽ khởi động lại…");
+        showMessage("Đang lưu cài đặt. Thiết bị sẽ khởi động lại…");
         final int controlToken = controlEpoch;
         final CloudApi cloud = accounts.api();
         final String device = activeDevice.id;
@@ -1442,7 +1433,7 @@ public final class MainActivity extends Activity {
                         new JSONObject().put("revision", revision).put("values", visibleValues));
                 onControl(controlToken, () -> {
                     runtimeConfig = new RuntimeConfigCodec.Config(runtimeConfig.raw, values);
-                    showMessage(response.optString("message", "Đã lưu cài đặt."));
+                    showMessage("Đã lưu cài đặt.");
                 });
             } catch (Exception error) {
                 onControl(controlToken, () -> showMessage(errorMessage(error)));
@@ -1512,7 +1503,7 @@ public final class MainActivity extends Activity {
     private void loadManagedTab(LinearLayout content, Tab selected) {
         if (demoMode) {
             if (selected == Tab.SETTINGS) buildSettings(content);
-            else { LinearLayout card=card(); addSectionTitle(card,"Firmware MS51"); addHelp(card,"Không có phiên bản cập nhật."); content.addView(card); }
+            else { LinearLayout card=card(); addSectionTitle(card,"Cập nhật thiết bị"); addHelp(card,"Không có phiên bản cập nhật."); content.addView(card); }
             return;
         }
         final int controlToken=controlEpoch, viewToken=accessViewEpoch;
@@ -1549,7 +1540,7 @@ public final class MainActivity extends Activity {
                     onControl(controlToken, () -> {
                         if(viewToken!=accessViewEpoch) return;
                         if(fresh.optInt("revision",-1)!=deviceAccess.optInt("revision",-1)) {
-                            deviceAccess=fresh; showMessage("Admin vừa thay đổi quyền. Cài đặt được tải lại."); showControl(Tab.SETTINGS);
+                            deviceAccess=fresh; showMessage("Người quản lý vừa thay đổi quyền. Cài đặt được tải lại."); showControl(Tab.SETTINGS);
                         } else watchSettingsPolicy(controlToken,viewToken);
                     });
                 } catch(Exception error) { onControl(controlToken, () -> {
@@ -1560,29 +1551,29 @@ public final class MainActivity extends Activity {
     }
 
     private void buildManagedFirmware(LinearLayout content, JSONObject access, int viewToken) {
-        LinearLayout box=card(); addSectionTitle(box,"Firmware MS51"); content.addView(box,fullParams(0,0,0,0));
+        LinearLayout box=card(); addSectionTitle(box,"Cập nhật thiết bị"); content.addView(box,fullParams(0,0,0,0));
         JSONObject firmware=access.optJSONObject("firmware"), job=access.optJSONObject("job");
         boolean same=firmware!=null && job!=null && firmware.optString("id").equals(job.optString("release"));
         boolean running=same && "running".equals(job.optString("state"));
         boolean unknown=same && "unknown".equals(job.optString("state"));
         if (running || unknown) {
-            addHelp(box,job.optString("message", "Đang cập nhật…"));
-            if (unknown) addHelp(box,"Cần admin kiểm tra thiết bị rồi cấp lại bản cập nhật.");
+            addHelp(box,plainMessage(job.optString("message", "Đang cập nhật…")));
+            if (unknown) addHelp(box,"Cần người quản lý kiểm tra và cấp lại bản cập nhật.");
         } else if (access.optBoolean("update_available") && firmware!=null) {
-            addHelp(box,"Đã có bản chương trình được quản trị viên cấp cho thiết bị này.");
+            addHelp(box,"Đã có phiên bản mới cho thiết bị.");
             Button update=primaryButton("Cập nhật"); box.addView(update,fullParams(0,12,0,0));
             update.setEnabled(!managedUpdateStarting);
             update.setOnClickListener(v -> {
                 if (managedUpdateStarting) return;
-                new AlertDialog.Builder(this).setTitle("Cập nhật chương trình?")
-                    .setMessage("Giữ nguồn và Internet của thiết bị trong khi nạp. MS51 sẽ tạm dừng vận hành để cập nhật.")
+                new AlertDialog.Builder(this).setTitle("Cập nhật thiết bị?")
+                    .setMessage("Giữ nguồn và Internet trong khi cập nhật. Thiết bị sẽ tạm dừng vận hành.")
                     .setNegativeButton("Hủy",null).setPositiveButton("Cập nhật",(dialog,which) -> {
                         if(viewToken==accessViewEpoch) startManagedUpdate(firmware.optString("id"),update);
                     }).show();
             });
         } else addHelp(box,"Không có phiên bản cập nhật.");
-        if (same && "success".equals(job.optString("state"))) addHelp(box,job.optString("message"));
-        if (same && "failed".equals(job.optString("state"))) addHelp(box,job.optString("message"));
+        if (same && "success".equals(job.optString("state"))) addHelp(box,plainMessage(job.optString("message")));
+        if (same && "failed".equals(job.optString("state"))) addHelp(box,plainMessage(job.optString("message")));
         final int controlToken=controlEpoch;
         mainHandler.postDelayed(() -> {
             if(!currentControl(controlToken) || viewToken!=accessViewEpoch || tab!=Tab.FIRMWARE || managedUpdateStarting) return;
@@ -1629,12 +1620,12 @@ public final class MainActivity extends Activity {
     private void uploadFirmware() {
         if (demoMode) { showMessage("Chế độ xem thử: không tải tệp lên thiết bị."); return; }
         if (selectedFirmwareUri == null || selectedFirmwareName.isEmpty()) {
-            showMessage("Hãy chọn tệp HEX hoặc BIN trước.");
+            showMessage("Hãy chọn tệp cập nhật trước.");
             return;
         }
         String lower = selectedFirmwareName.toLowerCase(Locale.US);
         if (!(lower.endsWith(".hex") || lower.endsWith(".ihex") || lower.endsWith(".ihx") || lower.endsWith(".bin"))) {
-            showMessage("Thiết bị chỉ nhận tệp .hex, .ihex, .ihx hoặc .bin.");
+            showMessage("Tệp cập nhật không được hỗ trợ.");
             return;
         }
         showMessage("Đang gửi " + selectedFirmwareName + " vào thiết bị…");
@@ -1663,21 +1654,18 @@ public final class MainActivity extends Activity {
     }
 
     private void readChipInfo() {
-        showMessage("Đang đọc thông tin MS51…");
+        showMessage("Đang kiểm tra thiết bị…");
         final int controlToken = controlEpoch;
         final EspApi session = api.snapshot(15000);
         io.execute(() -> {
             if (!currentControl(controlToken)) return;
             try {
                 JSONObject response = session.post("/api/info", new JSONObject());
-                String info = "PDID: " + response.optInt("pdid", 0)
-                        + "\nDevice ID: " + response.optInt("device_id", 0)
-                        + "\nKhóa chip: " + (response.optBoolean("locked", false) ? "Có" : "Không")
-                        + "\nAPROM: " + response.optInt("aprom_size", 0) + " bytes";
+                String info = "Đã kết nối bộ điều khiển.";
                 onControl(controlToken, () -> {
                     if (firmwareInfo != null) firmwareInfo.setText(info);
                     if (deviceInfo != null) deviceInfo.setText(info);
-                    showMessage(response.optString("message", "Đã đọc thông tin MS51."));
+                    showMessage("Đã kiểm tra thiết bị.");
                 });
             } catch (Exception error) {
                 onControl(controlToken, () -> showMessage(errorMessage(error)));
@@ -1712,7 +1700,7 @@ public final class MainActivity extends Activity {
     private void runJob(String action, boolean needsImage, boolean destructive) {
         if (demoMode) { showMessage("Chế độ xem thử: không gửi lệnh đến thiết bị."); return; }
         if (needsImage && imageGeneration <= 0) {
-            showMessage("Hãy gửi tệp firmware vào thiết bị trước.");
+            showMessage("Hãy gửi bản cập nhật vào thiết bị trước.");
             return;
         }
         showMessage("Thiết bị đang thực hiện: " + jobLabel(action));
@@ -1766,8 +1754,7 @@ public final class MainActivity extends Activity {
         addSectionTitle(networkCard, "Kết nối hiện tại");
         JSONObject uplink = getUplink(lastStatus);
         addValueLine(networkCard, "Wi‑Fi", blankForDash(uplink.optString("ssid", uplinkSsid)));
-        addValueLine(networkCard, "IP của thiết bị", blankForDash(uplink.optString("ip", uplinkIp)));
-        addValueLine(networkCard, "Tín hiệu", uplink.has("rssi") ? uplink.optInt("rssi", 0) + " dBm" : "—");
+        addValueLine(networkCard, "Tín hiệu", uplink.has("rssi") ? (uplink.optInt("rssi", -100) >= -60 ? "Tốt" : uplink.optInt("rssi", -100) >= -75 ? "Trung bình" : "Yếu") : "—");
         Button refresh = neutralButton("Làm mới trạng thái");
         refresh.setOnClickListener(v -> refreshDeviceStatus());
         networkCard.addView(refresh, fullParams(0, 10, 0, 0));
@@ -1781,17 +1768,16 @@ public final class MainActivity extends Activity {
         content.addView(networkCard, fullParams(0, 0, 0, 0));
 
         LinearLayout chipCard = card();
-        addSectionTitle(chipCard, "Thông tin MS51");
-        deviceInfo = monospaceText("Bấm Đọc thông tin MS51 để kiểm tra chip.");
+        addSectionTitle(chipCard, "Kiểm tra thiết bị");
+        deviceInfo = monospaceText("Kiểm tra kết nối với bộ điều khiển.");
         chipCard.addView(deviceInfo, fullParams(0, 2, 0, 0));
-        Button info = neutralButton("Đọc thông tin MS51");
+        Button info = neutralButton("Kiểm tra kết nối");
         info.setOnClickListener(v -> readChipInfo());
         chipCard.addView(info, fullParams(0, 10, 0, 0));
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.0.2 • Kết nối qua Internet");
-        addHelp(about, "NTC 10k chưa được firmware hiện tại hỗ trợ.");
+        addHelp(about, "Phiên bản 3.1.2 • Kết nối qua Internet");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {
             try (InputStream stream = getAssets().open("LICENSE.txt")) {
@@ -1905,7 +1891,9 @@ public final class MainActivity extends Activity {
             case "COOL": case "COOLING": return "Đang làm lạnh";
             case "DEFROST": case "ICE_FLUSH": return "Đang xả đá";
             case "IDLE": case "STOP": return "Đang chờ";
-            default: return mode;
+            case "SETTING": case "ADVANCE_SETTING": return "Đang cài đặt";
+            case "PASSWORD_CONFIG": return "Đang cài mật khẩu";
+            default: return "Đang chờ dữ liệu";
         }
     }
 
@@ -2130,7 +2118,14 @@ public final class MainActivity extends Activity {
 
     private static String errorMessage(Exception error) {
         String message = error == null ? "Có lỗi không xác định." : error.getMessage();
-        return message == null || message.trim().isEmpty() ? "Có lỗi không xác định." : message;
+        return message == null || message.trim().isEmpty() ? "Có lỗi không xác định." : plainMessage(message);
+    }
+
+    private static String plainMessage(String text) {
+        return text.replace("firmware", "bản cập nhật").replace("Firmware", "Bản cập nhật")
+                .replace("UART", "thiết bị").replace("MQTT", "kết nối").replace("MS51", "bộ điều khiển")
+                .replace("admin", "người quản lý").replace("Admin", "Người quản lý")
+                .replace("CRC", "mã kiểm tra").replace("generation", "phiên bản");
     }
 
     private static String jobLabel(String action) {

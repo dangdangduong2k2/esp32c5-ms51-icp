@@ -1,0 +1,18 @@
+{
+  "version": "3.1.2",
+  "version_code": 14,
+  "apk_sha256": "f7358e0b933da620a6df7a83b7e59785bfbff4e79977cb089f0fbaf0b50f6fdf",
+  "android_tests": {
+    "ok": true,
+    "platform": "Android 35 emulator",
+    "checks": [
+      "existing managed permissions and update regression",
+      "existing saved history regression",
+      "upgrade installation, same signing key",
+      "overview screenshot inspected: refresh only, no direct data card, three relay icons with on/off/unknown labels"
+    ]
+  },
+  "preview": "overview-preview.png (illustrative data, not live device readings)",
+  "server_changed": false,
+  "firmware_changed": false
+}

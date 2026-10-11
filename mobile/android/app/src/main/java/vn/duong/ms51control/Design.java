@@ -65,6 +65,9 @@ final class Design {
                 case "arrow": path(c,5,12,19,12); path(c,14,7,19,12,14,17); break;
                 case "refresh":
                     c.drawArc(4,4,20,20,40,285,false,p); path(c,16,3,20,5,19,9); break;
+                case "power":
+                    c.drawArc(4,4,20,21,310,280,false,p);
+                    c.drawLine(12,2,12,12,p); break;
                 case "shield":
                     path(c,12,3,20,6,19,15,16,19,12,22,8,19,5,15,4,6,12,3);
                     path(c,8,12,11,15,16,9); break;

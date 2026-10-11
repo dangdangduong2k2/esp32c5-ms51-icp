@@ -1,5 +1,11 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.1.2 · Giao diện gọn hơn
+
+[Tải MS51 Connect 3.1.2 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.2/MS51-Connect-3.1.2.apk)
+
+Tổng quan chỉ giữ nút Làm mới, bỏ ba lối tắt phía sau và bảng Dữ liệu trực tiếp. Ba rơ-le có biểu tượng nguồn, màu xanh khi bật, xám khi tắt hoặc đang chờ dữ liệu; nhãn trạng thái phân biệt rõ từng trường hợp. Tab Firmware đổi thành Cập nhật; các thông báo kết nối và thông tin thiết bị dùng cách gọi dễ hiểu. Cài đè APK 3.1.1, không cần cập nhật máy chủ hoặc nạp lại chip.
+
 ## Bản thử nghiệm 3.1.1 · Nhật ký thời lượng MS51
 
 [Tải MS51 Connect 3.1.1 APK](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.1/MS51-Connect-3.1.1.apk) · [Kiểm thử](docs/ms51-connect-3.1.1/test-results.json)

@@ -75,6 +75,26 @@ final class ManagedChecks {
                     invoke(a,"clearDeviceState",new Class[]{});
                     check(get(a,"lastHistory")==null && ((long)get(a,"nextHistoryRead"))==0,"Device switch clears history");
                     check(DeviceHistory.text(new long[30]).contains("Chưa có"),"Empty history explicit");
+                    // Save an offline preview of the actual views for visual review.
+                    EspApi demo=new EspApi(); demo.setDemo(true);
+                    set(a,"lastStatus",demo.get("/api/status"));
+                    JSONObject preview=demo.get("/api/debug");
+                    preview.getJSONArray("variables").remove(5); // third relay awaits data
+                    set(a,"lastDebug",preview);
+                    long[] sample=new long[30]; sample[0]=7620; sample[1]=5460; sample[2]=8400;
+                    set(a,"lastHistory",sample);
+                    LinearLayout page=new LinearLayout(a);page.setOrientation(LinearLayout.VERTICAL);
+                    page.setPadding(32,32,32,32);page.setBackgroundColor(Design.BG);
+                    invoke(a,"addNavigation",new Class[]{LinearLayout.class},page);
+                    invoke(a,"buildOverview",new Class[]{LinearLayout.class},page);
+                    page.measure(View.MeasureSpec.makeMeasureSpec(1080,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
+                    page.layout(0,0,1080,page.getMeasuredHeight());
+                    android.graphics.Bitmap shot=android.graphics.Bitmap.createBitmap(1080,page.getMeasuredHeight(),android.graphics.Bitmap.Config.ARGB_8888);
+                    page.draw(new android.graphics.Canvas(shot));
+                    try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(a.getExternalFilesDir(null),"overview-preview.png"))) {
+                        shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);
+                    }
+                    shot.recycle();
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());

@@ -1,6 +1,8 @@
-# MS51 Connect 3.1.1
+# MS51 Connect 3.1.2
 
-Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 13, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 14, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+
+3.1.2 giản lược Tổng quan: chỉ giữ Làm mới, bỏ ba lối tắt và Dữ liệu trực tiếp. Rơ-le 1–3 có icon nguồn đổi màu theo trạng thái, luôn đi cùng chữ BẬT/TẮT/Chờ dữ liệu để không phụ thuộc màu sắc. Các nhãn UART/Firmware, thông tin chip và mạng được thay bằng ngôn ngữ thông thường. Bốn tab điều hướng vẫn có đủ Tổng quan, Cài đặt, Cập nhật và Thiết bị. Không thay đổi API hoặc dữ liệu thiết bị.
 
 3.1.1 đổi Nhật ký thiết bị từ log trạng thái UART sang 30 thời lượng đã lưu trong MS51 (L00–L29). Giá trị 100 ms được đổi sang phút/giây; không tạo ngày giờ giả. Vị trí bằng 0 được ẩn; mảng vẫn giữ đúng số L sau khi chỉ số ghi quay vòng. Đọc mỗi 15 giây trong Tổng quan, hoặc bấm Làm mới; phản hồi trễ bị loại khi đổi màn hình/thiết bị. Mất kết nối giữ bản đọc trước có nhãn rõ ràng. Endpoint cloud riêng chỉ trả về lịch sử, dùng được khi cài đặt bị ẩn, không trả byte cấu hình/PIN. Không cần nạp firmware với bản UART hiện có. Xem [giao thức và kiểm thử](../../docs/ms51-connect-3.1.1/history.md).
 
@@ -22,7 +24,7 @@ Wi-Fi nhà dùng kết nối Internet thông thường của Android/cài đặt
 
 ## Sử dụng
 
-1. Cài APK 3.1.1, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.x giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
+1. Cài APK 3.1.2, đăng ký tài khoản hoặc đăng nhập. Cài đè bản 3.x giữ tài khoản và thiết bị đã ghép. Tài khoản cục bộ 2.2 cần đăng ký lại một lần; dữ liệu cũ không bị xóa.
 2. Trang đầu hiển thị các thiết bị đã ghép, với trạng thái MQTT hiện tại. Tài khoản dùng được trên nhiều điện thoại.
 3. Bấm **Thêm thiết bị** → **Tìm Wi-Fi thiết bị** → chọn AP `MS51-PROGRAMMER-<MAC>` → **Quét Wi-Fi** → chọn mạng → nhập mật khẩu. Có nút con mắt và hỗ trợ 5 GHz trên C5.
 4. Bấm **Tiếp tục** để điện thoại vào mạng đích. App kiểm tra MAC/SSID rồi yêu cầu bo chứng minh kết nối MQTT trước khi ghi vào tài khoản.
