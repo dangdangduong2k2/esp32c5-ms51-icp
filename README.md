@@ -42,6 +42,8 @@ MS51 trên bo thử nghiệm vẫn được mô phỏng bằng C5; **chưa hỗ 
 
 ## Firmware nạp ICP gốc (ESP32-C5)
 
+Bản chân **DAT = GPIO2, CLK = GPIO3, RS = GPIO4** có bộ ba file để nạp tại ESP Tool của Espressif. Xem [sơ đồ chân, địa chỉ nạp và cách build](docs/hardware/c5-dat2-clk3-rs4.md). Bản mặc định DAT1/CLK0/RS3 vẫn giữ nguyên.
+
 Project ESP-IDF này dùng ESP32-C5 để nhận dạng, xóa, ghi và kiểm tra APROM của
 MS51FC0AE qua ba chân nạp ICP:
 

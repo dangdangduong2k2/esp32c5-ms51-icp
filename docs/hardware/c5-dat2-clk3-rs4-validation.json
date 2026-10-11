@@ -1,0 +1,45 @@
+{
+  "variant": "esp32c5-dat2-clk3-rs4",
+  "pins": {
+    "DAT": 2,
+    "CLK": 3,
+    "RS": 4
+  },
+  "settings": {
+    "flash_mode": "dio",
+    "flash_size": "4MB",
+    "flash_freq": "80m"
+  },
+  "checks": [
+    "ESP32-C5 target and generated GPIO definitions",
+    "runtime data enabled, automatic programming disabled",
+    "partition checksum, bounds and flash size",
+    "app fits factory partition",
+    "three offsets match IDF flasher_args.json",
+    "NVS layout unchanged",
+    "esptool bootloader checksum and SHA256 validation passed",
+    "esptool application checksum and SHA256 validation passed"
+  ],
+  "files": [
+    {
+      "address": "0x2000",
+      "name": "bootloader.bin",
+      "size": 22224,
+      "sha256": "6f2d971f9cf801d3d275ec62bffe5185cb897e270bdc5f49f5c40323ab786c17"
+    },
+    {
+      "address": "0x8000",
+      "name": "partition-table.bin",
+      "size": 3072,
+      "sha256": "a051e6e82b5380e3647d1dbc8a0217c359da226970eb94f2cb0b864d9a712d43"
+    },
+    {
+      "address": "0x10000",
+      "name": "esp32c5-dat2-clk3-rs4.bin",
+      "size": 1447120,
+      "sha256": "e4a6dc7d97073363211b1c3cd7dc70d1d22da359b838ad457f1e0da10ff4bcb2"
+    }
+  ],
+  "hardware_tested": false,
+  "chip_revision": "1.0 through 1.99"
+}
