@@ -1,0 +1,38 @@
+{
+  "version": "3.1.4",
+  "version_code": 16,
+  "apk_sha256": "79dd4a662d2b4b3147b5a819e6fb8655508153842cce7d1b166751f1c5f93475",
+  "android_tests": {
+    "ok": true,
+    "platform": "Android API 35 emulator",
+    "checks": [
+      "temperature on both GPIO1 and GPIO6, negative/zero/normal/upper limit",
+      "open/short/out-of-range/stale/null/old-firmware states",
+      "managed settings and updates regression",
+      "saved history regression",
+      "independent of MS51 debug telemetry",
+      "same signing certificate and upgrade install"
+    ],
+    "lint_errors": 0
+  },
+  "server_changed": false,
+  "ms51_changed": false,
+  "hardware_tested": false,
+  "firmware": {
+    "build": true,
+    "chip": "esp32c5",
+    "pins": {
+      "DAT": 1,
+      "CLK": 0,
+      "RS": 3,
+      "NTC": 6
+    },
+    "adc_unit": 1,
+    "adc_channel": 5,
+    "image_checksum_valid": true,
+    "image_hash_valid": true,
+    "app_bytes": 1460160,
+    "factory_partition_bytes": 1572864,
+    "hardware_tested": false
+  }
+}

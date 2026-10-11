@@ -1233,7 +1233,8 @@ public final class MainActivity extends Activity {
         if (input == null || !input.optBoolean("enabled")) {
             temperatureNote.setText("Thiết bị chưa hỗ trợ cảm biến này"); return;
         }
-        if (input.optInt("gpio", -1) != 1 || !input.optBoolean("valid") || input.isNull("age_ms")) return;
+        int gpio = input.optInt("gpio", -1);
+        if ((gpio != 1 && gpio != 6) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
         long age = input.optLong("age_ms", -1);
         if (age < 0 || age > 2000) return;
         String sensor = input.optString("sensor");
@@ -1821,7 +1822,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.1.3 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.1.4 • Kết nối qua Internet");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {
             try (InputStream stream = getAssets().open("LICENSE.txt")) {

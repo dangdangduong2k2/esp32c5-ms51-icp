@@ -1,5 +1,11 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.1.4 · Trở lại chân cũ, NTC ở IO6
+
+[Tải APK 3.1.4](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.4/MS51-Connect-3.1.4.apk) · [Bộ ba file C5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.4/ESP32-C5-DAT1-CLK0-RS3-NTC-IO6.zip) · [Hướng dẫn](docs/ms51-connect-3.1.4/README.md)
+
+**DAT = IO1, CLK = IO0, RS = IO3; NTC = IO6.** Nguồn 3,3 V → trở 10 kΩ → IO6 → NTC 10 kΩ B3950 → GND. Cần APK và C5 mới, không cần đổi VPS hoặc nạp MS51. Giao diện giữ nguyên; app vẫn tương thích cảm biến IO1 của bản 3.1.3. Chưa kiểm tra nhiệt độ trên phần cứng ở lần này.
+
 ## Bản thử nghiệm 3.1.3 · Nhiệt độ NTC ở IO1
 
 [Tải APK 3.1.3](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.3/MS51-Connect-3.1.3.apk) · [Bộ ba file C5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.3/ESP32-C5-DAT2-CLK3-RS4-NTC-IO1.zip) · [Đấu dây, preview và kiểm thử](docs/ms51-connect-3.1.3/README.md)

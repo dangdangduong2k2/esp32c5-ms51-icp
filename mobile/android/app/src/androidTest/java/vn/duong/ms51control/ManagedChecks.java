@@ -91,7 +91,8 @@ final class ManagedChecks {
                     page.setPadding(32,32,32,32);page.setBackgroundColor(Design.BG);
                     invoke(a,"addNavigation",new Class[]{LinearLayout.class},page);
                     invoke(a,"buildOverview",new Class[]{LinearLayout.class},page);
-                    for(int temperature:new int[]{-1800,0,2500,12500}) {
+                    for(int gpio:new int[]{1,6}) for(int temperature:new int[]{-1800,0,2500,12500}) {
+                        sensor.put("gpio",gpio);
                         sensor.put("temperature_centi",temperature);
                         invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,null);
                         check(((TextView)get(a,"temperatureValue")).getText().toString().equals(String.format(java.util.Locale.forLanguageTag("vi-VN"),"%.1f °C",temperature/100.0)),"Temperature remains available without MS51 telemetry");
@@ -125,7 +126,7 @@ final class ManagedChecks {
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: managed settings/updates and history regression; temperature normal/negative/zero/open/short/out-of-range/stale/null/old-firmware states, independent of MS51 telemetry.");
+            result.putString("stream","PASS: managed settings/updates and history regression; temperature GPIO1 and GPIO6 normal/negative/zero/open/short/out-of-range/stale/null/old-firmware states, independent of MS51 telemetry.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}
