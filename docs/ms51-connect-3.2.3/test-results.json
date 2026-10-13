@@ -1,0 +1,15 @@
+{
+  "version": "3.2.3",
+  "version_code": 26,
+  "apk_sha256": "37479f8201599566b5b0c20602b2813dc2898ed12b0fde6e74c2b389f82cacb4",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "source_review": "All shield artwork/usages, requested headings and license menu removed; HOME text button calls existing logout handler; empty eyebrow consumes no space",
+    "license_notice": "LICENSE.txt retained in APK assets",
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "scope": "Cosmetic UI cleanup; no new tests or hardware actions"
+  }
+}

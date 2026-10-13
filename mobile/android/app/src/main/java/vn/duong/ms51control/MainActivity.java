@@ -333,7 +333,7 @@ public final class MainActivity extends Activity {
         ++controlEpoch; ++setupEpoch; stopDashboard(); stopHome();
         screen = Screen.HOME; setupBusy = false; openingDevice = false; activeDevice = null;
         clearDeviceState(); api.setExpectedDeviceId(""); api.setCloud(null,""); lastUiMessage = "";
-        LinearLayout content = createPage("THIẾT BỊ CỦA BẠN", "Xin chào, " + username,
+        LinearLayout content = createPage("", "Xin chào, " + username,
                 "Mọi thiết bị, trong một không gian.");
         List<DeviceStore.Device> devices = deviceStore.list(accountId);
         LinearLayout hero = card(); hero.setBackground(new Design.Hero());
@@ -1007,8 +1007,8 @@ public final class MainActivity extends Activity {
         screen = Screen.CONTROL;
         tab = selectedTab;
         String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt vận hành"
-                : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị của bạn";
-        LinearLayout content = createPage("KHÔNG GIAN THIẾT BỊ", title,
+                : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị";
+        LinearLayout content = createPage("", title,
                 tab == Tab.OVERVIEW ? "Theo dõi bộ điều khiển, ngay trong tầm tay."
                 : tab == Tab.SETTINGS ? "Tinh chỉnh cho từng nhu cầu vận hành."
                 : tab == Tab.FIRMWARE ? "Cập nhật phiên bản mới cho thiết bị."
@@ -1970,20 +1970,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.2.2 • Kết nối qua Internet");
-        Button license = neutralButton("Giấy phép nguồn mở");
-        license.setOnClickListener(v -> {
-            try (InputStream stream = getAssets().open("LICENSE.txt")) {
-                ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-                byte[] buffer = new byte[1024];
-                int count;
-                while ((count = stream.read(buffer)) != -1) bytes.write(buffer, 0, count);
-                new AlertDialog.Builder(this).setTitle("esp32c5-ms51-icp • MIT")
-                        .setMessage(new String(bytes.toByteArray(), StandardCharsets.UTF_8))
-                        .setPositiveButton("Đóng", null).show();
-            } catch (IOException error) { showMessage(errorMessage(error)); }
-        });
-        about.addView(license, fullParams(0, 12, 0, 0));
+        addHelp(about, "Phiên bản 3.2.3 • Kết nối qua Internet");
         Button exit = neutralButton("Danh sách thiết bị");
         exit.setOnClickListener(v -> showDevices());
         about.addView(exit, fullParams(0, 12, 0, 0));
@@ -2031,16 +2018,17 @@ public final class MainActivity extends Activity {
         brand.addView(wordmark,wrapParams(10,0,0,0));
         TextView connect=bodyText(" / connect"); connect.setTextSize(16);
         brand.addView(connect,new LinearLayout.LayoutParams(0,-2,1));
-        ImageView shield=icon("shield",Design.TEAL,22);
-        shield.setContentDescription(screen == Screen.HOME ? "Tài khoản" : "Kết nối nội bộ");
         if (screen == Screen.HOME) {
-            shield.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-            shield.setPadding(dp(10),dp(10),dp(10),dp(10));
-            shield.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(username)
-                    .setMessage("Tài khoản và thiết bị được lưu trên điện thoại này.")
-                    .setNegativeButton("Đóng", null).setPositiveButton("Đăng xuất", (d,w) -> logout()).show());
+            Button signOut = neutralButton("Đăng xuất");
+            signOut.setTextSize(12); signOut.setTextColor(Design.TEAL);
+            signOut.setMinWidth(0); signOut.setMinimumWidth(0);
+            signOut.setMinHeight(dp(48)); signOut.setMinimumHeight(dp(48));
+            signOut.setPadding(dp(8),0,dp(8),0);
+            signOut.setMaxLines(1); signOut.setHorizontallyScrolling(false);
+            signOut.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
+            signOut.setOnClickListener(v -> logout());
+            brand.addView(signOut,new LinearLayout.LayoutParams(-2,dp(48)));
         }
-        brand.addView(shield,new LinearLayout.LayoutParams(dp(44),dp(44)));
         pageRoot.addView(brand);
         if(demoMode){
             TextView demo=mutedText("XEM THỬ  •  DỮ LIỆU MINH HỌA");
@@ -2052,9 +2040,11 @@ public final class MainActivity extends Activity {
         scroll.setClipToPadding(false); scroll.setVerticalScrollBarEnabled(false);
         LinearLayout content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(dp(22),dp(12),dp(22),dp(28));
-        TextView eyebrowView=mutedText(eyebrow); eyebrowView.setTextColor(Design.TEAL);
-        eyebrowView.setTextSize(10); eyebrowView.setLetterSpacing(.12f);
-        content.addView(eyebrowView,fullParams(0,0,0,7));
+        if (!eyebrow.isEmpty()) {
+            TextView eyebrowView=mutedText(eyebrow); eyebrowView.setTextColor(Design.TEAL);
+            eyebrowView.setTextSize(10); eyebrowView.setLetterSpacing(.12f);
+            content.addView(eyebrowView,fullParams(0,0,0,7));
+        }
         TextView heading=valueText(title); heading.setTextSize(29);
         heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         content.addView(heading,fullParams(0,0,0,5));

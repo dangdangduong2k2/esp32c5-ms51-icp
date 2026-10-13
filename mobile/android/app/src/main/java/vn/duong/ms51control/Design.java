@@ -82,9 +82,6 @@ final class Design {
                     path(c,9,14,9,5); c.drawArc(9,2,15,8,180,180,false,p);
                     path(c,15,5,15,14); c.drawArc(6,11,18,23,300,300,false,p);
                     c.drawLine(12,8,12,18,p); p.setStyle(Paint.Style.FILL); c.drawCircle(12,18,2,p); break;
-                case "shield":
-                    path(c,12,3,20,6,19,15,16,19,12,22,8,19,5,15,4,6,12,3);
-                    path(c,8,12,11,15,16,9); break;
                 case "pulse": path(c,2,12,7,12,10,5,14,20,17,12,22,12); break;
                 case "clock": c.drawCircle(12,12,9,p); path(c,12,6,12,12,16,14); break;
                 case "eye": case "eye-off":
