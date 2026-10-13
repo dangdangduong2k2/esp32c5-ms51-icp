@@ -1,5 +1,11 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.3.0 · Ba cảm biến và điều kiện kích
+
+[Tải APK 3.3.0](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.3.0/MS51-Connect-3.3.0.apk) · [Đấu dây, bản nạp và preview](docs/ms51-connect-3.3.0/README.md)
+
+Thêm NTC **20k ở IO5**, giữ **10k ở IO6**, **50k ở IO4**; tất cả B3950, mỗi nhánh dùng trở kéo lên 10k tới 3,3 V. Thẻ **Điều kiện kích** cho chọn 10k/20k/50k/SIG và nhập ngưỡng. Nhiệt độ lớn hơn ngưỡng thay tín hiệu SIG; chọn SIG tiếp tục đọc P0.1 active-low như cũ. Cấu hình lưu tại bo. Cần cập nhật APK, C5, MS51 và server; đã nạp/xác minh trên bo đang nối và triển khai server.
+
 ## Bản thử nghiệm 3.1.6 · Chỉ hiện nét LED đang sáng
 
 [Tải APK 3.1.6](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.6/MS51-Connect-3.1.6.apk) · [Preview và kiểm thử](docs/ms51-connect-3.1.6/README.md)

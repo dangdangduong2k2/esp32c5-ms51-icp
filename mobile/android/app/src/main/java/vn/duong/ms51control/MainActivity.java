@@ -109,7 +109,14 @@ public final class MainActivity extends Activity {
     private TextView dashboardLogs;
     private TextView temperatureValue;
     private TextView temperatureNote;
-    private TextView temperature50Value, temperature50Note;
+    private TextView temperature50Value, temperature50Note, temperature20Value, temperature20Note;
+    private Spinner triggerSource;
+    private EditText triggerThreshold;
+    private TextView triggerState;
+    private Button triggerSave;
+    private boolean triggerLoaded, triggerSaving;
+    private static final String[] TRIGGER_SOURCES = {"SIG","10K","20K","50K"};
+    private final Runnable expireTriggerControls = () -> { if(triggerSave!=null) triggerSave.setEnabled(false); };
     private final CountdownTracker countdownTracker = new CountdownTracker();
     private final Runnable expireCounting = () -> stopCounting();
 
@@ -308,7 +315,7 @@ public final class MainActivity extends Activity {
     }
 
     private void clearDeviceState() {
-        deviceAccess = new JSONObject(); managedUpdateStarting = false; modeChanging = false; pendingMode = null; modeAwaitingConfirmation = false; mainHandler.removeCallbacks(expireModeConfirmation); ++accessViewEpoch;
+        deviceAccess = new JSONObject(); managedUpdateStarting = false; modeChanging = false; pendingMode = null; modeAwaitingConfirmation = false; triggerLoaded=false; triggerSaving=false; mainHandler.removeCallbacks(expireModeConfirmation); ++accessViewEpoch;
         configLoaded = false; runtimeConfig = RuntimeConfigCodec.defaults();
         lastStatus = null; lastDebug = null; imageGeneration = 0;
         lastHistory = null; nextHistoryRead = 0; historyError = "";
@@ -1101,10 +1108,11 @@ public final class MainActivity extends Activity {
         mainHandler.removeCallbacks(expireModeConfirmation);
         // Paint on the UI thread before the command is queued for network I/O.
         renderModeControls(lastStatus, lastDebug);
+        renderTrigger(lastStatus, lastDebug);
     }
 
     private void selectMode(String mode) {
-        if (modeChanging || pendingMode != null || managedUpdateStarting || !foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
+        if (triggerSaving || modeChanging || pendingMode != null || managedUpdateStarting || !foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
         Button chosen = "COOL".equals(mode) ? coolModeButton : iceModeButton;
         if (chosen == null || !chosen.isEnabled()) return;
         beginModeChange(mode);
@@ -1153,7 +1161,7 @@ public final class MainActivity extends Activity {
         }
         boolean enabled = fresh && selected != null && ("APP".equals(source) || "PHYSICAL".equals(source)) &&
             ("COOL".equals(running) || "ICE_FLUSH".equals(running) || "IDLE".equals(running)) &&
-            status != null && !status.optBoolean("busy",true) && !modeChanging && pendingMode == null && !managedUpdateStarting;
+            status != null && !status.optBoolean("busy",true) && !modeChanging && pendingMode == null && !triggerSaving && !managedUpdateStarting;
         coolModeButton.setEnabled(enabled); iceModeButton.setEnabled(enabled);
         String displayed = pendingMode != null ? pendingMode : fresh ? ("0".equals(selected) ? "COOL" : "1".equals(selected) ? "ICE_FLUSH" : null) : null;
         paintModeButton(coolModeButton,true,"COOL".equals(displayed),"COOL".equals(pendingMode));
@@ -1195,11 +1203,14 @@ public final class MainActivity extends Activity {
 
         addSectionTitle(content, "Nhiệt độ");
         LinearLayout temperatures = new LinearLayout(this);
-        LinearLayout.LayoutParams tLeft = new LinearLayout.LayoutParams(0, -1, 1); tLeft.setMargins(0,0,dp(6),0);
-        LinearLayout.LayoutParams tRight = new LinearLayout.LayoutParams(0, -1, 1); tRight.setMargins(dp(6),0,0,0);
-        temperatures.addView(temperatureCard("10k", false), tLeft);
-        temperatures.addView(temperatureCard("50k", true), tRight);
+        String[] sensorLabels = {"10k","20k","50k"};
+        for(int i=0;i<3;i++) {
+            LinearLayout.LayoutParams param = new LinearLayout.LayoutParams(0,-1,1);
+            if(i>0) param.setMargins(dp(8),0,0,0);
+            temperatures.addView(temperatureCard(sensorLabels[i],i),param);
+        }
         content.addView(temperatures, fullParams(0,6,0,16));
+        buildTriggerCard(content);
 
         LinearLayout relayCard = card(); addSectionTitle(relayCard, "Trạng thái rơ-le");
         LinearLayout relays = new LinearLayout(this); relays.setOrientation(LinearLayout.HORIZONTAL);
@@ -1225,18 +1236,89 @@ public final class MainActivity extends Activity {
         renderHistory();
     }
 
-    private LinearLayout temperatureCard(String label, boolean second) {
-        LinearLayout box = card();
+    private void buildTriggerCard(LinearLayout content) {
+        triggerLoaded=false;
+        LinearLayout card=card(); addSectionTitle(card,"Điều kiện kích");
+        card.addView(mutedText("Nguồn tín hiệu"));
+        triggerSource=choiceSpinner(choices("10k",1,"20k",2,"50k",3,"SIG",0));
+        card.addView(triggerSource,fullParams(0,6,0,12));
+        card.addView(mutedText("Ngưỡng nhiệt độ (°C)"));
+        triggerThreshold=textInput("Ví dụ: 25",false);
+        triggerThreshold.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        card.addView(triggerThreshold,fullParams(0,6,0,8));
+        triggerState=mutedText("Đang chờ dữ liệu…"); card.addView(triggerState,fullParams(0,0,0,12));
+        triggerSave=primaryButton("Lưu");triggerSave.setEnabled(false);
+        triggerSave.setOnClickListener(v -> saveTrigger());card.addView(triggerSave);
+        triggerSource.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view,int position,long id) {
+                triggerThreshold.setEnabled(!triggerSaving && ((Choice)triggerSource.getSelectedItem()).value!=0);
+            }
+        });
+        content.addView(card,fullParams(0,0,0,16));
+    }
+
+    private void renderTrigger(JSONObject status, JSONObject debug) {
+        if(triggerSave==null) return;
+        JSONObject trigger=status==null ? null : status.optJSONObject("trigger");
+        boolean supported=trigger!=null && trigger.optBoolean("enabled");
+        if(supported && !triggerLoaded && !triggerSaving) {
+            String source=trigger.optString("source","SIG");
+            int choice=0; for(int i=0;i<TRIGGER_SOURCES.length;i++) if(TRIGGER_SOURCES[i].equals(source)) choice=i;
+            selectChoice(triggerSource,choice);
+            triggerThreshold.setText(java.math.BigDecimal.valueOf(trigger.optInt("threshold_centi",2500),2).stripTrailingZeros().toPlainString());
+            triggerLoaded=true;
+        }
+        triggerSource.setEnabled(supported && !triggerSaving);
+        triggerThreshold.setEnabled(supported && !triggerSaving && ((Choice)triggerSource.getSelectedItem()).value!=0);
+        triggerSave.setEnabled(supported && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting && !status.optBoolean("busy",true));
+        mainHandler.removeCallbacks(expireTriggerControls);
+        if(triggerSave.isEnabled()) mainHandler.postDelayed(expireTriggerControls,5000);
+        if(triggerSaving) triggerState.setText("Đang lưu…");
+        else if(!supported) triggerState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        else if(!trigger.optBoolean("synced")) triggerState.setText("Đang chờ bộ điều khiển xác nhận.");
+        else if("SIG".equals(trigger.optString("source"))) triggerState.setText("Đang dùng tín hiệu từ chân SIG.");
+        else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến đã chọn · Không kích.");
+        else triggerState.setText(trigger.optBoolean("active") ? "Nhiệt độ vượt ngưỡng · Đang kích." : "Nhiệt độ chưa vượt ngưỡng · Không kích.");
+    }
+
+    private void saveTrigger() {
+        if(triggerSaving || modeChanging || pendingMode!=null || managedUpdateStarting || !triggerLoaded || triggerSave==null || !triggerSave.isEnabled() || !foreground || screen!=Screen.CONTROL || tab!=Tab.OVERVIEW) return;
+        int selected=((Choice)triggerSource.getSelectedItem()).value;
+        int threshold=2500;
+        try {
+            if(selected!=0) threshold=new java.math.BigDecimal(triggerThreshold.getText().toString().trim().replace(',','.')).movePointRight(2).intValueExact();
+            else if(lastStatus!=null && lastStatus.optJSONObject("trigger")!=null) threshold=lastStatus.getJSONObject("trigger").optInt("threshold_centi",2500);
+            if(threshold < -5500 || threshold > 12500) throw new IllegalArgumentException();
+        } catch(Exception invalid) { triggerThreshold.setError("Nhập từ -55 đến 125 °C, tối đa 2 số lẻ."); return; }
+        final int value=threshold, token=controlEpoch;
+        final EspApi session=api.snapshot(15000);
+        triggerSaving=true; renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);
+        io.execute(() -> {
+            if(!currentControl(token)) return;
+            try {
+                session.post("/api/trigger",new JSONObject().put("source",TRIGGER_SOURCES[selected]).put("threshold_centi",value));
+                onControl(token,() -> { triggerSaving=false;triggerLoaded=false;showMessage("Đã lưu điều kiện kích.");refreshDashboard(); });
+            } catch(Exception error) {
+                onControl(token,() -> { triggerSaving=false;renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);showMessage("Chưa xác nhận lưu. "+errorMessage(error));refreshDashboard(); });
+            }
+        });
+    }
+
+    private LinearLayout temperatureCard(String label, int sensorIndex) {
+        LinearLayout box = card(); box.setPadding(dp(10),dp(16),dp(10),dp(16));
         LinearLayout heading = new LinearLayout(this); heading.setGravity(Gravity.CENTER_VERTICAL);
         TextView name = mutedText(label); name.setTextSize(12);
         heading.addView(name, new LinearLayout.LayoutParams(0,-2,1));
         heading.addView(icon("thermometer",Design.TEAL,20), new LinearLayout.LayoutParams(dp(22),dp(22)));
         box.addView(heading);
-        TextView value = valueText("— °C"); value.setTextSize(27); value.setSingleLine(true);
+        TextView value = valueText("— °C"); value.setTextSize(20); value.setSingleLine(true);
+        if(Build.VERSION.SDK_INT>=26) value.setAutoSizeTextTypeUniformWithConfiguration(13,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         box.addView(value, fullParams(0,12,0,6));
         TextView note = mutedText("Đang chờ dữ liệu"); note.setTextSize(11);
         box.addView(note);
-        if (second) { temperature50Value = value; temperature50Note = note; }
+        if(sensorIndex==1) { temperature20Value=value; temperature20Note=note; }
+        else if (sensorIndex==2) { temperature50Value = value; temperature50Note = note; }
         else { temperatureValue = value; temperatureNote = note; }
         return box;
     }
@@ -1311,6 +1393,7 @@ public final class MainActivity extends Activity {
         if (dashboardConnection == null) return;
         renderTemperature(status);
         renderModeControls(status, debug);
+        renderTrigger(status, debug);
         JSONObject uplink = getUplink(status);
         String ssid = uplink.optString("ssid", uplinkSsid);
         String network = ssid.isEmpty() ? "Chưa nhận Wi‑Fi" : ssid;
@@ -1363,11 +1446,12 @@ public final class MainActivity extends Activity {
     }
 
     private void renderTemperature(JSONObject status) {
-        renderSensor(status == null ? null : status.optJSONObject("analog"), temperatureValue, temperatureNote, false);
-        renderSensor(status == null ? null : status.optJSONObject("analog50k"), temperature50Value, temperature50Note, true);
+        renderSensor(status == null ? null : status.optJSONObject("analog"), temperatureValue, temperatureNote, 0);
+        renderSensor(status == null ? null : status.optJSONObject("analog50k"), temperature50Value, temperature50Note, 2);
+        renderSensor(status == null ? null : status.optJSONObject("analog20k"), temperature20Value, temperature20Note, 1);
     }
 
-    private void renderSensor(JSONObject input, TextView temperatureValue, TextView temperatureNote, boolean second) {
+    private void renderSensor(JSONObject input, TextView temperatureValue, TextView temperatureNote, int sensorIndex) {
         if (temperatureValue == null) return;
         temperatureValue.setText("— °C"); temperatureValue.setTextColor(Design.MUTED);
         temperatureNote.setText("Đang chờ dữ liệu");
@@ -1376,7 +1460,7 @@ public final class MainActivity extends Activity {
             temperatureNote.setText("Thiết bị chưa hỗ trợ cảm biến này"); return;
         }
         int gpio = input.optInt("gpio", -1);
-        if ((second ? gpio != 4 : (gpio != 1 && gpio != 6)) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
+        if ((sensorIndex==2 ? gpio != 4 : sensorIndex==1 ? gpio != 5 : (gpio != 1 && gpio != 6)) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
         long age = input.optLong("age_ms", -1);
         if (age < 0 || age > 2000) return;
         String sensor = input.optString("sensor");
@@ -1964,7 +2048,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.2.4 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.3.0 • Kết nối qua Internet");
         Button exit = neutralButton("Danh sách thiết bị");
         exit.setOnClickListener(v -> showDevices());
         about.addView(exit, fullParams(0, 12, 0, 0));
@@ -2363,6 +2447,7 @@ public final class MainActivity extends Activity {
     }
 
     private void stopDashboard() {
+        mainHandler.removeCallbacks(expireTriggerControls); expireTriggerControls.run();
         mainHandler.removeCallbacks(expireModeControls);
         expireModeControls.run();
         stopCounting();

@@ -459,6 +459,42 @@ uint16_t adc_average(uint8_t chanel)
 	return (uint16_t)result;
 }
 
+/* A temperature source is a leased virtual active-low SIG, never a GPIO drive. */
+static uint8_t trigger_owner_valid(void)
+{
+    return eData.trigger_mark == 0xB6 && eData.trigger_source <= 3 &&
+        eData.trigger_inverse == (uint8_t)(eData.trigger_source ^ 0xFF);
+}
+static TICK_TYPE trigger_now(void)
+{
+    TICK_TYPE now;
+    uint8_t saved_ea = EA;
+    EA = 0; now = millis(); EA = saved_ea;
+    return now;
+}
+uint8_t trigger_fresh(void)
+{
+    return trigger_received && (TICK_TYPE)(trigger_now() - trigger_tick) < 3000UL;
+}
+uint8_t signal_read(void)
+{
+    if (trigger_source == 0) return PIN_read(SIG_PIN);
+    return (trigger_fresh() && trigger_active) ? 0 : 1;
+}
+uint8_t trigger_set(uint8_t source, uint8_t active)
+{
+    if (source > 3 || active > 1) return 0;
+    if (!trigger_owner_valid() || eData.trigger_source != source) {
+        eData.trigger_mark = 0xB6; eData.trigger_source = source;
+        eData.trigger_inverse = (uint8_t)(source ^ 0xFF);
+        AP_EEPROM_Commit();
+        if (!trigger_owner_valid() || eData.trigger_source != source) return 0;
+    }
+    trigger_source = source; trigger_active = active;
+    trigger_tick = trigger_now(); trigger_received = 1;
+    return 1;
+}
+
 /* Ownership survives reboot; the boot switch sample is only a baseline. */
 static uint8_t mode_owner_valid(void)
 {
@@ -843,7 +879,7 @@ void open_time_t(void)
 		if (tick_timeout(&tick_open_time, 100))
 		{
 //			if (test)
-			if (!PIN_read(SIG_PIN))
+			if (!signal_read())
 			{
 				sig_time++;
 			}
@@ -1048,7 +1084,7 @@ void RL3_DF_OFF(void)
 void RL3_DF_reset_if_sig_idle(void)
 {
 //	if (!test)
-  if (PIN_read(SIG_PIN))
+  if (signal_read())
 	{
 		RL3_sig_is_on = 0;
 	}
@@ -1467,7 +1503,7 @@ void program_COOL(void)
 		if (eData.HCF)
 		{
 //			if (test && !enable_hcf_OP_timeout_sig && !enable_open_time)
-			if (!PIN_read(SIG_PIN) && !enable_hcf_OP_timeout_sig && !enable_open_time)
+			if (!signal_read() && !enable_hcf_OP_timeout_sig && !enable_open_time)
 			{ // thay bang sig
 				if (!hcf_mode)
 				{
@@ -1734,7 +1770,7 @@ void program_COOL(void)
 		if (eData.HCF)
 		{
 //			if (test && !enable_hcf_CL_timeout_sig && !enable_open_time)
-			if (!PIN_read(SIG_PIN)   && !enable_hcf_CL_timeout_sig && !enable_open_time)
+			if (!signal_read()   && !enable_hcf_CL_timeout_sig && !enable_open_time)
 			{ 
 				if (!hcf_mode)
 				{
@@ -3057,6 +3093,7 @@ void main()
 	MODIFY_HIRC_166();
 	eeprom_init();
 	mode_restore_owner();
+    trigger_source = trigger_owner_valid() ? eData.trigger_source : 0;
 	password_day_tick = 0;
 	delay_ms(100);
 	shutdown_timeout_refresh();

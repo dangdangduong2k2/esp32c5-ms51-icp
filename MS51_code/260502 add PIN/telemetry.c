@@ -15,7 +15,7 @@
 
 #define TELEMETRY_INTERVAL_MS       1000UL
 #define TELEMETRY_RX_FRAME_TIMEOUT_MS 250UL
-#define TELEMETRY_TX_BUFFER_SIZE    256u
+#define TELEMETRY_TX_BUFFER_SIZE    384u
 #define TELEMETRY_RX_BUFFER_SIZE    256u
 #define TELEMETRY_CONFIG_SIZE       217u
 
@@ -30,6 +30,7 @@
 #define TELEMETRY_RESPONSE_SOF      0xA6u
 #define TELEMETRY_COMMAND_GET       0x47u /* 'G' */
 #define TELEMETRY_COMMAND_SET       0x53u /* 'S' */
+#define TELEMETRY_COMMAND_TRIGGER   0x54u /* source, active; renewed every 500 ms */
 #define TELEMETRY_COMMAND_MODE      0x4Du /* M: one byte COOL=0, ICE_FLUSH=1 */
 
 #define TELEMETRY_STATUS_OK          0u
@@ -47,8 +48,8 @@ typedef enum {
 } telemetry_rx_state_t;
 
 static volatile uint8_t telemetry_tx_busy;
-static volatile uint8_t telemetry_tx_index;
-static volatile uint8_t telemetry_tx_length;
+static volatile uint16_t telemetry_tx_index;
+static volatile uint16_t telemetry_tx_length;
 static uint8_t xdata telemetry_tx_buffer[TELEMETRY_TX_BUFFER_SIZE];
 static TICK_TYPE telemetry_tick;
 static uint8_t telemetry_buffer_overflow;
@@ -297,6 +298,9 @@ static void telemetry_build_snapshot(void)
 	telemetry_append_var_text("relay1", relay1_on ? "ON" : "OFF");
 	telemetry_append_var_text("relay2", relay2_on ? "ON" : "OFF");
 	telemetry_append_var_text("relay3", relay3_on ? "ON" : "OFF");
+    telemetry_append_var_u16("sig_source", trigger_source);
+    telemetry_append_var_text("sig_active", signal_read() ? "OFF" : "ON");
+    telemetry_append_var_u16("sig_link", trigger_source == 0 || trigger_fresh());
 }
 
 static void telemetry_start_transmit(void)
@@ -475,6 +479,12 @@ static void telemetry_finish_config_command(void)
 		telemetry_schedule_config_response(telemetry_pending_command,
 			telemetry_pending_sequence, TELEMETRY_STATUS_OK, 1, 0);
 	}
+    else if (telemetry_pending_command == TELEMETRY_COMMAND_TRIGGER)
+    {
+        telemetry_schedule_config_response(telemetry_pending_command,
+            telemetry_pending_sequence, trigger_set(telemetry_rx_payload[0],telemetry_rx_payload[1]) ?
+            TELEMETRY_STATUS_OK : TELEMETRY_STATUS_BAD_CONFIG, 0, 0);
+    }
 	else if (telemetry_pending_command == TELEMETRY_COMMAND_MODE)
 	{
 		telemetry_schedule_config_response(telemetry_pending_command,
@@ -526,7 +536,7 @@ static void telemetry_process_command_byte(uint8_t value)
 		}
 		break;
 	case telemetry_rx_state_command:
-		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET && value != TELEMETRY_COMMAND_MODE)
+		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET && value != TELEMETRY_COMMAND_MODE && value != TELEMETRY_COMMAND_TRIGGER)
 		{
 			telemetry_reset_rx_parser();
 			break;
@@ -543,7 +553,8 @@ static void telemetry_process_command_byte(uint8_t value)
 	case telemetry_rx_state_length:
 		telemetry_rx_length = value;
 		telemetry_rx_crc = telemetry_crc16_update(telemetry_rx_crc, value);
-		if ((telemetry_rx_command == TELEMETRY_COMMAND_MODE && value != 1) ||
+		if ((telemetry_rx_command == TELEMETRY_COMMAND_TRIGGER && value != 2) ||
+            (telemetry_rx_command == TELEMETRY_COMMAND_MODE && value != 1) ||
 			(telemetry_rx_command == TELEMETRY_COMMAND_GET && value != 0) ||
 			(telemetry_rx_command == TELEMETRY_COMMAND_SET &&
 			 value != TELEMETRY_CONFIG_SIZE))

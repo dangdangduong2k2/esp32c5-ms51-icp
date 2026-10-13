@@ -60,6 +60,11 @@ menu "MS51FC0AE ICP programmer"
         depends on MS51_ANALOG_IO6 && MS51_DAT_GPIO != 4 && MS51_CLK_GPIO != 4 && MS51_RST_GPIO != 4
         default n
 
+    config MS51_NTC_20K_IO5
+        bool "Read 20k B3950 NTC on GPIO5 with 10k pullup"
+        depends on MS51_ANALOG_IO6 && MS51_DAT_GPIO != 5 && MS51_CLK_GPIO != 5 && MS51_RST_GPIO != 5
+        default n
+
     config MS51_DEBUG_UART_ENABLE
         bool "Enable MS51 runtime UART/debug over shared ICP wires"
         default y

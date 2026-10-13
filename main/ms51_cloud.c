@@ -183,7 +183,7 @@ static cJSON *remote_upload(const cJSON *body) {
     esp_http_client_handle_t download=esp_http_client_init(&config);
     if(!download) return error_result("Khong du bo nho tai tep.");
     esp_http_client_set_header(download,"Authorization",auth);
-    esp_err_t error=ms51_operation_lock(0);
+    esp_err_t error=ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if(error!=ESP_OK) { esp_http_client_cleanup(download); return error_result("Thiet bi dang ban. Vui long doi."); }
     transfer_reader_t reader={.http=download,.size=n->valueint};
     ms51_image_t image={0}; ms51_storage_info_t info;
@@ -209,7 +209,7 @@ static cJSON *remote_upload(const cJSON *body) {
 }
 static bool allowed(const char *method,const char *path) {
     const char *get[]={"/api/status","/api/debug","/api/runtime-config"};
-    const char *post[]={"/api/mode","/api/info","/api/reset","/api/runtime-config","/api/program","/api/verify","/api/program-full","/api/erase","/internal/upload","/internal/unpair"};
+    const char *post[]={"/api/trigger","/api/mode","/api/info","/api/reset","/api/runtime-config","/api/program","/api/verify","/api/program-full","/api/erase","/internal/upload","/internal/unpair"};
     if(!strcmp(method,"GET")) { for(size_t i=0;i<sizeof(get)/sizeof(*get);i++) if(!strcmp(path,get[i])) return true; }
     if(!strcmp(method,"POST")) { for(size_t i=0;i<sizeof(post)/sizeof(*post);i++) if(!strcmp(path,post[i])) return true; }
     return false;

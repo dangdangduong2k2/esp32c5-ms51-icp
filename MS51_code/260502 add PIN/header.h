@@ -85,6 +85,9 @@ struct eeprom_type
 	uint8_t mode_owner_mark;
 	uint8_t mode_owner_value; /* 0 physical, 1 app COOL, 2 app ICE_FLUSH */
 	uint8_t mode_owner_inverse;
+    uint8_t trigger_mark;
+    uint8_t trigger_source; /* 0 SIG, 1 10k, 2 20k, 3 50k */
+    uint8_t trigger_inverse;
 } eData;
 
 #include "TM1650_multi.h"

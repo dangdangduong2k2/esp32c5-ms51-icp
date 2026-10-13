@@ -2,6 +2,7 @@
 #include "ms51_presence.h"
 #include "ms51_cloud.h"
 #include "ms51_analog.h"
+#include "ms51_trigger.h"
 #include "cJSON.h"
 
 #include <inttypes.h>
@@ -700,12 +701,14 @@ static esp_err_t status_handler(httpd_req_t *request)
                  uplink.nat_enabled ? "true" : "false", MDNS_HOSTNAME_FQDN,
                  s_mdns_started ? "true" : "false");
     }
-    char analog[192], analog50k[192];
+    char analog[192], analog50k[192], analog20k[192], trigger[224];
     ms51_analog_json(analog, sizeof(analog));
     ms51_analog_50k_json(analog50k, sizeof(analog50k));
+    ms51_analog_20k_json(analog20k,sizeof(analog20k));
+    ms51_trigger_json(trigger,sizeof(trigger));
     size_t analog_used = strlen(payload);
     int added = snprintf(payload + analog_used - 1, sizeof(payload) - analog_used + 1,
-                         ",\"analog\":%s,\"analog50k\":%s}", analog, analog50k);
+                         ",\"analog\":%s,\"analog50k\":%s,\"analog20k\":%s,\"trigger\":%s}", analog, analog50k, analog20k, trigger);
     if (added < 0 || (size_t)added >= sizeof(payload) - analog_used + 1)
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR, "Status too large");
     char presence[384];
@@ -1029,7 +1032,7 @@ static esp_err_t runtime_config_get_handler(httpd_req_t *request)
                                ESP_ERR_INVALID_STATE);
     }
 
-    esp_err_t error = ms51_operation_lock(0);
+    esp_err_t error = ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if (error != ESP_OK || !state_begin_runtime_operation("runtime-read",
                                                             "Đang đọc cấu hình MS51 qua UART...")) {
         if (error == ESP_OK) {
@@ -1090,7 +1093,7 @@ static esp_err_t runtime_config_set_handler(httpd_req_t *request)
                                ESP_ERR_INVALID_STATE);
     }
 
-    esp_err_t error = ms51_operation_lock(0);
+    esp_err_t error = ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if (error != ESP_OK || !state_begin_runtime_operation("runtime-write",
                                                             "Đang lưu cấu hình MS51 qua UART...")) {
         if (error == ESP_OK) {
@@ -1122,6 +1125,31 @@ static esp_err_t runtime_config_set_handler(httpd_req_t *request)
                      NULL);
 }
 
+static esp_err_t trigger_handler(httpd_req_t *request)
+{
+    if(wrong_device(request)) return ESP_OK;
+    char body[HTTP_JSON_BODY_SIZE];
+    if(receive_json(request,body,sizeof(body))!=ESP_OK)
+        return send_error_json(request,"400 Bad Request","Invalid request.",ESP_ERR_INVALID_ARG);
+    cJSON *json=cJSON_Parse(body);
+    const cJSON *value=cJSON_GetObjectItemCaseSensitive(json,"source");
+    const cJSON *limit=cJSON_GetObjectItemCaseSensitive(json,"threshold_centi");
+    int selected=-1;
+    const char *names[]={"SIG","10K","20K","50K"};
+    if(cJSON_IsString(value)) for(int i=0;i<4;i++) if(!strcmp(names[i],value->valuestring)) selected=i;
+    bool valid=selected>=0 && cJSON_IsNumber(limit) && limit->valuedouble>=-5500 && limit->valuedouble<=12500 &&
+        limit->valuedouble==(double)limit->valueint && cJSON_GetArraySize(json)==2;
+    int threshold=valid ? limit->valueint : 0;
+    cJSON_Delete(json);
+    if(!valid) return send_error_json(request,"400 Bad Request","Invalid trigger settings.",ESP_ERR_INVALID_ARG);
+    esp_err_t error=ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
+    if(error!=ESP_OK) return send_error_json(request,"409 Conflict","Device is busy.",error);
+    error=ms51_trigger_configure(selected,threshold);
+    ms51_operation_unlock();
+    if(error!=ESP_OK) return send_error_json(request,"409 Conflict","Could not save trigger settings.",error);
+    return send_json(request,"{\"ok\":true}",NULL);
+}
+
 static esp_err_t mode_handler(httpd_req_t *request)
 {
     if (wrong_device(request)) return ESP_OK;
@@ -1134,7 +1162,7 @@ static esp_err_t mode_handler(httpd_req_t *request)
         !strcmp(value->valuestring,"ICE_FLUSH") ? 1 : -1;
     cJSON_Delete(json);
     if (mode < 0) return send_error_json(request,"400 Bad Request","Invalid mode.",ESP_ERR_INVALID_ARG);
-    esp_err_t error = ms51_operation_lock(0);
+    esp_err_t error = ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if (error != ESP_OK) return send_error_json(request,"409 Conflict","Device is busy.",error);
     if (!state_begin_runtime_operation("mode", "Dang chuyen che do...")) {
         ms51_operation_unlock();
@@ -1199,7 +1227,7 @@ static esp_err_t upload_handler_legacy(httpd_req_t *request)
     char filename[MS51_STORAGE_FILENAME_SIZE];
     decode_filename(encoded_name, filename, sizeof(filename));
 
-    esp_err_t error = ms51_operation_lock(0);
+    esp_err_t error = ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if (error != ESP_OK) {
         return send_error_json(request, "409 Conflict",
                                "Bộ nạp đang bận.", error);
@@ -1318,7 +1346,7 @@ static esp_err_t upload_handler(httpd_req_t *request)
                                ESP_ERR_INVALID_SIZE);
     }
 
-    esp_err_t error = ms51_operation_lock(0);
+    esp_err_t error = ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if (error != ESP_OK) {
         return send_error_json(request, "409 Conflict", "Programmer is busy.", error);
     }
@@ -2144,7 +2172,7 @@ static esp_err_t start_http_server(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
-    config.max_uri_handlers = 16;
+    config.max_uri_handlers = 17;
     config.max_open_sockets = 4;
     config.lru_purge_enable = true;
     config.recv_wait_timeout = 20;
@@ -2165,6 +2193,7 @@ static esp_err_t start_http_server(void)
         {.uri = "/api/uplink/scan", .method = HTTP_GET, .handler = wifi_scan_handler},
         {.uri = "/api/uplink", .method = HTTP_POST, .handler = uplink_handler},
         {.uri = "/api/upload", .method = HTTP_POST, .handler = upload_handler},
+        {.uri = "/api/trigger", .method = HTTP_POST, .handler = trigger_handler},
         {.uri = "/api/mode", .method = HTTP_POST, .handler = mode_handler},
         {.uri = "/api/info", .method = HTTP_POST, .handler = info_handler},
         {.uri = "/api/reset", .method = HTTP_POST, .handler = reset_handler},

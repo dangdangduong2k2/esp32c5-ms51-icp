@@ -1,0 +1,51 @@
+{
+  "version": "3.3.0",
+  "version_code": 28,
+  "apk_sha256": "d48f8ea2adf8edb8294c7c1c33750e771655cf0444dd7d0ffb5d804f2af22985",
+  "assets": {
+    "ESP32-C5-DAT1-CLK0-RS3-THREE-NTC-3.3.0.zip": "42ebf9f97491d2625356b348592d7dbb20af47b5cdfdd533e63d8d56f37944f4",
+    "MS51-Connect-3.3.0.apk": "d48f8ea2adf8edb8294c7c1c33750e771655cf0444dd7d0ffb5d804f2af22985",
+    "MS51-Trigger-Control-3.3.0.hex": "e72ec492d33e11339e307de5d36c5c406e98451c4f9e638e7eb373b0245445d1"
+  },
+  "flash_files": [
+    {
+      "address": "0x2000",
+      "name": "bootloader.bin",
+      "size": 22224,
+      "sha256": "6eea75dfebe0ebc4279c3415edee42fe425c1330d0ed2da6129136a72ed41faf"
+    },
+    {
+      "address": "0x8000",
+      "name": "partition-table.bin",
+      "size": 3072,
+      "sha256": "a051e6e82b5380e3647d1dbc8a0217c359da226970eb94f2cb0b864d9a712d43"
+    },
+    {
+      "address": "0x10000",
+      "name": "esp32c5-dat1-clk0-rs3-three-ntc.bin",
+      "size": 1464912,
+      "sha256": "002482a36c7933c7449b0bf93a46a77f26673b9bd4bdaea75160ca3501e52550"
+    }
+  ],
+  "validation": {
+    "android_build": "passed",
+    "android_lint": "passed",
+    "android_instrumentation": "PASS: three independent temperature tiles and faults; trigger form load, edit preservation, save and mode overlap guards; two mode icons, immediate selection, confirmation and timeout; countdown animation; managed settings/updates/history regression.",
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "server_tests": 28,
+    "host_c": "PASS: physical active-low SIG, virtual override, timeout, restart, rollover, idempotent persistence, invalid frames and all three NTC conversions/faults",
+    "ms51_keil": "0 errors, 0 warnings; code 27669 bytes, xdata 1594",
+    "c5_build": "passed; app fits 0x180000 partition",
+    "c5_flash": "verified, NVS unchanged across flash",
+    "ms51_flash": "verified; 217 public settings bytes unchanged",
+    "live_lan": "10K 12500 confirmed OFF\n10K -5500 confirmed ON\n20K 12500 confirmed OFF\n50K 12500 confirmed OFF\n20K 3000 confirmed ON\nSIG 2500 confirmed OFF\nPASS: LAN trigger, three pins, validation, MS51 reset, settings preservation; restored original SIG.",
+    "live_https_mqtt": "Cloud 10K 12500 confirmed OFF\nCloud 10K -5500 confirmed ON\nCloud 20K 12500 confirmed OFF\nCloud SIG 2500 confirmed OFF\nPASS: HTTPS ownership-authenticated RPC > MQTT > C5 > MS51; restored SIG; temporary session removed.",
+    "restart": "MS51 reset tested: restored selected source and renewed heartbeat",
+    "full_power_cycle": "not separately tested this turn",
+    "temperature_accuracy": "ADC readings and threshold behavior verified; sensor wiring and accuracy against a reference thermometer not independently verified",
+    "preview": "actual Android views with labeled illustrative readings",
+    "mode_regression": "18 assertions passed"
+  },
+  "firmware_changed": true,
+  "server_changed": true
+}

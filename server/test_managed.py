@@ -44,6 +44,28 @@ class ManagedTests(AdminTests):
             with core.lock:
                 core.db.execute("DELETE FROM update_jobs WHERE id='job-mode'");core.db.commit()
 
+    def test_trigger_owner_validation_and_update_overlap(self):
+        body={'id':'b'*32,'method':'POST','path':'/api/trigger','body':{}}
+        with patch.object(core.bridge,'call',return_value={'ok':True}) as call:
+            for source in ('SIG','10K','20K','50K'):
+                body['body']={'source':source,'threshold_centi':2500}
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+            self.assertEqual(call.call_count,4);call.reset_mock()
+            for value in ({}, {'source':'BAD','threshold_centi':0}, {'source':'20K','threshold_centi':True},
+                          {'source':'20K','threshold_centi':12501}, {'source':'20K','threshold_centi':-5501},
+                          {'source':'20K','threshold_centi':2.5}, {'source':'20K','threshold_centi':0,'extra':1}):
+                body['body']=value
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,400)
+            body['body']={'source':'20K','threshold_centi':2500}
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body).status_code,401)
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile('bob')).status_code,404)
+            with core.lock:
+                core.db.execute("INSERT INTO update_jobs VALUES(?,?,?,?,?,?,?)",('job-trigger',DEVICE,'u1','test','running','',time.time()));core.db.commit()
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,409)
+            call.assert_not_called()
+            with core.lock:
+                core.db.execute("DELETE FROM update_jobs WHERE id='job-trigger'");core.db.commit()
+
     def set_policy(self, visible):
         rev = self.client.get(ADMIN + '/access').json()['revision']
         r = self.client.post(ADMIN + '/access', json={'visible': visible, 'revision': rev}, headers=self.headers)

@@ -27,18 +27,42 @@ _Static_assert(ADC1_CHANNEL_0_GPIO_NUM == NTC_GPIO, "IO1 must be ADC1 channel 0"
 #endif
 static adc_oneshot_unit_handle_t s_adc;
 #if CONFIG_MS51_NTC_50K_IO4
-#define SENSOR_COUNT 2
 #if CONFIG_MS51_DAT_GPIO == 4 || CONFIG_MS51_CLK_GPIO == 4 || CONFIG_MS51_RST_GPIO == 4
 #error "IO4 NTC conflicts with MS51 pins"
 #endif
 _Static_assert(ADC1_CHANNEL_3_GPIO_NUM == 4, "IO4 must be ADC1 channel 3");
-static const adc_channel_t channels[] = { NTC_CHANNEL, ADC_CHANNEL_3 };
-static const int gpios[] = { NTC_GPIO, 4 };
-#else
-#define SENSOR_COUNT 1
-static const adc_channel_t channels[] = { NTC_CHANNEL };
-static const int gpios[] = { NTC_GPIO };
 #endif
+#if CONFIG_MS51_NTC_20K_IO5
+#if CONFIG_MS51_DAT_GPIO == 5 || CONFIG_MS51_CLK_GPIO == 5 || CONFIG_MS51_RST_GPIO == 5
+#error "IO5 NTC conflicts with MS51 pins"
+#endif
+_Static_assert(ADC1_CHANNEL_4_GPIO_NUM == 5, "IO5 must be ADC1 channel 4");
+#endif
+static const adc_channel_t channels[] = { NTC_CHANNEL,
+#if CONFIG_MS51_NTC_50K_IO4
+    ADC_CHANNEL_3,
+#endif
+#if CONFIG_MS51_NTC_20K_IO5
+    ADC_CHANNEL_4,
+#endif
+};
+static const int gpios[] = { NTC_GPIO,
+#if CONFIG_MS51_NTC_50K_IO4
+    4,
+#endif
+#if CONFIG_MS51_NTC_20K_IO5
+    5,
+#endif
+};
+static const int nominal[] = { 10000,
+#if CONFIG_MS51_NTC_50K_IO4
+    50000,
+#endif
+#if CONFIG_MS51_NTC_20K_IO5
+    20000,
+#endif
+};
+#define SENSOR_COUNT (sizeof(channels)/sizeof(channels[0]))
 static adc_cali_handle_t s_calibration[SENSOR_COUNT];
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static struct { bool valid; int raw; int mv; int64_t at; } s_sample[SENSOR_COUNT];
@@ -112,7 +136,7 @@ static void sensor_json(unsigned index, char *output, size_t size)
         return;
     }
     int centi_celsius;
-    const char *sensor = ms51_ntc_temperature(mv, raw, index == 0 ? 10000 : 50000, &centi_celsius);
+    const char *sensor = ms51_ntc_temperature(mv, raw, nominal[index], &centi_celsius);
     char temperature[16] = "null";
     if (strcmp(sensor, "ok") == 0) snprintf(temperature, sizeof(temperature), "%d", centi_celsius);
     snprintf(output, size, "{\"enabled\":true,\"gpio\":%d,\"valid\":true,\"raw\":%d,\"millivolts\":%d,\"age_ms\":%d,\"sensor\":\"%s\",\"temperature_centi\":%s}",
@@ -127,6 +151,25 @@ void ms51_analog_50k_json(char *output, size_t size) {
 #endif
 }
 
+void ms51_analog_20k_json(char *output, size_t size) {
+#if CONFIG_MS51_NTC_20K_IO5
+    sensor_json(SENSOR_COUNT - 1, output, size);
+#else
+    snprintf(output,size,"{\"enabled\":false,\"valid\":false}");
+#endif
+}
+bool ms51_analog_temperature(unsigned source, int *temperature) {
+    int wanted = source == 1 ? 10000 : source == 2 ? 20000 : source == 3 ? 50000 : 0;
+    for (unsigned i=0;i<SENSOR_COUNT;i++) if(nominal[i]==wanted) {
+        portENTER_CRITICAL(&s_lock);
+        bool valid=s_sample[i].valid; int raw=s_sample[i].raw,mv=s_sample[i].mv; int64_t at=s_sample[i].at;
+        portEXIT_CRITICAL(&s_lock);
+        return valid && at && esp_timer_get_time()-at < 2000000 &&
+            strcmp(ms51_ntc_temperature(mv,raw,nominal[i],temperature),"ok")==0;
+    }
+    return false;
+}
+
 #else
 esp_err_t ms51_analog_init(void) { return ESP_OK; }
 void ms51_analog_json(char *output, size_t size)
@@ -134,4 +177,6 @@ void ms51_analog_json(char *output, size_t size)
     snprintf(output, size, "{\"enabled\":false,\"valid\":false}");
 }
 void ms51_analog_50k_json(char *output, size_t size) { ms51_analog_json(output, size); }
+void ms51_analog_20k_json(char *output, size_t size) { ms51_analog_json(output, size); }
+bool ms51_analog_temperature(unsigned source, int *temperature) { (void)source; (void)temperature; return false; }
 #endif

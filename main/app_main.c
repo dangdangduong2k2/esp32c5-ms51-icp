@@ -19,6 +19,7 @@
 #include "ms51_firmware.h"
 #include "ms51_debug_uart.h"
 #include "ms51_analog.h"
+#include "ms51_trigger.h"
 #include "ms51_operation.h"
 #include "ms51_programmer.h"
 #include "ms51_storage.h"
@@ -527,6 +528,9 @@ void app_main(void)
         ESP_LOGE(TAG, "Wi-Fi/web disabled: %s; USB console remains available",
                  esp_err_to_name(web_error));
     }
+
+    const esp_err_t trigger_error = ms51_trigger_init();
+    if(trigger_error != ESP_OK) ESP_LOGW(TAG,"Trigger unavailable: %s",esp_err_to_name(trigger_error));
 
     if (xTaskCreate(console_task, "console_start", 4096, NULL, 1, NULL) != pdPASS) {
         ESP_LOGE(TAG, "Could not start diagnostic console task");

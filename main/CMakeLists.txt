@@ -33,6 +33,7 @@ idf_component_register(
     SRCS "ms51_cloud.c" "ms51_presence.c"
         "app_main.c"
         "ms51_analog.c"
+        "ms51_trigger.c"
         "ms51_ntc.c"
         "ms51_debug_uart.c"
         "ms51_image.c"

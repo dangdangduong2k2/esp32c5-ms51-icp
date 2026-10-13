@@ -305,7 +305,7 @@ esp_err_t ms51_programmer_get_info(ms51_device_info_t *info)
 esp_err_t ms51_programmer_try_get_info(ms51_device_info_t *info)
 {
     ESP_RETURN_ON_FALSE(info != NULL, ESP_ERR_INVALID_ARG, TAG, "info is NULL");
-    ESP_RETURN_ON_ERROR(ms51_operation_lock(0), TAG, "programmer is busy");
+    ESP_RETURN_ON_ERROR(ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT), TAG, "programmer is busy");
 
     esp_err_t error = open_checked_session(info);
     close_session();
@@ -602,7 +602,7 @@ esp_err_t ms51_programmer_reset(void)
 
 esp_err_t ms51_programmer_try_reset(void)
 {
-    ESP_RETURN_ON_ERROR(ms51_operation_lock(0), TAG, "programmer is busy");
+    ESP_RETURN_ON_ERROR(ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT), TAG, "programmer is busy");
     const esp_err_t error = ms51_icp_reset_target();
     unlock_programmer();
     return error;

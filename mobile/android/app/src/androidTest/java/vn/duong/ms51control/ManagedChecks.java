@@ -123,6 +123,24 @@ final class ManagedChecks {
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
                     check(((TextView)get(a,"temperature50Value")).getText().toString().equals("— °C"),"50k stale hidden");
                     second.put("age_ms",100);
+                    JSONObject third=new JSONObject(sensor.toString()).put("gpio",5).put("temperature_centi",2875);
+                    sampleStatus.put("analog20k",third);
+                    invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperature20Value")).getText().toString().equals("28,8 °C"),"Independent 20k IO5 reading");
+                    third.put("sensor","short");invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperature20Value")).getText().toString().equals("— °C"),"20k short hidden");
+                    check(((TextView)get(a,"temperature50Value")).getText().toString().equals("31,5 °C"),"20k short leaves 50k intact");
+                    third.put("sensor","ok");
+                    sampleStatus.put("trigger",new JSONObject().put("enabled",true).put("source","20K").put("threshold_centi",3000).put("synced",true).put("sensor_valid",true).put("active",false));
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    android.widget.EditText threshold=(android.widget.EditText)get(a,"triggerThreshold");
+                    check(threshold.getText().toString().equals("30"),"Stored threshold loaded");
+                    threshold.setText("35");invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(threshold.getText().toString().equals("35"),"Polling preserves an edited threshold");
+                    set(a,"triggerSaving",true);invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!((Button)get(a,"triggerSave")).isEnabled() && !threshold.isEnabled(),"Save blocks overlapping edits");
+                    set(a,"triggerSaving",false);set(a,"triggerLoaded",false);
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     CountdownTracker tracker = new CountdownTracker();
                     check(tracker.update("COOL","GREEN","5","8",null)==1,"First sample at five already counts");
                     for (int i=0;i<120;i++) check(tracker.update("COOL","GREEN","5","8",null)==1,"Unchanged minutes keep blinking");
@@ -158,6 +176,9 @@ final class ManagedChecks {
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(ice.isSelected() && !cool.isSelected(),"Older COOL telemetry cannot overwrite pending ICE selection");
                     check(!cool.isEnabled() && !ice.isEnabled(),"In-flight command blocks overlapping taps");
+                    check(!((Button)get(a,"triggerSave")).isEnabled(),"Pending mode immediately blocks trigger save");
+                    invoke(a,"saveTrigger",new Class[]{});
+                    check(!(Boolean)get(a,"triggerSaving"),"Trigger save cannot overlap a pending mode command");
                     invoke(a,"finishModeChange",new Class[]{boolean.class,String.class},false,"Test failed command");
                     check(cool.isSelected() && !ice.isSelected() && get(a,"pendingMode")==null,"Failed request restores last confirmed mode");
                     invoke(a,"beginModeChange",new Class[]{String.class},"ICE_FLUSH");
@@ -241,7 +262,7 @@ final class ManagedChecks {
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: two icon buttons, immediate pending color, old-poll isolation, failure rollback, confirmation and timeout; dual sensor independence/faults/stale data; immediate countdown state, unchanged digits, phase switch, holds, stale data and animation cleanup; managed settings/updates/history regression.");
+            result.putString("stream","PASS: three independent temperature tiles and faults; trigger form load, edit preservation, save and mode overlap guards; two mode icons, immediate selection, confirmation and timeout; countdown animation; managed settings/updates/history regression.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}
