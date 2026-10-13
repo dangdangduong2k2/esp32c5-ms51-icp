@@ -1,6 +1,8 @@
-# MS51 Connect 3.2.0
+# MS51 Connect 3.2.1
 
-Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 23, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 24, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+
+3.2.1 bỏ Làm mới ở Tổng quan; hai nút chế độ có icon và phản hồi màu ngay khi chạm, kèm trạng thái gửi/xác nhận và khôi phục khi lỗi. Chỉ cập nhật APK. [Preview và kiểm thử](../../docs/ms51-connect-3.2.1/README.md).
 
 3.2.0 thêm hai nút Làm lạnh/Xả đá cạnh Làm mới và lưu nguồn điều khiển cuối trên MS51. Cần cập nhật app, C5, MS51 và server. [Hướng dẫn, preview và kiểm thử](../../docs/ms51-connect-3.2.0/README.md).
 

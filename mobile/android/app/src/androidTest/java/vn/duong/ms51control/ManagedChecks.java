@@ -141,19 +141,37 @@ final class ManagedChecks {
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     SevenSegmentView green=(SevenSegmentView)get(a,"greenDisplay"), red=(SevenSegmentView)get(a,"redDisplay");
                     check(green.isCounting() && !red.isCounting(),"First sample blinks without a digit change");
-                    Button cool=(Button)get(a,"coolModeButton"), ice=(Button)get(a,"iceModeButton"), refresh=(Button)get(a,"refreshModeButton");
+                    Button cool=(Button)get(a,"coolModeButton"), ice=(Button)get(a,"iceModeButton");
                     check(!cool.isEnabled() && !ice.isEnabled(),"Older MS51 cannot receive soft mode commands");
                     JSONObject modeSource=new JSONObject().put("name","mode_source").put("value","PHYSICAL").put("age_ms",100);
                     JSONObject selectedMode=new JSONObject().put("name","selected_mode").put("value","0").put("age_ms",100);
                     preview.getJSONArray("variables").put(modeSource).put(selectedMode);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(cool.isEnabled() && ice.isEnabled(),"Fresh capable device enables both mode choices");
-                    check(((LinearLayout.LayoutParams)cool.getLayoutParams()).weight > ((LinearLayout.LayoutParams)refresh.getLayoutParams()).weight,"Mode buttons wider than refresh");
-                    check(cool.getParent()==ice.getParent() && cool.getParent()==refresh.getParent(),"Three actions share one row");
-                    set(a,"modeChanging",true);
+                    check(cool.getParent()==ice.getParent() && ((ViewGroup)cool.getParent()).getChildCount()==2,"Only two mode actions in row");
+                    check(((LinearLayout.LayoutParams)cool.getLayoutParams()).weight == ((LinearLayout.LayoutParams)ice.getLayoutParams()).weight,"Equal width mode buttons");
+                    check(!texts(page).contains("Làm mới"),"Overview has no refresh button");
+                    check(cool.getCompoundDrawables()[0]!=null && ice.getCompoundDrawables()[0]!=null,"Both mode buttons have icons");
+                    set(a,"lastStatus",sampleStatus);set(a,"lastDebug",preview);
+                    invoke(a,"beginModeChange",new Class[]{String.class},"ICE_FLUSH");
+                    check(ice.isSelected() && !cool.isSelected() && ice.getText().toString().contains("Đang gửi"),"Tap paints desired mode immediately before network response");
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
-                    check(!cool.isEnabled() && !ice.isEnabled() && !refresh.isEnabled(),"In-flight mode request disables overlapping actions");
-                    set(a,"modeChanging",false);selectedMode.put("age_ms",4000);
+                    check(ice.isSelected() && !cool.isSelected(),"Older COOL telemetry cannot overwrite pending ICE selection");
+                    check(!cool.isEnabled() && !ice.isEnabled(),"In-flight command blocks overlapping taps");
+                    invoke(a,"finishModeChange",new Class[]{boolean.class,String.class},false,"Test failed command");
+                    check(cool.isSelected() && !ice.isSelected() && get(a,"pendingMode")==null,"Failed request restores last confirmed mode");
+                    invoke(a,"beginModeChange",new Class[]{String.class},"ICE_FLUSH");
+                    invoke(a,"finishModeChange",new Class[]{boolean.class,String.class},true,"Test accepted command");
+                    check(ice.isSelected() && ice.getText().toString().contains("Đang xác nhận") && !cool.isEnabled(),"ACK keeps selection until fresh state arrives");
+                    selectedMode.put("value","1");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(ice.isSelected() && ice.isEnabled() && get(a,"pendingMode")==null,"Confirmed target releases pending state");
+                    selectedMode.put("value","0");
+                    invoke(a,"beginModeChange",new Class[]{String.class},"ICE_FLUSH");
+                    invoke(a,"finishModeChange",new Class[]{boolean.class,String.class},true,"Test accepted command");
+                    ((Runnable)get(a,"expireModeConfirmation")).run();
+                    check(get(a,"pendingMode")==null && !cool.isEnabled() && !ice.isEnabled() && !ice.isSelected(),"Confirmation timeout never leaves a false confirmed selection");
+                    selectedMode.put("age_ms",4000);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(!cool.isEnabled() && !ice.isEnabled(),"Stale selection disables commands");
                     selectedMode.put("age_ms",100);sampleStatus.put("busy",true);
@@ -209,11 +227,21 @@ final class ManagedChecks {
                     try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(a.getExternalFilesDir(null),"overview-preview.png"))) {
                         shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);
                     }
+                    // Verify the immediate visual state while network work is still pending.
+                    invoke(a,"beginModeChange",new Class[]{String.class},"ICE_FLUSH");
+                    page.measure(View.MeasureSpec.makeMeasureSpec(1080,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
+                    page.layout(0,0,1080,page.getMeasuredHeight());
+                    check(cool.getTop()==ice.getTop() && cool.getBottom()==ice.getBottom(),"Two-line pending label keeps button edges aligned");
+                    check(ice.getBottom()<=((View)ice.getParent()).getHeight(),"Pending button is not clipped by its row");
+                    page.draw(new android.graphics.Canvas(shot));
+                    try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(a.getExternalFilesDir(null),"mode-pending-preview.png"))) {
+                        shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);
+                    }
                     shot.recycle();
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: dual sensor independence/faults/stale data; immediate countdown state, unchanged digits, phase switch, holds, stale data and animation cleanup; managed settings/updates/history regression.");
+            result.putString("stream","PASS: two icon buttons, immediate pending color, old-poll isolation, failure rollback, confirmation and timeout; dual sensor independence/faults/stale data; immediate countdown state, unchanged digits, phase switch, holds, stale data and animation cleanup; managed settings/updates/history regression.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}

@@ -128,7 +128,16 @@ public final class MainActivity extends Activity {
     private int accessViewEpoch;
     private boolean managedUpdateStarting;
     private boolean modeChanging;
-    private Button refreshModeButton, coolModeButton, iceModeButton;
+    private Button coolModeButton, iceModeButton;
+    private String pendingMode;
+    private boolean modeAwaitingConfirmation;
+    private final Runnable expireModeConfirmation = () -> {
+        if (!modeAwaitingConfirmation) return;
+        pendingMode = null; modeAwaitingConfirmation = false;
+        renderModeControls(null, null);
+        showMessage("Chưa xác nhận trạng thái mới. Đang đọc lại thiết bị…");
+        refreshDashboard();
+    };
     private final Runnable expireModeControls = () -> { if (coolModeButton != null) coolModeButton.setEnabled(false); if (iceModeButton != null) iceModeButton.setEnabled(false); };
 
     private TextView firmwareInfo;
@@ -305,7 +314,7 @@ public final class MainActivity extends Activity {
     }
 
     private void clearDeviceState() {
-        deviceAccess = new JSONObject(); managedUpdateStarting = false; modeChanging = false; ++accessViewEpoch;
+        deviceAccess = new JSONObject(); managedUpdateStarting = false; modeChanging = false; pendingMode = null; modeAwaitingConfirmation = false; mainHandler.removeCallbacks(expireModeConfirmation); ++accessViewEpoch;
         configLoaded = false; runtimeConfig = RuntimeConfigCodec.defaults();
         lastStatus = null; lastDebug = null; imageGeneration = 0;
         lastHistory = null; nextHistoryRead = 0; historyError = "";
@@ -1069,22 +1078,42 @@ public final class MainActivity extends Activity {
         row.addView(item, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
     }
 
-    private Button modeAction(LinearLayout row, String title, float weight, Runnable action) {
+    private Button modeAction(LinearLayout row, String title, Runnable action) {
         Button button = neutralButton(title);
-        button.setTextSize(12); button.setMinWidth(0); button.setMinimumWidth(0);
-        button.setPadding(dp(4),0,dp(4),0); button.setMaxLines(1); button.setHorizontallyScrolling(false);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,dp(54),weight);
-        if (row.getChildCount() > 0) params.setMargins(dp(8),0,0,0);
+        button.setTextSize(13); button.setMinWidth(0); button.setMinimumWidth(0);
+        button.setPadding(dp(14),0,dp(14),0); button.setMaxLines(2); button.setHorizontallyScrolling(false);
+        button.setCompoundDrawablePadding(dp(8));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,dp(64),1);
+        if (row.getChildCount() > 0) params.setMargins(dp(12),0,0,0);
         row.addView(button,params); button.setOnClickListener(v -> action.run());
         return button;
     }
 
+    private void paintModeButton(Button button, boolean cool, boolean selected, boolean pending) {
+        String title = cool ? "Làm lạnh" : "Xả đá";
+        button.setText(title + (pending ? (modeChanging ? "\nĐang gửi…" : "\nĐang xác nhận…") : ""));
+        int accent = cool ? 0xFF176B9C : 0xFFA95616;
+        int ink = selected ? Color.WHITE : (button.isEnabled() ? accent : Design.MUTED);
+        button.setSelected(selected);
+        button.setTextColor(ink);
+        button.setBackgroundTintList(ColorStateList.valueOf(selected ? accent : 0xFFEDF3F6));
+        Design.Icon symbol = new Design.Icon(cool ? "snowflake" : "droplet", ink);
+        symbol.setBounds(0,0,dp(22),dp(22));
+        button.setCompoundDrawables(symbol,null,null,null);
+    }
+
+    private void beginModeChange(String mode) {
+        modeChanging = true; pendingMode = mode; modeAwaitingConfirmation = false;
+        mainHandler.removeCallbacks(expireModeConfirmation);
+        // Paint on the UI thread before the command is queued for network I/O.
+        renderModeControls(lastStatus, lastDebug);
+    }
+
     private void selectMode(String mode) {
-        if (modeChanging || managedUpdateStarting || !foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
+        if (modeChanging || pendingMode != null || managedUpdateStarting || !foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
         Button chosen = "COOL".equals(mode) ? coolModeButton : iceModeButton;
         if (chosen == null || !chosen.isEnabled()) return;
-        modeChanging = true;
-        coolModeButton.setEnabled(false); iceModeButton.setEnabled(false); refreshModeButton.setEnabled(false);
+        beginModeChange(mode);
         final int token = controlEpoch;
         final EspApi session = api.snapshot(15000);
         showMessage("Đang chuyển chế độ…");
@@ -1093,16 +1122,20 @@ public final class MainActivity extends Activity {
             try {
                 session.post("/api/mode", new JSONObject().put("mode",mode));
                 // Refresh from hardware rather than assuming a late command still owns the mode.
-                onControl(token, () -> finishModeChange("Đã gửi lệnh chuyển chế độ."));
+                onControl(token, () -> finishModeChange(true, "Đã gửi lệnh chuyển chế độ."));
             } catch (Exception error) {
-                onControl(token, () -> finishModeChange("Chưa xác nhận chuyển chế độ. " + errorMessage(error)));
+                onControl(token, () -> finishModeChange(false, "Chưa xác nhận chuyển chế độ. " + errorMessage(error)));
             }
         });
     }
 
-    private void finishModeChange(String message) {
+    private void finishModeChange(boolean accepted, String message) {
         modeChanging = false;
-        if (refreshModeButton != null) refreshModeButton.setEnabled(true);
+        modeAwaitingConfirmation = accepted;
+        if (!accepted) pendingMode = null;
+        mainHandler.removeCallbacks(expireModeConfirmation);
+        renderModeControls(lastStatus, lastDebug);
+        if (modeAwaitingConfirmation) mainHandler.postDelayed(expireModeConfirmation,5000);
         showMessage(message); refreshDashboard();
     }
 
@@ -1118,13 +1151,19 @@ public final class MainActivity extends Activity {
             if("mode_source".equals(v.optString("name"))) source=v.optString("value");
             if("mode".equals(v.optString("name"))) running=v.optString("value");
         }
+        if (modeAwaitingConfirmation && fresh &&
+            (("COOL".equals(pendingMode) && "0".equals(selected)) ||
+             ("ICE_FLUSH".equals(pendingMode) && "1".equals(selected)))) {
+            pendingMode = null; modeAwaitingConfirmation = false;
+            mainHandler.removeCallbacks(expireModeConfirmation);
+        }
         boolean enabled = fresh && selected != null && ("APP".equals(source) || "PHYSICAL".equals(source)) &&
             ("COOL".equals(running) || "ICE_FLUSH".equals(running) || "IDLE".equals(running)) &&
-            status != null && !status.optBoolean("busy",true) && !modeChanging && !managedUpdateStarting;
+            status != null && !status.optBoolean("busy",true) && !modeChanging && pendingMode == null && !managedUpdateStarting;
         coolModeButton.setEnabled(enabled); iceModeButton.setEnabled(enabled);
-        coolModeButton.setBackgroundTintList(ColorStateList.valueOf(fresh && "0".equals(selected) ? 0xFFCCEEE5 : 0xFFEDF3F6));
-        iceModeButton.setBackgroundTintList(ColorStateList.valueOf(fresh && "1".equals(selected) ? 0xFFCCEEE5 : 0xFFEDF3F6));
-        if (refreshModeButton != null) refreshModeButton.setEnabled(!modeChanging);
+        String displayed = pendingMode != null ? pendingMode : fresh ? ("0".equals(selected) ? "COOL" : "1".equals(selected) ? "ICE_FLUSH" : null) : null;
+        paintModeButton(coolModeButton,true,"COOL".equals(displayed),"COOL".equals(pendingMode));
+        paintModeButton(iceModeButton,false,"ICE_FLUSH".equals(displayed),"ICE_FLUSH".equals(pendingMode));
         mainHandler.removeCallbacks(expireModeControls);
         if(enabled) mainHandler.postDelayed(expireModeControls,5000);
     }
@@ -1145,10 +1184,9 @@ public final class MainActivity extends Activity {
         hero.addView(dashboardConnection, fullParams(0, 14, 0, 0));
         content.addView(hero, fullParams(0, 0, 0, 18));
 
-        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-        refreshModeButton = modeAction(actions, "Làm mới", 0.85f, () -> { nextHistoryRead = 0; refreshDashboard(); });
-        coolModeButton = modeAction(actions, "Làm lạnh", 1.35f, () -> selectMode("COOL"));
-        iceModeButton = modeAction(actions, "Xả đá", 1.35f, () -> selectMode("ICE_FLUSH"));
+        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); actions.setBaselineAligned(false);
+        coolModeButton = modeAction(actions, "Làm lạnh", () -> selectMode("COOL"));
+        iceModeButton = modeAction(actions, "Xả đá", () -> selectMode("ICE_FLUSH"));
         coolModeButton.setEnabled(false); iceModeButton.setEnabled(false);
         content.addView(actions, fullParams(0, 0, 0, 20));
 
@@ -1932,7 +1970,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.1.6 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.2.1 • Kết nối qua Internet");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {
             try (InputStream stream = getAssets().open("LICENSE.txt")) {

@@ -65,6 +65,17 @@ final class Design {
                 case "arrow": path(c,5,12,19,12); path(c,14,7,19,12,14,17); break;
                 case "refresh":
                     c.drawArc(4,4,20,20,40,285,false,p); path(c,16,3,20,5,19,9); break;
+                case "snowflake":
+                    for (int i=0;i<6;i++) {
+                        c.save(); c.rotate(i*60,12,12);
+                        path(c,12,12,12,3); path(c,9,5,12,8,15,5); c.restore();
+                    }
+                    break;
+                case "droplet":
+                    Path drop = new Path(); drop.moveTo(12,2);
+                    drop.cubicTo(10,6,5,10,5,14); drop.cubicTo(5,23,19,23,19,14);
+                    drop.cubicTo(19,10,14,6,12,2); c.drawPath(drop,p);
+                    c.drawArc(8,11,16,19,75,85,false,p); break;
                 case "power":
                     c.drawArc(4,4,20,21,310,280,false,p);
                     c.drawLine(12,2,12,12,p); break;

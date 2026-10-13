@@ -1,0 +1,15 @@
+{
+  "version": "3.2.1",
+  "version_code": 24,
+  "apk_sha256": "28b4b841c278135a41de9967fd08747eb08498e9400579fb9690a5a80266dbbe",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed, no errors",
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "android_instrumentation": "passed: two equal icon buttons; immediate pending selection; old telemetry cannot override in-flight selection; failure rollback; ACK waits for target telemetry; timeout clears pending state; two-line labels stay aligned without clipping; existing managed access, update, sensors, countdown and history regression",
+    "visual_check": "Actual Android view previews inspected for normal and pending state using illustrative data",
+    "hardware": "No additional board actions this release; uses unchanged 3.2.0 mode API"
+  }
+}
