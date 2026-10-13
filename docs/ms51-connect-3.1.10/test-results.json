@@ -1,0 +1,13 @@
+{
+  "version": "3.1.10",
+  "version_code": 22,
+  "apk_sha256": "d2f13a9c935668212de12c0435a49ed904d067cbfd368fe99f56867976adc6f8",
+  "validation": {
+    "build": "passed",
+    "lint_errors": 0,
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "change": "Removed unit label from the shared OP/CL card builder; no new behavior or tests"
+  },
+  "firmware_changed": false,
+  "server_changed": false
+}

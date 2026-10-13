@@ -101,3 +101,8 @@ App bỏ qua trường `remote_paused` tùy chọn đã cũ còn trong bộ nh�
 ## 3.1.9 — Nhãn OP và CL
 
 Ô xanh có nhãn OP, ô đỏ có nhãn CL phía trên số. Giữ hiệu ứng nhấp nháy theo trạng thái bộ đếm của 3.1.8. Chỉ cập nhật APK, không cần nạp C5/MS51. Đã kiểm thử emulator API 35, lint không có lỗi và kiểm tra ảnh giao diện trong `docs/ms51-connect-3.1.9`.
+
+
+## 3.1.10 — Bỏ đơn vị dưới ô số
+
+Bỏ chữ “phút” dưới cả OP và CL. Nhãn OP/CL, số hiển thị và hiệu ứng nhấp nháy giữ nguyên. Chỉ cập nhật APK. Build thành công, lint không có lỗi, chữ ký giữ nguyên.

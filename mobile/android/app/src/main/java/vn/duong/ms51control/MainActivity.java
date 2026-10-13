@@ -1150,7 +1150,6 @@ public final class MainActivity extends Activity {
         card.addView(label, fullParams(0,0,0,8));
         SevenSegmentView display=new SevenSegmentView(this); display.setSegmentColor(color);
         card.addView(display,new LinearLayout.LayoutParams(-1,dp(64)));
-        TextView unit=mutedText("phút"); card.addView(unit,fullParams(0,6,0,0));
         if("green".equals(channel)) greenDisplay=display; else redDisplay=display;
         return card;
     }
