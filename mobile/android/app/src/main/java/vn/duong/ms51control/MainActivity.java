@@ -231,13 +231,7 @@ public final class MainActivity extends Activity {
         stopHome(); stopDashboard(); ++setupEpoch; ++authEpoch;
         screen = Screen.AUTH; setupBusy = false; authBusy = false; registerMode = register;
         lastUiMessage = "";
-        LinearLayout content = createPage("KHÔNG GIAN CỦA BẠN", register ? "Tạo tài khoản" : "Chào mừng trở lại",
-                register ? "Bắt đầu quản lý các thiết bị của bạn." : "Đăng nhập để mở không gian thiết bị.");
-        LinearLayout hero = card(); hero.setBackground(new Design.Hero());
-        TextView welcome = valueText("Kết nối trong\ntầm tay bạn."); welcome.setTextSize(27); welcome.setTextColor(Color.WHITE);
-        hero.addView(welcome);
-        TextView caption = bodyText("MS51 CONNECT"); caption.setTextColor(Design.MINT); caption.setLetterSpacing(.12f);
-        hero.addView(caption, fullParams(0,20,0,0)); content.addView(hero,fullParams(0,0,0,20));
+        LinearLayout content = createPage("", register ? "Tạo tài khoản" : "Đăng nhập", "");
         accountName = textInput("Tên đăng nhập", false); accountName.setSingleLine(true);
         accountName.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         accountName.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(32)});
@@ -334,7 +328,7 @@ public final class MainActivity extends Activity {
         screen = Screen.HOME; setupBusy = false; openingDevice = false; activeDevice = null;
         clearDeviceState(); api.setExpectedDeviceId(""); api.setCloud(null,""); lastUiMessage = "";
         LinearLayout content = createPage("", "Xin chào, " + username,
-                "Mọi thiết bị, trong một không gian.");
+                "");
         List<DeviceStore.Device> devices = deviceStore.list(accountId);
         LinearLayout hero = card(); hero.setBackground(new Design.Hero());
         TextView count = valueText(String.format(Locale.ROOT,"%02d",devices.size())); count.setTextSize(46); count.setTextColor(Color.WHITE);
@@ -1010,7 +1004,7 @@ public final class MainActivity extends Activity {
                 : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị";
         LinearLayout content = createPage("", title,
                 tab == Tab.OVERVIEW ? "Theo dõi bộ điều khiển"
-                : tab == Tab.SETTINGS ? "Tinh chỉnh cho từng nhu cầu vận hành."
+                : tab == Tab.SETTINGS ? ""
                 : tab == Tab.FIRMWARE ? "Cập nhật phiên bản mới cho thiết bị."
                 : "Thông tin kết nối và bộ điều khiển.");
         TextView deviceName = mutedText(activeDevice == null ? "" : activeDevice.name);
@@ -2047,8 +2041,8 @@ public final class MainActivity extends Activity {
         }
         TextView heading=valueText(title); heading.setTextSize(29);
         heading.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        content.addView(heading,fullParams(0,0,0,5));
-        content.addView(bodyText(subtitle),fullParams(0,0,0,22));
+        content.addView(heading,fullParams(0,0,0,subtitle.isEmpty() ? 22 : 5));
+        if (!subtitle.isEmpty()) content.addView(bodyText(subtitle),fullParams(0,0,0,22));
         messageView=bodyText(lastUiMessage); messageView.setTextSize(12);
         messageView.setPadding(dp(14),dp(12),dp(14),dp(12));
         messageView.setBackground(rounded(0xFFE8F2F1,dp(12)));

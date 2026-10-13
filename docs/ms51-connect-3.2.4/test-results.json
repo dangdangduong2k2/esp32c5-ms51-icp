@@ -1,12 +1,12 @@
 {
   "version": "3.2.4",
   "version_code": 27,
-  "apk_sha256": "09f51c172c5f09ec4fe23708543d0d4b3d74ff8825ed9413a084c774ec7ec226",
+  "apk_sha256": "85a3a463b145ba16c5d270a89bafcfe438cd76b97f1b232b5a3f50c1207d1d71",
   "firmware_changed": false,
   "server_changed": false,
   "validation": {
     "build": "passed",
     "lint": "passed",
-    "scope": "Overview subtitle shortened to Theo dõi bộ điều khiển; no behavior changes or new tests"
+    "scope": "Removed slogans from login/register, home and settings; overview subtitle is Theo dõi bộ điều khiển; blank descriptions take no space; no behavior changes or new tests"
   }
 }
