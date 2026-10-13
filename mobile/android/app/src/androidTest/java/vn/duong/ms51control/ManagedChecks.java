@@ -141,6 +141,18 @@ final class ManagedChecks {
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     SevenSegmentView green=(SevenSegmentView)get(a,"greenDisplay"), red=(SevenSegmentView)get(a,"redDisplay");
                     check(green.isCounting() && !red.isCounting(),"First sample blinks without a digit change");
+                    JSONObject oldPause = new JSONObject().put("name","remote_paused").put("value","OFF").put("age_ms",60000);
+                    preview.getJSONArray("variables").put(oldPause);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(green.isCounting(),"Old optional pause field after MS51 upgrade cannot block current countdown");
+                    oldPause.put("value","ON");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(green.isCounting(),"Stale ON is not a current pause");
+                    oldPause.put("age_ms",100);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!green.isCounting(),"Fresh remote pause still stops blink");
+                    oldPause.put("value","OFF").put("age_ms",60000);
+
                     preview.put("last_rx_age_ms",5000);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(!green.isCounting() && green.getAlpha()==1f,"Stale telemetry cancels pulse and restores alpha");

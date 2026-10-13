@@ -1239,16 +1239,18 @@ public final class MainActivity extends Activity {
         greenDisplay.setValue(values.get("green_min"));
         redDisplay.setValue(values.get("red_min"));
         boolean fresh = values.containsKey("countdown_active") && debug.optLong("last_rx_age_ms", -1) >= 0 && debug.optLong("last_rx_age_ms", -1) <= 3000;
+        String currentPause = null;
         for (int i = 0; fresh && variables != null && i < variables.length(); i++) {
             JSONObject item = variables.optJSONObject(i);
-            if (item != null && ("countdown_active".equals(item.optString("name")) || "remote_paused".equals(item.optString("name")) || "mode".equals(item.optString("name")) || "green_min".equals(item.optString("name")) || "red_min".equals(item.optString("name")))) {
+            if (item != null && "remote_paused".equals(item.optString("name")) && item.optLong("age_ms", -1) >= 0 && item.optLong("age_ms", -1) <= 3000) currentPause = item.optString("value");
+            if (item != null && ("countdown_active".equals(item.optString("name")) || "mode".equals(item.optString("name")) || "green_min".equals(item.optString("name")) || "red_min".equals(item.optString("name")))) {
                 long age = item.optLong("age_ms", -1);
                 if (age < 0 || age > 3000) fresh = false;
             }
         }
         if (!fresh) stopCounting();
         else {
-            int active = countdownTracker.update(mode, values.get("countdown_active"), values.get("green_min"), values.get("red_min"), values.get("remote_paused"));
+            int active = countdownTracker.update(mode, values.get("countdown_active"), values.get("green_min"), values.get("red_min"), currentPause);
             greenDisplay.setCounting(active == 1); redDisplay.setCounting(active == 2);
             mainHandler.removeCallbacks(expireCounting);
             mainHandler.postDelayed(expireCounting, 5000);

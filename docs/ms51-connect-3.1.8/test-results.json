@@ -1,0 +1,110 @@
+{
+  "version": "3.1.8",
+  "version_code": 20,
+  "sha256": {
+    "MS51-Connect-3.1.8.apk": "e98242564cce9ac924af9434f40e54f4df61038a084e39f0079e6662820d2c3e",
+    "MS51-Countdown-State-3.1.7.hex": "8696569d3612c3f40870ec21470f96e2f2783142fa9885cdb4b0ccbb204595b9"
+  },
+  "android_tests": {
+    "platform": "API 35 emulator",
+    "passed": true,
+    "lint_errors": 0,
+    "same_signer_as_3_1_6": true,
+    "checks": [
+      "Immediate blink at first timer state while number unchanged",
+      "Unchanged digits continue to blink",
+      "Phase change switches blink without digit change",
+      "NONE, remote pause, settings and non-numeric values stop blink",
+      "Stale timer state stops even with fresh UART traffic",
+      "No inference for older firmware",
+      "Existing dual temperature, managed settings, firmware, history and animation cleanup checks",
+      "Stale optional remote_paused OFF/ON from previous MS51 firmware does not block current countdown; fresh ON still pauses"
+    ]
+  },
+  "ms51_build": {
+    "compiler": "Keil C51 9.60.7.0",
+    "optimization": "8,SIZE",
+    "code_bytes": 26659,
+    "xdata_bytes": 1447,
+    "errors": 0,
+    "warnings": 0,
+    "hex_max_address": "0x6824",
+    "limit_exclusive": "0x6f00",
+    "physical_flash_tested": true
+  },
+  "c5_changed": false,
+  "server_changed": false,
+  "hardware": {
+    "program_verified": true,
+    "program_job": 1,
+    "config_identical": true,
+    "timer_samples": [
+      {
+        "mode": {
+          "name": "mode",
+          "value": "ICE_FLUSH",
+          "age_ms": 770
+        },
+        "green_min": {
+          "name": "green_min",
+          "value": "32",
+          "age_ms": 771
+        },
+        "red_min": {
+          "name": "red_min",
+          "value": "4",
+          "age_ms": 771
+        },
+        "countdown_active": {
+          "name": "countdown_active",
+          "value": "RED",
+          "age_ms": 762
+        }
+      },
+      {
+        "mode": {
+          "name": "mode",
+          "value": "ICE_FLUSH",
+          "age_ms": 915
+        },
+        "green_min": {
+          "name": "green_min",
+          "value": "32",
+          "age_ms": 916
+        },
+        "red_min": {
+          "name": "red_min",
+          "value": "4",
+          "age_ms": 916
+        },
+        "countdown_active": {
+          "name": "countdown_active",
+          "value": "RED",
+          "age_ms": 914
+        }
+      },
+      {
+        "mode": {
+          "name": "mode",
+          "value": "ICE_FLUSH",
+          "age_ms": 41
+        },
+        "green_min": {
+          "name": "green_min",
+          "value": "32",
+          "age_ms": 42
+        },
+        "red_min": {
+          "name": "red_min",
+          "value": "4",
+          "age_ms": 42
+        },
+        "countdown_active": {
+          "name": "countdown_active",
+          "value": "RED",
+          "age_ms": 33
+        }
+      }
+    ]
+  }
+}

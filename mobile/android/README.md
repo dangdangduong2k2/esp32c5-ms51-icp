@@ -89,3 +89,10 @@ MS51 bổ sung `VAR,countdown_active,GREEN|RED|NONE` mỗi giây. App nhấp nh�
 Cần APK 3.1.7 và bản MS51 có trường mới. C5 hiện tại chuyển tiếp trường này mà không cần nạp lại; máy chủ không đổi. HEX kèm phát hành được build từ `MS51_code/260502 add PIN`, cùng source thư mục người dùng cung cấp; chưa nạp kiểm thử trên MS51 thật. Bo quan sát trước cập nhật có các trường `physical_mode`, `effective_mode`, `remote_paused` không có trong source này, vì vậy cần xác nhận bản source trước khi nạp thay thế.
 
 Keil chuyển từ `OPTIMIZE(8,SPEED)` sang `OPTIMIZE(8,SIZE)` để giữ nguyên giới hạn `CODE(0x0000-0x6EFF)`: 26.659 byte code, 0 lỗi/cảnh báo. Không mở rộng vùng flash sang vùng dành riêng. Xem `docs/ms51-connect-3.1.7/test-results.json`.
+
+
+## 3.1.8 — Xác minh trên MS51 thật
+
+Đã nạp HEX MS51 3.1.7 từ source người dùng xác nhận ngày 13/10/2026. C5 báo nạp thành công với kiểm tra từng trang flash; cấu hình 217 byte trước/sau giống nhau. Đã quan sát trạng thái GREEN sau khởi động và RED ở pha kế tiếp; ba mẫu liên tục cùng số đỏ 4 vẫn báo RED.
+
+App bỏ qua trường `remote_paused` tùy chọn đã cũ còn trong bộ nhớ C5 sau khi thay MS51. Trạng thái bộ đếm hiện tại vẫn quyết định hiệu ứng; trạng thái tạm dừng mới (nếu có) vẫn được tôn trọng. Không cần khởi động lại/nạp lại C5 để xóa dữ liệu cũ. Kiểm thử emulator API 35 đạt, cùng chữ ký APK trước. Bản này dùng nguyên HEX MS51 của 3.1.7; không có thay đổi chương trình MS51 thêm.
