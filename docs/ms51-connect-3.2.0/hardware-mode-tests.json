@@ -1,0 +1,63 @@
+{
+  "c5_flash_verified": true,
+  "nvs_identical": true,
+  "ms51_flash_verified": true,
+  "mode_tests": [
+    {
+      "mode": "COOL",
+      "mode_source": "APP",
+      "selected_mode": "0",
+      "green_min": "5",
+      "red_min": "6",
+      "countdown_active": "GREEN",
+      "relay1": "OFF",
+      "relay2": "ON",
+      "relay3": "OFF"
+    },
+    {
+      "mode": "ICE_FLUSH",
+      "mode_source": "APP",
+      "selected_mode": "1",
+      "green_min": "31",
+      "red_min": "5",
+      "countdown_active": "GREEN",
+      "relay1": "OFF",
+      "relay2": "OFF",
+      "relay3": "ON"
+    },
+    {
+      "mode": "COOL",
+      "mode_source": "APP",
+      "selected_mode": "0",
+      "green_min": "5",
+      "red_min": "6",
+      "countdown_active": "GREEN",
+      "relay1": "OFF",
+      "relay2": "ON",
+      "relay3": "OFF"
+    }
+  ],
+  "restart_keeps_app_mode": {
+    "mode": "COOL",
+    "mode_source": "APP",
+    "selected_mode": "0",
+    "green_min": "5",
+    "red_min": "6",
+    "countdown_active": "GREEN",
+    "relay1": "OFF",
+    "relay2": "ON",
+    "relay3": "OFF"
+  },
+  "final_state": {
+    "mode": "ICE_FLUSH",
+    "mode_source": "APP",
+    "selected_mode": "1",
+    "green_min": "31",
+    "red_min": "5",
+    "countdown_active": "GREEN",
+    "relay1": "OFF",
+    "relay2": "OFF",
+    "relay3": "ON"
+  },
+  "settings_217_bytes_preserved": true
+}

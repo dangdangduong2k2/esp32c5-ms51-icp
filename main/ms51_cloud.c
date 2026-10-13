@@ -209,7 +209,7 @@ static cJSON *remote_upload(const cJSON *body) {
 }
 static bool allowed(const char *method,const char *path) {
     const char *get[]={"/api/status","/api/debug","/api/runtime-config"};
-    const char *post[]={"/api/info","/api/reset","/api/runtime-config","/api/program","/api/verify","/api/program-full","/api/erase","/internal/upload","/internal/unpair"};
+    const char *post[]={"/api/mode","/api/info","/api/reset","/api/runtime-config","/api/program","/api/verify","/api/program-full","/api/erase","/internal/upload","/internal/unpair"};
     if(!strcmp(method,"GET")) { for(size_t i=0;i<sizeof(get)/sizeof(*get);i++) if(!strcmp(path,get[i])) return true; }
     if(!strcmp(method,"POST")) { for(size_t i=0;i<sizeof(post)/sizeof(*post);i++) if(!strcmp(path,post[i])) return true; }
     return false;

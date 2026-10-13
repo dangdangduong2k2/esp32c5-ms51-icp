@@ -30,6 +30,7 @@
 #define TELEMETRY_RESPONSE_SOF      0xA6u
 #define TELEMETRY_COMMAND_GET       0x47u /* 'G' */
 #define TELEMETRY_COMMAND_SET       0x53u /* 'S' */
+#define TELEMETRY_COMMAND_MODE      0x4Du /* M: one byte COOL=0, ICE_FLUSH=1 */
 
 #define TELEMETRY_STATUS_OK          0u
 #define TELEMETRY_STATUS_BAD_FRAME   1u
@@ -288,6 +289,8 @@ static void telemetry_build_snapshot(void)
 	EA = saved_ea;
 
 	telemetry_append_var_text("mode", telemetry_mode_text());
+	telemetry_append_var_text("mode_source", mode_from_app ? "APP" : "PHYSICAL");
+	telemetry_append_var_u16("selected_mode", (uint16_t)switch_state);
 	telemetry_append_display("green_min", &GREEN);
 	telemetry_append_display("red_min", &RED);
 	telemetry_append_var_text("countdown_active", telemetry_countdown_active());
@@ -472,6 +475,12 @@ static void telemetry_finish_config_command(void)
 		telemetry_schedule_config_response(telemetry_pending_command,
 			telemetry_pending_sequence, TELEMETRY_STATUS_OK, 1, 0);
 	}
+	else if (telemetry_pending_command == TELEMETRY_COMMAND_MODE)
+	{
+		telemetry_schedule_config_response(telemetry_pending_command,
+			telemetry_pending_sequence, mode_select_app(telemetry_rx_payload[0]) ?
+			TELEMETRY_STATUS_OK : TELEMETRY_STATUS_BAD_CONFIG, 0, 0);
+	}
 	else if (telemetry_pending_command == TELEMETRY_COMMAND_SET)
 	{
 		if (!telemetry_config_blob_is_valid(telemetry_rx_payload))
@@ -517,7 +526,7 @@ static void telemetry_process_command_byte(uint8_t value)
 		}
 		break;
 	case telemetry_rx_state_command:
-		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET)
+		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET && value != TELEMETRY_COMMAND_MODE)
 		{
 			telemetry_reset_rx_parser();
 			break;
@@ -534,7 +543,8 @@ static void telemetry_process_command_byte(uint8_t value)
 	case telemetry_rx_state_length:
 		telemetry_rx_length = value;
 		telemetry_rx_crc = telemetry_crc16_update(telemetry_rx_crc, value);
-		if ((telemetry_rx_command == TELEMETRY_COMMAND_GET && value != 0) ||
+		if ((telemetry_rx_command == TELEMETRY_COMMAND_MODE && value != 1) ||
+			(telemetry_rx_command == TELEMETRY_COMMAND_GET && value != 0) ||
 			(telemetry_rx_command == TELEMETRY_COMMAND_SET &&
 			 value != TELEMETRY_CONFIG_SIZE))
 		{

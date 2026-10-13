@@ -480,7 +480,7 @@ class Rpc(BaseModel):
 
 
 GET_PATHS = {"/api/status", "/api/debug", "/api/runtime-config"}
-POST_PATHS = {"/api/info", "/api/reset", "/api/runtime-config", "/api/program", "/api/verify", "/api/program-full", "/api/erase"}
+POST_PATHS = {"/api/mode", "/api/info", "/api/reset", "/api/runtime-config", "/api/program", "/api/verify", "/api/program-full", "/api/erase"}
 
 
 @app.post("/devices/{device}/request")
@@ -496,6 +496,12 @@ def rpc(device: str, data: Rpc, request: Request):
                 fail(403, 'Admin chưa cấp quyền cài đặt cho thiết bị này.')
     if not (data.method == "GET" and data.path in GET_PATHS or data.method == "POST" and data.path in POST_PATHS):
         fail(400, "Lệnh này chỉ dùng khi kết nối trực tiếp với thiết bị.")
+    if data.path == '/api/mode':
+        with lock:
+            if db.execute("SELECT 1 FROM update_jobs WHERE device=? AND state='running'", (device,)).fetchone():
+                fail(409, 'Thiết bị đang cập nhật. Vui lòng đợi hoàn tất.')
+    if data.path == '/api/mode' and (data.method != 'POST' or set(data.body) != {'mode'} or data.body.get('mode') not in ('COOL', 'ICE_FLUSH')):
+        fail(400, 'Chế độ không hợp lệ.')
     if len(json.dumps(data.body).encode()) > 4096:
         fail(413, "Nội dung lệnh quá lớn.")
     return bridge.call(row, user["id"], data.id, data.method, data.path, data.body)

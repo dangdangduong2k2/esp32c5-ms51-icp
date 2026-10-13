@@ -72,6 +72,14 @@ uint8_t btn_pin[btnTotal] = {SET_PIN, UP_PIN, DOWN_PIN};
 
 typedef enum switch_t { SW_COOL, SW_ICE_FLUSH, SW_IDLE } switch_t;
 switch_t switch_state = SW_IDLE;
+switch_t physical_switch_state = SW_IDLE;
+uint8_t mode_from_app = 0;
+uint8_t physical_switch_ready = 0;
+static switch_t mode_candidate = SW_IDLE;
+static uint8_t mode_candidate_count = 0;
+void switch_program(program_t pr);
+uint8_t mode_select_app(uint8_t mode);
+
 
 typedef enum RL_t { R1, R2, R3 } RL_t;
 Progress_t progress;

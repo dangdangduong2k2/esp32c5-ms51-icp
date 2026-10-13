@@ -27,6 +27,7 @@ static const char *TAG = "ms51_debug_uart";
 #define MS51_RUNTIME_RESPONSE_SOF 0xA6u
 #define MS51_RUNTIME_COMMAND_GET 0x47u
 #define MS51_RUNTIME_COMMAND_SET 0x53u
+#define MS51_RUNTIME_COMMAND_MODE 0x4Du
 #define MS51_RUNTIME_REQUEST_MAX_SIZE (1u + 1u + 1u + 1u + MS51_RUNTIME_CONFIG_SIZE + 2u)
 #define MS51_RUNTIME_RESPONSE_TIMEOUT_MS 3000u
 
@@ -289,7 +290,7 @@ static bool process_runtime_response_byte_locked(uint8_t byte)
         return true;
 
     case MS51_RUNTIME_RX_COMMAND:
-        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET) {
+        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET && byte != MS51_RUNTIME_COMMAND_MODE) {
             ++s_state.dropped_lines;
             reset_runtime_parser_locked();
             return true;
@@ -477,9 +478,10 @@ static esp_err_t runtime_config_request(uint8_t command, const uint8_t *payload,
         (payload_length != 0u && payload == NULL)) {
         return ESP_ERR_INVALID_STATE;
     }
-    if ((command == MS51_RUNTIME_COMMAND_GET && payload_length != 0u) ||
+    if ((command == MS51_RUNTIME_COMMAND_MODE && (payload_length != 1u || payload[0] > 1u)) ||
+        (command == MS51_RUNTIME_COMMAND_GET && payload_length != 0u) ||
         (command == MS51_RUNTIME_COMMAND_SET && payload_length != MS51_RUNTIME_CONFIG_SIZE) ||
-        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET)) {
+        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET && command != MS51_RUNTIME_COMMAND_MODE)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -716,4 +718,9 @@ esp_err_t ms51_debug_uart_set_runtime_config(
     }
     return runtime_config_request(MS51_RUNTIME_COMMAND_SET, config,
                                   MS51_RUNTIME_CONFIG_SIZE, NULL, target_status);
+}
+
+esp_err_t ms51_debug_uart_set_mode(uint8_t mode, uint8_t *target_status)
+{
+    return runtime_config_request(MS51_RUNTIME_COMMAND_MODE, &mode, 1, NULL, target_status);
 }

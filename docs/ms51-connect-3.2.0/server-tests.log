@@ -1,0 +1,34 @@
+D:\Codex\Documents\2026-10-05\https-github-com-dangdangduong2k2-esp32c5-ms51\work\test-venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+test_admin_password_revokes_all_admin_sessions (test_admin.AdminTests.test_admin_password_revokes_all_admin_sessions) ... ok
+test_anonymous_and_mobile_users_cannot_access_admin (test_admin.AdminTests.test_anonymous_and_mobile_users_cannot_access_admin) ... ok
+test_cookie_session_and_mobile_separation (test_admin.AdminTests.test_cookie_session_and_mobile_separation) ... ok
+test_csrf_origin_and_validation (test_admin.AdminTests.test_csrf_origin_and_validation) ... ok
+test_device_rename_scoped_to_owner (test_admin.AdminTests.test_device_rename_scoped_to_owner) ... ok
+test_duplicate_rename_rolls_back_without_session_revocation (test_admin.AdminTests.test_duplicate_rename_rolls_back_without_session_revocation) ... ok
+test_logout_expiry_and_login_limit (test_admin.AdminTests.test_logout_expiry_and_login_limit) ... ok
+test_mobile_login_race_with_password_reset (test_admin.AdminTests.test_mobile_login_race_with_password_reset) ... ok
+test_read_only_fields_and_presence (test_admin.AdminTests.test_read_only_fields_and_presence) ... ok
+test_register_login_health_regression (test_admin.AdminTests.test_register_login_health_regression) ... ok
+test_rename_and_reset_revoke_sessions_keep_devices (test_admin.AdminTests.test_rename_and_reset_revoke_sessions_keep_devices) ... ok
+test_search_pagination_and_literal_sql (test_admin.AdminTests.test_search_pagination_and_literal_sql) ... ok
+test_static_headers_no_traversal (test_admin.AdminTests.test_static_headers_no_traversal) ... ok
+test_username_only_keeps_password_and_noop_keeps_session (test_admin.AdminTests.test_username_only_keeps_password_and_noop_keeps_session) ... ok
+test_mode_owner_validation_and_update_overlap (__main__.ManagedTests.test_mode_owner_validation_and_update_overlap) ... ok
+test_policy_validation_and_stale_admin (__main__.ManagedTests.test_policy_validation_and_stale_admin) ... ok
+test_history_uint32_offsets_and_hidden_settings (__main__.ManagedTests.test_history_uint32_offsets_and_hidden_settings) ... ok
+test_history_malformed_and_wrong_owner (__main__.ManagedTests.test_history_malformed_and_wrong_owner) ... ok
+test_history_does_not_bypass_update_lock (__main__.ManagedTests.test_history_does_not_bypass_update_lock) ... ok
+test_hidden_settings_and_legacy_bypasses_denied (__main__.ManagedTests.test_hidden_settings_and_legacy_bypasses_denied) ... ok
+test_settings_merge_preserves_hidden_and_reserved_bytes (__main__.ManagedTests.test_settings_merge_preserves_hidden_and_reserved_bytes) ... ok
+test_settings_empty_stale_and_all_hidden (__main__.ManagedTests.test_settings_empty_stale_and_all_hidden) ... ok
+test_hex_rejections_and_owner_security (__main__.ManagedTests.test_hex_rejections_and_owner_security) ... ok
+test_assignment_revoke_and_no_content_in_mobile_metadata (__main__.ManagedTests.test_assignment_revoke_and_no_content_in_mobile_metadata) ... ok
+test_repeated_update_locked_and_idempotent (__main__.ManagedTests.test_repeated_update_locked_and_idempotent) ... ok
+test_worker_success_only_after_program_and_verify (__main__.ManagedTests.test_worker_success_only_after_program_and_verify) ... ok
+test_worker_mismatch_never_programs_or_claims_success (__main__.ManagedTests.test_worker_mismatch_never_programs_or_claims_success) ... ok
+
+----------------------------------------------------------------------
+Ran 27 tests in 8.198s
+
+OK

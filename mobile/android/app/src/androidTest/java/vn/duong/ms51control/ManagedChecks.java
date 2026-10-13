@@ -141,6 +141,26 @@ final class ManagedChecks {
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     SevenSegmentView green=(SevenSegmentView)get(a,"greenDisplay"), red=(SevenSegmentView)get(a,"redDisplay");
                     check(green.isCounting() && !red.isCounting(),"First sample blinks without a digit change");
+                    Button cool=(Button)get(a,"coolModeButton"), ice=(Button)get(a,"iceModeButton"), refresh=(Button)get(a,"refreshModeButton");
+                    check(!cool.isEnabled() && !ice.isEnabled(),"Older MS51 cannot receive soft mode commands");
+                    JSONObject modeSource=new JSONObject().put("name","mode_source").put("value","PHYSICAL").put("age_ms",100);
+                    JSONObject selectedMode=new JSONObject().put("name","selected_mode").put("value","0").put("age_ms",100);
+                    preview.getJSONArray("variables").put(modeSource).put(selectedMode);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(cool.isEnabled() && ice.isEnabled(),"Fresh capable device enables both mode choices");
+                    check(((LinearLayout.LayoutParams)cool.getLayoutParams()).weight > ((LinearLayout.LayoutParams)refresh.getLayoutParams()).weight,"Mode buttons wider than refresh");
+                    check(cool.getParent()==ice.getParent() && cool.getParent()==refresh.getParent(),"Three actions share one row");
+                    set(a,"modeChanging",true);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!cool.isEnabled() && !ice.isEnabled() && !refresh.isEnabled(),"In-flight mode request disables overlapping actions");
+                    set(a,"modeChanging",false);selectedMode.put("age_ms",4000);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!cool.isEnabled() && !ice.isEnabled(),"Stale selection disables commands");
+                    selectedMode.put("age_ms",100);sampleStatus.put("busy",true);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!cool.isEnabled() && !ice.isEnabled(),"Busy programmer blocks mode buttons");
+                    sampleStatus.put("busy",false);
+
                     JSONObject oldPause = new JSONObject().put("name","remote_paused").put("value","OFF").put("age_ms",60000);
                     preview.getJSONArray("variables").put(oldPause);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);

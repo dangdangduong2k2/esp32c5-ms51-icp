@@ -72,6 +72,8 @@ esp_err_t ms51_debug_uart_get_runtime_config(uint8_t config[MS51_RUNTIME_CONFIG_
 esp_err_t ms51_debug_uart_set_runtime_config(
     const uint8_t config[MS51_RUNTIME_CONFIG_SIZE], uint8_t *target_status);
 
+esp_err_t ms51_debug_uart_set_mode(uint8_t mode, uint8_t *target_status);
+
 #ifdef __cplusplus
 }
 #endif

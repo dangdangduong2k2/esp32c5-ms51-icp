@@ -1,0 +1,2 @@
+PASS: dual sensor independence/faults/stale data; immediate countdown state, unchanged digits, phase switch, holds, stale data and animation cleanup; managed settings/updates/history regression.
+Mode control assertions: fresh/legacy/stale data, busy device, command in flight and row width weights passed.

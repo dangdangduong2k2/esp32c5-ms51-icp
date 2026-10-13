@@ -1,0 +1,28 @@
+{
+  "version": "3.2.0",
+  "version_code": 23,
+  "apk_sha256": "5b77221208ee52ef1a880e753bdd8bbdac4cd44ebfad1e06bcf42a07647c3e55",
+  "assets": {
+    "ESP32-C5-DAT1-CLK0-RS3-DUAL-NTC-3.2.0.zip": "d3dca92b8641a904667778228d51d3caf3ff393740db264b75c092858660c9ca",
+    "MS51-Connect-3.2.0.apk": "5b77221208ee52ef1a880e753bdd8bbdac4cd44ebfad1e06bcf42a07647c3e55",
+    "MS51-Mode-Control-3.2.0.hex": "ba6da346f35ea5507dcad37242e883953b576194c067112ddc526f37c66bb799"
+  },
+  "validation": {
+    "android_build": "passed",
+    "android_lint": "passed, no errors",
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "android_instrumentation": "passed: permissions, updates, history, dual sensors, countdown, new mode controls and stale/busy gating",
+    "preview": "actual Android views, illustrative values, visually checked",
+    "server_tests": 27,
+    "ms51_mode_c_assertions": 18,
+    "ms51_keil": "0 errors, 0 warnings; code 27163 bytes; xdata 1454",
+    "c5_build": "passed; app 1461472 bytes fits 0x180000 partition",
+    "c5_flash": "OpenOCD write and verification passed; NVS binary identical",
+    "ms51_flash": "native page verification passed; 217 settings bytes preserved",
+    "live_https_mqtt": "both COOL and ICE_FLUSH commands acknowledged and confirmed in fresh MS51 telemetry; temporary test session removed",
+    "restart": "MS51 reset retains APP mode despite opposite switch baseline; physical movement takes ownership and this source survives reset",
+    "power_cycle": "not separately tested with full supply removal this turn"
+  },
+  "firmware_changed": true,
+  "server_changed": true
+}

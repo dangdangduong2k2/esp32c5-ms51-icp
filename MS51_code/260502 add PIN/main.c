@@ -459,12 +459,70 @@ uint16_t adc_average(uint8_t chanel)
 	return (uint16_t)result;
 }
 
+/* Ownership survives reboot; the boot switch sample is only a baseline. */
+static uint8_t mode_owner_valid(void)
+{
+    return eData.mode_owner_mark == 0xA7 && eData.mode_owner_value <= 2 &&
+        eData.mode_owner_inverse == (uint8_t)(eData.mode_owner_value ^ 0xFF);
+}
+
+static uint8_t mode_save_owner(uint8_t owner)
+{
+    if (!mode_owner_valid() || eData.mode_owner_value != owner) {
+        eData.mode_owner_mark = 0xA7;
+        eData.mode_owner_value = owner;
+        eData.mode_owner_inverse = (uint8_t)(owner ^ 0xFF);
+        AP_EEPROM_Commit();
+    }
+    return mode_owner_valid() && eData.mode_owner_value == owner;
+}
+
+static void mode_restore_owner(void)
+{
+    mode_from_app = mode_owner_valid() && eData.mode_owner_value != 0;
+    if (mode_from_app) switch_state = (switch_t)(eData.mode_owner_value - 1);
+}
+
+static void mode_observe_switch(switch_t sampled)
+{
+    if (!physical_switch_ready) {
+        physical_switch_state = sampled;
+        physical_switch_ready = 1;
+        mode_candidate = sampled;
+        mode_candidate_count = 0;
+        if (!mode_from_app) switch_state = sampled;
+        return;
+    }
+    if (sampled == physical_switch_state) { mode_candidate_count = 0; return; }
+    if (sampled != mode_candidate) { mode_candidate = sampled; mode_candidate_count = 1; return; }
+    if (++mode_candidate_count < 3) return;
+    physical_switch_state = sampled;
+    mode_candidate_count = 0;
+    if (mode_from_app) mode_save_owner(0);
+    mode_from_app = 0;
+    switch_state = sampled;
+}
+
+uint8_t mode_select_app(uint8_t mode)
+{
+    /* Never bypass the PIN gate, shutdown or a local settings operation. */
+    if (mode > SW_ICE_FLUSH || !physical_switch_ready || mode_candidate_count ||
+        eData.shutdown || eData.pin_locked || password_gate ||
+        (program != IDLE && program != COOL && program != ICE_FLUSH)) return 0;
+    if (!mode_save_owner(mode + 1)) return 0;
+    mode_from_app = 1;
+    switch_state = (switch_t)mode;
+    /* Repeated commands are idempotent: don't restart an active countdown. */
+    if (program != (program_t)mode) switch_program((program_t)mode);
+    return 1;
+}
+
 void ADC_update(void)
 {
 	static TICK_TYPE tick;
 	uint32_t result = 0;
 	switch_t state;
-	static uint8_t state_count = 0;
+
 
 	if (adc_done)
 	{
@@ -492,20 +550,8 @@ void ADC_update(void)
 			state = SW_ICE_FLUSH;
 		}
 
-		switch_state = state;
-
-		if (switch_state != state)
-		{
-			if (++state_count > 2)
-			{
-				switch_state = state;
-				state_count = 0;
-			}
-		}
-		else
-		{
-			state_count = 0;
-		}
+		/* Wait for the startup ADC average, then debounce actual changes. */
+		if (adc_stable_count >= 4) mode_observe_switch(state);
 
 		// DBG_MSG("\r\nadc: ");
 		// DBG_NUM(adc_avg[0]);
@@ -3010,6 +3056,7 @@ void main()
 	default_state();
 	MODIFY_HIRC_166();
 	eeprom_init();
+	mode_restore_owner();
 	password_day_tick = 0;
 	delay_ms(100);
 	shutdown_timeout_refresh();

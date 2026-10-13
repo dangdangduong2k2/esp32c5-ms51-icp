@@ -81,6 +81,10 @@ struct eeprom_type
 	uint8_t pin_wrong_limit;
 	uint8_t pin_request_mark;
 	uint8_t pin_request_mark_inv;
+	/* Private persisted owner; first 217 configuration bytes stay unchanged. */
+	uint8_t mode_owner_mark;
+	uint8_t mode_owner_value; /* 0 physical, 1 app COOL, 2 app ICE_FLUSH */
+	uint8_t mode_owner_inverse;
 } eData;
 
 #include "TM1650_multi.h"

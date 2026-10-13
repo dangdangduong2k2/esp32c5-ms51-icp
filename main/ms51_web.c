@@ -2,6 +2,7 @@
 #include "ms51_presence.h"
 #include "ms51_cloud.h"
 #include "ms51_analog.h"
+#include "cJSON.h"
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -1121,6 +1122,34 @@ static esp_err_t runtime_config_set_handler(httpd_req_t *request)
                      NULL);
 }
 
+static esp_err_t mode_handler(httpd_req_t *request)
+{
+    if (wrong_device(request)) return ESP_OK;
+    char body[HTTP_JSON_BODY_SIZE];
+    if (receive_json(request, body, sizeof(body)) != ESP_OK)
+        return send_error_json(request, "400 Bad Request", "Invalid mode request.", ESP_ERR_INVALID_ARG);
+    cJSON *json = cJSON_Parse(body);
+    const cJSON *value = cJSON_GetObjectItemCaseSensitive(json, "mode");
+    int mode = !cJSON_IsString(value) ? -1 : !strcmp(value->valuestring,"COOL") ? 0 :
+        !strcmp(value->valuestring,"ICE_FLUSH") ? 1 : -1;
+    cJSON_Delete(json);
+    if (mode < 0) return send_error_json(request,"400 Bad Request","Invalid mode.",ESP_ERR_INVALID_ARG);
+    esp_err_t error = ms51_operation_lock(0);
+    if (error != ESP_OK) return send_error_json(request,"409 Conflict","Device is busy.",error);
+    if (!state_begin_runtime_operation("mode", "Dang chuyen che do...")) {
+        ms51_operation_unlock();
+        return send_error_json(request,"409 Conflict","Device is busy.",ESP_ERR_INVALID_STATE);
+    }
+    uint8_t target_status = 0xFF;
+    error = ms51_debug_uart_set_mode((uint8_t)mode, &target_status);
+    if (error == ESP_OK && target_status != 0) error = ESP_ERR_INVALID_STATE;
+    state_finish_runtime_operation(error == ESP_OK ? "Da chuyen che do." : "Chua chuyen duoc che do.", error);
+    ms51_operation_unlock();
+    if (error != ESP_OK) return send_error_json(request,"409 Conflict",
+        "Chua chuyen duoc che do. Kiem tra khoa PIN, cai dat hoac ket noi voi mach.",error);
+    return send_json(request,"{\"ok\":true,\"message\":\"Da chuyen che do.\"}",NULL);
+}
+
 static void decode_filename(const char *encoded, char *decoded, size_t decoded_size)
 {
     size_t output = 0;
@@ -2115,7 +2144,7 @@ static esp_err_t start_http_server(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
-    config.max_uri_handlers = 15;
+    config.max_uri_handlers = 16;
     config.max_open_sockets = 4;
     config.lru_purge_enable = true;
     config.recv_wait_timeout = 20;
@@ -2136,6 +2165,7 @@ static esp_err_t start_http_server(void)
         {.uri = "/api/uplink/scan", .method = HTTP_GET, .handler = wifi_scan_handler},
         {.uri = "/api/uplink", .method = HTTP_POST, .handler = uplink_handler},
         {.uri = "/api/upload", .method = HTTP_POST, .handler = upload_handler},
+        {.uri = "/api/mode", .method = HTTP_POST, .handler = mode_handler},
         {.uri = "/api/info", .method = HTTP_POST, .handler = info_handler},
         {.uri = "/api/reset", .method = HTTP_POST, .handler = reset_handler},
         {.uri = "/api/program", .method = HTTP_POST, .handler = job_handler,

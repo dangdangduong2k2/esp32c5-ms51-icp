@@ -1,0 +1,44 @@
+{
+  "variant": "esp32c5-dat1-clk0-rs3-dual-ntc",
+  "pins": {
+    "DAT": 1,
+    "CLK": 0,
+    "RS": 3,
+    "NTC10K": 6,
+    "NTC50K": 4
+  },
+  "settings": {
+    "flash_mode": "dio",
+    "flash_size": "4MB",
+    "flash_freq": "80m"
+  },
+  "checks": [
+    "ESP32-C5 target and generated GPIO definitions",
+    "runtime data enabled, automatic programming disabled",
+    "partition checksum, bounds and flash size",
+    "app fits factory partition",
+    "three offsets match IDF flasher_args.json",
+    "NVS layout unchanged"
+  ],
+  "files": [
+    {
+      "address": "0x2000",
+      "name": "bootloader.bin",
+      "size": 22224,
+      "sha256": "6eea75dfebe0ebc4279c3415edee42fe425c1330d0ed2da6129136a72ed41faf"
+    },
+    {
+      "address": "0x8000",
+      "name": "partition-table.bin",
+      "size": 3072,
+      "sha256": "a051e6e82b5380e3647d1dbc8a0217c359da226970eb94f2cb0b864d9a712d43"
+    },
+    {
+      "address": "0x10000",
+      "name": "esp32c5-dat1-clk0-rs3-dual-ntc.bin",
+      "size": 1461472,
+      "sha256": "f9e1595de460bc424188a4092b81c46f6b84b4924770c4ed11cc899a5bff9967"
+    }
+  ],
+  "hardware_tested": true
+}

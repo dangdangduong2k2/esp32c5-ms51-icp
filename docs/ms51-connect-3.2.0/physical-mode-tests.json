@@ -1,0 +1,24 @@
+{
+  "physical_switch_takes_over": {
+    "mode": "COOL",
+    "mode_source": "PHYSICAL",
+    "selected_mode": "0",
+    "green_min": "5",
+    "red_min": "6",
+    "countdown_active": "GREEN",
+    "relay1": "OFF",
+    "relay2": "OFF",
+    "relay3": "OFF"
+  },
+  "restart_keeps_physical_owner": {
+    "mode": "COOL",
+    "mode_source": "PHYSICAL",
+    "selected_mode": "0",
+    "green_min": "5",
+    "red_min": "6",
+    "countdown_active": "GREEN",
+    "relay1": "OFF",
+    "relay2": "ON",
+    "relay3": "OFF"
+  }
+}

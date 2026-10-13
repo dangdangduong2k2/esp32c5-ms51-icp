@@ -127,6 +127,9 @@ public final class MainActivity extends Activity {
     private JSONObject deviceAccess = new JSONObject();
     private int accessViewEpoch;
     private boolean managedUpdateStarting;
+    private boolean modeChanging;
+    private Button refreshModeButton, coolModeButton, iceModeButton;
+    private final Runnable expireModeControls = () -> { if (coolModeButton != null) coolModeButton.setEnabled(false); if (iceModeButton != null) iceModeButton.setEnabled(false); };
 
     private TextView firmwareInfo;
     private TextView firmwareFileInfo;
@@ -302,7 +305,7 @@ public final class MainActivity extends Activity {
     }
 
     private void clearDeviceState() {
-        deviceAccess = new JSONObject(); managedUpdateStarting = false; ++accessViewEpoch;
+        deviceAccess = new JSONObject(); managedUpdateStarting = false; modeChanging = false; ++accessViewEpoch;
         configLoaded = false; runtimeConfig = RuntimeConfigCodec.defaults();
         lastStatus = null; lastDebug = null; imageGeneration = 0;
         lastHistory = null; nextHistoryRead = 0; historyError = "";
@@ -1066,6 +1069,66 @@ public final class MainActivity extends Activity {
         row.addView(item, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
     }
 
+    private Button modeAction(LinearLayout row, String title, float weight, Runnable action) {
+        Button button = neutralButton(title);
+        button.setTextSize(12); button.setMinWidth(0); button.setMinimumWidth(0);
+        button.setPadding(dp(4),0,dp(4),0); button.setMaxLines(1); button.setHorizontallyScrolling(false);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,dp(54),weight);
+        if (row.getChildCount() > 0) params.setMargins(dp(8),0,0,0);
+        row.addView(button,params); button.setOnClickListener(v -> action.run());
+        return button;
+    }
+
+    private void selectMode(String mode) {
+        if (modeChanging || managedUpdateStarting || !foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
+        Button chosen = "COOL".equals(mode) ? coolModeButton : iceModeButton;
+        if (chosen == null || !chosen.isEnabled()) return;
+        modeChanging = true;
+        coolModeButton.setEnabled(false); iceModeButton.setEnabled(false); refreshModeButton.setEnabled(false);
+        final int token = controlEpoch;
+        final EspApi session = api.snapshot(15000);
+        showMessage("Đang chuyển chế độ…");
+        io.execute(() -> {
+            if (!currentControl(token)) return;
+            try {
+                session.post("/api/mode", new JSONObject().put("mode",mode));
+                // Refresh from hardware rather than assuming a late command still owns the mode.
+                onControl(token, () -> finishModeChange("Đã gửi lệnh chuyển chế độ."));
+            } catch (Exception error) {
+                onControl(token, () -> finishModeChange("Chưa xác nhận chuyển chế độ. " + errorMessage(error)));
+            }
+        });
+    }
+
+    private void finishModeChange(String message) {
+        modeChanging = false;
+        if (refreshModeButton != null) refreshModeButton.setEnabled(true);
+        showMessage(message); refreshDashboard();
+    }
+
+    private void renderModeControls(JSONObject status, JSONObject debug) {
+        if (coolModeButton == null || iceModeButton == null) return;
+        String selected = null, source = null, running = null;
+        boolean fresh = debug != null && debug.optBoolean("enabled") && debug.optLong("last_rx_age_ms",-1) >= 0 && debug.optLong("last_rx_age_ms",-1) <= 3000;
+        JSONArray vars = debug == null ? null : debug.optJSONArray("variables");
+        if (vars != null) for (int i=0;i<vars.length();i++) {
+            JSONObject v=vars.optJSONObject(i);
+            if(v==null || v.optLong("age_ms",-1)<0 || v.optLong("age_ms",-1)>3000) continue;
+            if("selected_mode".equals(v.optString("name"))) selected=v.optString("value");
+            if("mode_source".equals(v.optString("name"))) source=v.optString("value");
+            if("mode".equals(v.optString("name"))) running=v.optString("value");
+        }
+        boolean enabled = fresh && selected != null && ("APP".equals(source) || "PHYSICAL".equals(source)) &&
+            ("COOL".equals(running) || "ICE_FLUSH".equals(running) || "IDLE".equals(running)) &&
+            status != null && !status.optBoolean("busy",true) && !modeChanging && !managedUpdateStarting;
+        coolModeButton.setEnabled(enabled); iceModeButton.setEnabled(enabled);
+        coolModeButton.setBackgroundTintList(ColorStateList.valueOf(fresh && "0".equals(selected) ? 0xFFCCEEE5 : 0xFFEDF3F6));
+        iceModeButton.setBackgroundTintList(ColorStateList.valueOf(fresh && "1".equals(selected) ? 0xFFCCEEE5 : 0xFFEDF3F6));
+        if (refreshModeButton != null) refreshModeButton.setEnabled(!modeChanging);
+        mainHandler.removeCallbacks(expireModeControls);
+        if(enabled) mainHandler.postDelayed(expireModeControls,5000);
+    }
+
     private void buildOverview(LinearLayout content) {
         LinearLayout hero = card(); hero.setBackground(new Design.Hero());
         hero.setPadding(dp(22), dp(22), dp(22), dp(22));
@@ -1083,7 +1146,10 @@ public final class MainActivity extends Activity {
         content.addView(hero, fullParams(0, 0, 0, 18));
 
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL);
-        addQuickAction(actions, "Làm mới", "refresh", () -> { nextHistoryRead = 0; refreshDashboard(); });
+        refreshModeButton = modeAction(actions, "Làm mới", 0.85f, () -> { nextHistoryRead = 0; refreshDashboard(); });
+        coolModeButton = modeAction(actions, "Làm lạnh", 1.35f, () -> selectMode("COOL"));
+        iceModeButton = modeAction(actions, "Xả đá", 1.35f, () -> selectMode("ICE_FLUSH"));
+        coolModeButton.setEnabled(false); iceModeButton.setEnabled(false);
         content.addView(actions, fullParams(0, 0, 0, 20));
 
         addSectionTitle(content, "Thời gian hiển thị");
@@ -1212,6 +1278,7 @@ public final class MainActivity extends Activity {
     private void renderDashboard(JSONObject status, JSONObject debug) {
         if (dashboardConnection == null) return;
         renderTemperature(status);
+        renderModeControls(status, debug);
         JSONObject uplink = getUplink(status);
         String ssid = uplink.optString("ssid", uplinkSsid);
         String network = ssid.isEmpty() ? "Chưa nhận Wi‑Fi" : ssid;
@@ -2274,6 +2341,8 @@ public final class MainActivity extends Activity {
     }
 
     private void stopDashboard() {
+        mainHandler.removeCallbacks(expireModeControls);
+        expireModeControls.run();
         stopCounting();
         renderTemperature(null);
         dashboardEpoch++;

@@ -20,6 +20,30 @@ class ManagedTests(AdminTests):
         self.auth()
         self.mobile_headers = self.mobile()
 
+    def test_mode_owner_validation_and_update_overlap(self):
+        body = {'id':'a'*32, 'method':'POST', 'path':'/api/mode', 'body':{'mode':'COOL'}}
+        with patch.object(core.bridge, 'call', return_value={'ok':True}) as call:
+            for mode in ('COOL','ICE_FLUSH'):
+                body['body']={'mode':mode}
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+            self.assertEqual(call.call_count,2)
+            call.reset_mock()
+            for invalid in ({'mode':'IDLE'},{'mode':0},{'mode':'COOL','extra':1},{}):
+                body['body']=invalid
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,400)
+            body['body']={'mode':'COOL'}
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body).status_code,401)
+            other=self.mobile('bob')
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=other).status_code,404)
+            call.assert_not_called()
+            with core.lock:
+                core.db.execute("INSERT INTO update_jobs VALUES(?,?,?,?,?,?,?)", ('job-mode',DEVICE,'u1','test-release','running','',time.time()))
+                core.db.commit()
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,409)
+            call.assert_not_called()
+            with core.lock:
+                core.db.execute("DELETE FROM update_jobs WHERE id='job-mode'");core.db.commit()
+
     def set_policy(self, visible):
         rev = self.client.get(ADMIN + '/access').json()['revision']
         r = self.client.post(ADMIN + '/access', json={'visible': visible, 'revision': rev}, headers=self.headers)
