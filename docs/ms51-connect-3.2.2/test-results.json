@@ -1,0 +1,14 @@
+{
+  "version": "3.2.2",
+  "version_code": 25,
+  "apk_sha256": "f2d5ee546da01af4a934dfb1d65ad04b903bfa45954b29d1161c25a6cc7a695a",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "android_instrumentation": "existing managed suite passed",
+    "visual": "Actual Android normal/pending previews inspected: ice cube icon; same blue selected background as cooling",
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0"
+  }
+}

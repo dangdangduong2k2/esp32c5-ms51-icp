@@ -1092,12 +1092,12 @@ public final class MainActivity extends Activity {
     private void paintModeButton(Button button, boolean cool, boolean selected, boolean pending) {
         String title = cool ? "Làm lạnh" : "Xả đá";
         button.setText(title + (pending ? (modeChanging ? "\nĐang gửi…" : "\nĐang xác nhận…") : ""));
-        int accent = cool ? 0xFF176B9C : 0xFFA95616;
+        int accent = 0xFF176B9C;
         int ink = selected ? Color.WHITE : (button.isEnabled() ? accent : Design.MUTED);
         button.setSelected(selected);
         button.setTextColor(ink);
         button.setBackgroundTintList(ColorStateList.valueOf(selected ? accent : 0xFFEDF3F6));
-        Design.Icon symbol = new Design.Icon(cool ? "snowflake" : "droplet", ink);
+        Design.Icon symbol = new Design.Icon(cool ? "snowflake" : "ice-cube", ink);
         symbol.setBounds(0,0,dp(22),dp(22));
         button.setCompoundDrawables(symbol,null,null,null);
     }
@@ -1970,7 +1970,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.2.1 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.2.2 • Kết nối qua Internet");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {
             try (InputStream stream = getAssets().open("LICENSE.txt")) {

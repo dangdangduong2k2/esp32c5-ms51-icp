@@ -71,11 +71,10 @@ final class Design {
                         path(c,12,12,12,3); path(c,9,5,12,8,15,5); c.restore();
                     }
                     break;
-                case "droplet":
-                    Path drop = new Path(); drop.moveTo(12,2);
-                    drop.cubicTo(10,6,5,10,5,14); drop.cubicTo(5,23,19,23,19,14);
-                    drop.cubicTo(19,10,14,6,12,2); c.drawPath(drop,p);
-                    c.drawArc(8,11,16,19,75,85,false,p); break;
+                case "ice-cube":
+                    path(c,12,2,21,7,21,17,12,22,3,17,3,7,12,2);
+                    path(c,3,7,12,12,21,7); path(c,12,12,12,22);
+                    path(c,6,11,6,15); path(c,15,17,18,15); break;
                 case "power":
                     c.drawArc(4,4,20,21,310,280,false,p);
                     c.drawLine(12,2,12,12,p); break;
