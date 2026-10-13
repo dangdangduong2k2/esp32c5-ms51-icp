@@ -78,3 +78,14 @@ Runner kiểm tra IP mất/cũ, sai MAC/SSID, hủy thao tác, phạm vi dò m�
 Kiểm thử nền thẻ trạng thái (offline, không gọi server hoặc điều khiển C5):
 
     adb -s emulator-5556 shell am instrument -w -e mode render vn.duong.ms51connect.test/vn.duong.ms51control.CloudIntegrationTestRunner
+
+
+## 3.1.7 — Nhấp nháy theo trạng thái bộ đếm
+
+Chỉ ô số trong app nhấp nháy. Giá trị vẫn lấy từ `green_min`/`red_min`, được MS51 giải mã từ ảnh số đang ghi cho LED vật lý. Không thay đổi cách hiển thị hoặc nhấp nháy LED dưới mạch.
+
+MS51 bổ sung `VAR,countdown_active,GREEN|RED|NONE` mỗi giây. App nhấp nháy ngay từ mẫu đầu, không so sánh số giảm, không hết hạn sau 70 giây nếu dữ liệu trạng thái vẫn mới. `NONE`, cài đặt, dữ liệu không hợp lệ/cũ và tạm dừng từ xa (nếu phiên bản MS51 cung cấp) dừng hiệu ứng. Bản MS51 cũ không có trường mới vẫn hiển thị số nhưng không suy đoán bên đang đếm.
+
+Cần APK 3.1.7 và bản MS51 có trường mới. C5 hiện tại chuyển tiếp trường này mà không cần nạp lại; máy chủ không đổi. HEX kèm phát hành được build từ `MS51_code/260502 add PIN`, cùng source thư mục người dùng cung cấp; chưa nạp kiểm thử trên MS51 thật. Bo quan sát trước cập nhật có các trường `physical_mode`, `effective_mode`, `remote_paused` không có trong source này, vì vậy cần xác nhận bản source trước khi nạp thay thế.
+
+Keil chuyển từ `OPTIMIZE(8,SPEED)` sang `OPTIMIZE(8,SIZE)` để giữ nguyên giới hạn `CODE(0x0000-0x6EFF)`: 26.659 byte code, 0 lỗi/cảnh báo. Không mở rộng vùng flash sang vùng dành riêng. Xem `docs/ms51-connect-3.1.7/test-results.json`.

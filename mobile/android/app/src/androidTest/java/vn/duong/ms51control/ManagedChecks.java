@@ -124,31 +124,38 @@ final class ManagedChecks {
                     check(((TextView)get(a,"temperature50Value")).getText().toString().equals("— °C"),"50k stale hidden");
                     second.put("age_ms",100);
                     CountdownTracker tracker = new CountdownTracker();
-                    check(tracker.update("COOL","25","8",0)==0,"No inferred activity on first sample");
-                    check(tracker.update("COOL","24","8",1000)==1,"Green decreased");
-                    check(tracker.update("COOL","24","8",60000)==1,"Minute holds between decrements");
-                    check(tracker.update("COOL","24","8",72000)==0,"No movement expires");
-                    check(tracker.update("COOL","24","7",73000)==2,"Red decreased");
-                    check(tracker.update("SETTING","24","6",74000)==0,"Settings do not blink");
-                    tracker.update("COOL","24","7",75000);
-                    check(tracker.update("COOL","25","8",76000)==0,"Counter resets do not blink");
-                    check(tracker.update("COOL","N/A","8",77000)==0,"Unknown data does not blink");
+                    check(tracker.update("COOL","GREEN","5","8",null)==1,"First sample at five already counts");
+                    for (int i=0;i<120;i++) check(tracker.update("COOL","GREEN","5","8",null)==1,"Unchanged minutes keep blinking");
+                    check(tracker.update("COOL","RED","5","8",null)==2,"Phase change switches immediately without digit change");
+                    check(tracker.update("COOL","NONE","5","8",null)==0,"Paused timer stops with unchanged digits");
+                    check(tracker.update("COOL","GREEN","5","8","ON")==0,"Remote pause stops blink");
+                    check(tracker.update("SETTING","GREEN","5","8",null)==0,"Settings do not blink");
+                    check(tracker.update("COOL",null,"4","8",null)==0,"Old firmware does not guess from digit decrease");
+                    check(tracker.update("COOL","GREEN","N/A","8",null)==0,"Non-numeric display does not blink");
                     check(!texts(page).contains("MÀN HÌNH XANH") && !texts(page).contains("MÀN HÌNH ĐỎ"),"Timer labels removed");
                     check(texts(page).contains("10k") && texts(page).contains("50k"),"Both small sensor labels");
+                    JSONObject activeTimer = new JSONObject().put("name","countdown_active").put("value","GREEN").put("age_ms",100);
+                    preview.getJSONArray("variables").put(activeTimer);
                     for(int k=0;k<preview.getJSONArray("variables").length();k++)preview.getJSONArray("variables").getJSONObject(k).put("age_ms",100);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
-                    preview.getJSONArray("variables").getJSONObject(1).put("value","024");
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     SevenSegmentView green=(SevenSegmentView)get(a,"greenDisplay"), red=(SevenSegmentView)get(a,"redDisplay");
-                    check(green.isCounting() && !red.isCounting(),"Only moving green display pulses");
+                    check(green.isCounting() && !red.isCounting(),"First sample blinks without a digit change");
                     preview.put("last_rx_age_ms",5000);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(!green.isCounting() && green.getAlpha()==1f,"Stale telemetry cancels pulse and restores alpha");
                     preview.put("last_rx_age_ms",100);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
-                    preview.getJSONArray("variables").getJSONObject(2).put("value","007");
+                    activeTimer.put("value","RED");
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
-                    check(!green.isCounting() && red.isCounting(),"Red decrease switches pulse");
+                    check(!green.isCounting() && red.isCounting(),"Timer phase switches pulse with unchanged digits");
+                    activeTimer.put("age_ms",4000);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!green.isCounting() && !red.isCounting(),"Stale timer state stops despite fresh serial traffic");
+                    activeTimer.put("age_ms",100).put("value","NONE");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!green.isCounting() && !red.isCounting(),"Explicit hold stops both displays");
+                    activeTimer.put("value","RED");
                     java.lang.reflect.Field digits = SevenSegmentView.class.getDeclaredField("text"); digits.setAccessible(true);
                     for (String[] pair : new String[][]{{"007","  7"},{"025"," 25"},{"000","  0"},{"105","105"}}) {
                         red.setValue(pair[0]);
@@ -174,7 +181,7 @@ final class ManagedChecks {
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: dual sensor independence/faults/stale data; countdown movement, reset, settings, expiry and animation cleanup; managed settings/updates/history regression.");
+            result.putString("stream","PASS: dual sensor independence/faults/stale data; immediate countdown state, unchanged digits, phase switch, holds, stale data and animation cleanup; managed settings/updates/history regression.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}

@@ -249,6 +249,27 @@ static void telemetry_append_display(const char code *name, TM1650_class *displa
 	}
 }
 
+/* The running phase is authoritative even while displayed minutes are unchanged.
+ * HCF can hold the main countdown; history/popups do not display that timer. */
+static const char code *telemetry_countdown_active(void)
+{
+	uint16_t displayed;
+	if ((program != COOL && program != ICE_FLUSH) || !program_init ||
+		eData.shutdown || hcf_mode_timeout || countdown == 0 || show_his || popup_timeout)
+		return "NONE";
+	/* In HCF OP, the green display is deliberately fixed at zero. */
+	if (progress == OP)
+	{
+		if (eData.HCF && (switch_state == SW_IDLE || switch_state == SW_COOL ||
+			(switch_state == SW_ICE_FLUSH && eData.hDF)))
+			return "NONE";
+		return telemetry_display_number(&GREEN, &displayed) ? "GREEN" : "NONE";
+	}
+	if (progress == CL)
+		return telemetry_display_number(&RED, &displayed) ? "RED" : "NONE";
+	return "NONE";
+}
+
 static void telemetry_build_snapshot(void)
 {
 	uint8_t relay1_on;
@@ -269,6 +290,7 @@ static void telemetry_build_snapshot(void)
 	telemetry_append_var_text("mode", telemetry_mode_text());
 	telemetry_append_display("green_min", &GREEN);
 	telemetry_append_display("red_min", &RED);
+	telemetry_append_var_text("countdown_active", telemetry_countdown_active());
 	telemetry_append_var_text("relay1", relay1_on ? "ON" : "OFF");
 	telemetry_append_var_text("relay2", relay2_on ? "ON" : "OFF");
 	telemetry_append_var_text("relay3", relay3_on ? "ON" : "OFF");

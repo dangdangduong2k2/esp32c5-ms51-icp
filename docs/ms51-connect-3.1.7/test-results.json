@@ -1,0 +1,36 @@
+{
+  "version": "3.1.7",
+  "version_code": 19,
+  "sha256": {
+    "MS51-Connect-3.1.7.apk": "47e3b397f499fd49b4899e2fb6857dec2f17d9e74f78c973ee23c6254639f12f",
+    "MS51-Countdown-State-3.1.7.hex": "8696569d3612c3f40870ec21470f96e2f2783142fa9885cdb4b0ccbb204595b9"
+  },
+  "android_tests": {
+    "platform": "API 35 emulator",
+    "passed": true,
+    "lint_errors": 0,
+    "same_signer_as_3_1_6": true,
+    "checks": [
+      "Immediate blink at first timer state while number unchanged",
+      "Unchanged digits continue to blink",
+      "Phase change switches blink without digit change",
+      "NONE, remote pause, settings and non-numeric values stop blink",
+      "Stale timer state stops even with fresh UART traffic",
+      "No inference for older firmware",
+      "Existing dual temperature, managed settings, firmware, history and animation cleanup checks"
+    ]
+  },
+  "ms51_build": {
+    "compiler": "Keil C51 9.60.7.0",
+    "optimization": "8,SIZE",
+    "code_bytes": 26659,
+    "xdata_bytes": 1447,
+    "errors": 0,
+    "warnings": 0,
+    "hex_max_address": "0x6824",
+    "limit_exclusive": "0x6f00",
+    "physical_flash_tested": false
+  },
+  "c5_changed": false,
+  "server_changed": false
+}

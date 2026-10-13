@@ -114,7 +114,6 @@ public final class MainActivity extends Activity {
     private final Runnable expireCounting = () -> stopCounting();
 
     private void stopCounting() {
-        countdownTracker.reset();
         if (greenDisplay != null) greenDisplay.setCounting(false);
         if (redDisplay != null) redDisplay.setCounting(false);
         mainHandler.removeCallbacks(expireCounting);
@@ -1239,17 +1238,17 @@ public final class MainActivity extends Activity {
         dashboardMode.setText(friendlyMode(mode));
         greenDisplay.setValue(values.get("green_min"));
         redDisplay.setValue(values.get("red_min"));
-        boolean fresh = debug.optLong("last_rx_age_ms", -1) >= 0 && debug.optLong("last_rx_age_ms", -1) <= 3000;
+        boolean fresh = values.containsKey("countdown_active") && debug.optLong("last_rx_age_ms", -1) >= 0 && debug.optLong("last_rx_age_ms", -1) <= 3000;
         for (int i = 0; fresh && variables != null && i < variables.length(); i++) {
             JSONObject item = variables.optJSONObject(i);
-            if (item != null && ("mode".equals(item.optString("name")) || "green_min".equals(item.optString("name")) || "red_min".equals(item.optString("name")))) {
+            if (item != null && ("countdown_active".equals(item.optString("name")) || "remote_paused".equals(item.optString("name")) || "mode".equals(item.optString("name")) || "green_min".equals(item.optString("name")) || "red_min".equals(item.optString("name")))) {
                 long age = item.optLong("age_ms", -1);
                 if (age < 0 || age > 3000) fresh = false;
             }
         }
         if (!fresh) stopCounting();
         else {
-            int active = countdownTracker.update(mode, values.get("green_min"), values.get("red_min"), android.os.SystemClock.elapsedRealtime());
+            int active = countdownTracker.update(mode, values.get("countdown_active"), values.get("green_min"), values.get("red_min"), values.get("remote_paused"));
             greenDisplay.setCounting(active == 1); redDisplay.setCounting(active == 2);
             mainHandler.removeCallbacks(expireCounting);
             mainHandler.postDelayed(expireCounting, 5000);
