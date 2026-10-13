@@ -96,3 +96,8 @@ Keil chuyển từ `OPTIMIZE(8,SPEED)` sang `OPTIMIZE(8,SIZE)` để giữ nguy�
 Đã nạp HEX MS51 3.1.7 từ source người dùng xác nhận ngày 13/10/2026. C5 báo nạp thành công với kiểm tra từng trang flash; cấu hình 217 byte trước/sau giống nhau. Đã quan sát trạng thái GREEN sau khởi động và RED ở pha kế tiếp; ba mẫu liên tục cùng số đỏ 4 vẫn báo RED.
 
 App bỏ qua trường `remote_paused` tùy chọn đã cũ còn trong bộ nhớ C5 sau khi thay MS51. Trạng thái bộ đếm hiện tại vẫn quyết định hiệu ứng; trạng thái tạm dừng mới (nếu có) vẫn được tôn trọng. Không cần khởi động lại/nạp lại C5 để xóa dữ liệu cũ. Kiểm thử emulator API 35 đạt, cùng chữ ký APK trước. Bản này dùng nguyên HEX MS51 của 3.1.7; không có thay đổi chương trình MS51 thêm.
+
+
+## 3.1.9 — Nhãn OP và CL
+
+Ô xanh có nhãn OP, ô đỏ có nhãn CL phía trên số. Giữ hiệu ứng nhấp nháy theo trạng thái bộ đếm của 3.1.8. Chỉ cập nhật APK, không cần nạp C5/MS51. Đã kiểm thử emulator API 35, lint không có lỗi và kiểm tra ảnh giao diện trong `docs/ms51-connect-3.1.9`.

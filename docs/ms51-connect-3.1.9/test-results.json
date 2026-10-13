@@ -1,0 +1,17 @@
+{
+  "version": "3.1.9",
+  "version_code": 21,
+  "apk_sha256": "de3ae74361e8ccdc93ba35741da80b3608f0a39595375e5ce5cd1bae6313a9a4",
+  "android_tests": {
+    "ok": true,
+    "platform": "API 35 emulator",
+    "lint_errors": 0,
+    "checks": [
+      "Existing managed dashboard, countdown, sensors and update regression passed",
+      "Preview inspected: OP above green digits, CL above red digits",
+      "Same APK signing certificate; upgrade install succeeds"
+    ]
+  },
+  "firmware_changed": false,
+  "server_changed": false
+}

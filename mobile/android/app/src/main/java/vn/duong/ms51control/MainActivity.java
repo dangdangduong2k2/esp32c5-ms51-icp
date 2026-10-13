@@ -1145,6 +1145,9 @@ public final class MainActivity extends Activity {
 
     private LinearLayout timerCard(String channel, int color) {
         LinearLayout card = card();
+        TextView label = mutedText("green".equals(channel) ? "OP" : "CL");
+        label.setTextSize(12); label.setTextColor(color); label.setTypeface(Typeface.DEFAULT_BOLD);
+        card.addView(label, fullParams(0,0,0,8));
         SevenSegmentView display=new SevenSegmentView(this); display.setSegmentColor(color);
         card.addView(display,new LinearLayout.LayoutParams(-1,dp(64)));
         TextView unit=mutedText("phút"); card.addView(unit,fullParams(0,6,0,0));
