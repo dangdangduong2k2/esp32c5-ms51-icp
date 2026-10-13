@@ -20,6 +20,7 @@ $env:PATH = "$env:IDF_PYTHON_ENV_PATH\Scripts;$env:PATH"
 # Original DAT1/CLK0/RS3 wiring with a separate NTC input on IO6.
 # All partitions fit below 2 MiB. A 4 MiB header also works on larger flash chips.
 $seed = Get-Content -LiteralPath "$repo\sdkconfig.defaults" -Raw
+$seed = $seed.Replace('CONFIG_MS51_NTC_50K_IO4=y', '# CONFIG_MS51_NTC_50K_IO4 is not set')
 $seed += "`n# CONFIG_MS51_ANALOG_IO1 is not set`n"
 $seed = $seed.Replace('CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y', 'CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y')
 $seed = $seed.Replace('# Connected ESP32-C5 board has 16 MiB external flash.', '# Variant supports ESP32-C5 with at least 4 MiB flash.')

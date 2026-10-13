@@ -1,5 +1,11 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.1.5 · Hai cảm biến và ô đếm gọn hơn
+
+[Tải APK 3.1.5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.5/MS51-Connect-3.1.5.apk) · [Bộ ba file C5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.5/ESP32-C5-DAT1-CLK0-RS3-DUAL-NTC.zip) · [Preview, đấu dây và kiểm thử](docs/ms51-connect-3.1.5/README.md)
+
+Bỏ nhãn xanh/đỏ và số 0 đầu (007 → 7); nhấp nháy ô có số giảm. Lúc mới mở cần đợi lần giảm đầu tiên vì MS51 chưa gửi trạng thái đếm trực tiếp. Nhiệt độ tách trái **10k ở IO6**, phải **50k ở IO4**, cả hai **B3950 và trở kéo lên 10k tới 3,3 V**. DAT1/CLK0/RS3 giữ nguyên. Cần APK/C5 mới để đọc hai đầu đo; không đổi VPS/MS51. Chưa thử cảm biến trên phần cứng ở lần này.
+
 ## Bản thử nghiệm 3.1.4 · Trở lại chân cũ, NTC ở IO6
 
 [Tải APK 3.1.4](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.4/MS51-Connect-3.1.4.apk) · [Bộ ba file C5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.4/ESP32-C5-DAT1-CLK0-RS3-NTC-IO6.zip) · [Hướng dẫn](docs/ms51-connect-3.1.4/README.md)

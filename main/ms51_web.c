@@ -699,17 +699,21 @@ static esp_err_t status_handler(httpd_req_t *request)
                  uplink.nat_enabled ? "true" : "false", MDNS_HOSTNAME_FQDN,
                  s_mdns_started ? "true" : "false");
     }
-    char analog[192];
+    char analog[192], analog50k[192];
     ms51_analog_json(analog, sizeof(analog));
+    ms51_analog_50k_json(analog50k, sizeof(analog50k));
     size_t analog_used = strlen(payload);
     int added = snprintf(payload + analog_used - 1, sizeof(payload) - analog_used + 1,
-                         ",\"analog\":%s}", analog);
+                         ",\"analog\":%s,\"analog50k\":%s}", analog, analog50k);
     if (added < 0 || (size_t)added >= sizeof(payload) - analog_used + 1)
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR, "Status too large");
     char presence[384];
     ms51_presence_json(presence,sizeof(presence));
     size_t used=strlen(payload);
-    if(used>0)snprintf(payload+used-1,sizeof(payload)-used+1,"%s,\"cloud\":{\"protocol\":1,\"configured\":%s,\"online\":%s,\"clock_ready\":%s}}",presence,ms51_cloud_configured()?"true":"false",ms51_cloud_online()?"true":"false",ms51_cloud_clock_ready()?"true":"false");
+    if (used == 0) return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR, "Empty status");
+    added = snprintf(payload+used-1,sizeof(payload)-used+1,"%s,\"cloud\":{\"protocol\":1,\"configured\":%s,\"online\":%s,\"clock_ready\":%s}}",presence,ms51_cloud_configured()?"true":"false",ms51_cloud_online()?"true":"false",ms51_cloud_clock_ready()?"true":"false");
+    if (added < 0 || (size_t)added >= sizeof(payload)-used+1)
+        return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR, "Status too large");
     return send_json(request, payload, NULL);
 }
 

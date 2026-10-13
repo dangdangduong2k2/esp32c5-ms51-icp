@@ -55,6 +55,11 @@ menu "MS51FC0AE ICP programmer"
             Read a 10 kohm B3950 NTC to GND with a 10 kohm pullup to 3.3 V.
             GPIO6 is ADC1 channel 5, separate from DAT1/CLK0/RS3.
 
+    config MS51_NTC_50K_IO4
+        bool "Read second 50k B3950 NTC on GPIO4 with 10k pullup"
+        depends on MS51_ANALOG_IO6 && MS51_DAT_GPIO != 4 && MS51_CLK_GPIO != 4 && MS51_RST_GPIO != 4
+        default n
+
     config MS51_DEBUG_UART_ENABLE
         bool "Enable MS51 runtime UART/debug over shared ICP wires"
         default y

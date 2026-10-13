@@ -10,6 +10,23 @@ import android.view.View;
 
 /** Native three-digit seven-segment display used for the two MS51 timers. */
 final class SevenSegmentView extends View {
+    private android.animation.ObjectAnimator pulse;
+    private boolean counting;
+    void setCounting(boolean value) {
+        if (counting == value) return;
+        counting = value;
+        if (pulse != null) { pulse.cancel(); pulse = null; }
+        setAlpha(1f);
+        if (value) {
+            pulse = android.animation.ObjectAnimator.ofFloat(this, "alpha", 1f, .35f);
+            pulse.setDuration(600);
+            pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);
+            pulse.start();
+        }
+    }
+    boolean isCounting() { return counting; }
+    @Override protected void onDetachedFromWindow() { setCounting(false); super.onDetachedFromWindow(); }
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private String text = "---";
     private int segmentColor = Color.rgb(52, 211, 153);
@@ -37,6 +54,7 @@ final class SevenSegmentView extends View {
     void setValue(String value) {
         String raw = value == null ? "" : value.trim();
         if (raw.matches("\\d+")) {
+            raw = raw.replaceFirst("^0+(?!$)", "");
             raw = raw.length() > 3 ? raw.substring(raw.length() - 3) : raw;
             text = String.format("%3s", raw);
         } else {
@@ -69,6 +87,7 @@ final class SevenSegmentView extends View {
     }
 
     private void drawDigit(Canvas canvas, char character, float x, float y, float width, float height) {
+        if (character == ' ') return;
         float thickness = Math.max(dp(5), width * 0.15f);
         float inset = thickness * 0.42f;
         float middle = y + height / 2f;

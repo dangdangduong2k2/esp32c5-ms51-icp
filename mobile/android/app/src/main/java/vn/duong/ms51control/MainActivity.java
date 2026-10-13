@@ -109,6 +109,16 @@ public final class MainActivity extends Activity {
     private TextView dashboardLogs;
     private TextView temperatureValue;
     private TextView temperatureNote;
+    private TextView temperature50Value, temperature50Note;
+    private final CountdownTracker countdownTracker = new CountdownTracker();
+    private final Runnable expireCounting = () -> stopCounting();
+
+    private void stopCounting() {
+        countdownTracker.reset();
+        if (greenDisplay != null) greenDisplay.setCounting(false);
+        if (redDisplay != null) redDisplay.setCounting(false);
+        mainHandler.removeCallbacks(expireCounting);
+    }
     private long[] lastHistory;
     private long nextHistoryRead;
     private String historyError = "";
@@ -1079,25 +1089,20 @@ public final class MainActivity extends Activity {
 
         addSectionTitle(content, "Thời gian hiển thị");
         LinearLayout timers = new LinearLayout(this); timers.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout green = timerCard("MÀN HÌNH XANH", "green", 0xFF008978);
-        LinearLayout red = timerCard("MÀN HÌNH ĐỎ", "red", 0xFFCF5A68);
+        LinearLayout green = timerCard("green", 0xFF008978);
+        LinearLayout red = timerCard("red", 0xFFCF5A68);
         LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -2, 1); left.setMargins(0,0,dp(6),0);
         LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, -2, 1); right.setMargins(dp(6),0,0,0);
         timers.addView(green,left); timers.addView(red,right);
         content.addView(timers, fullParams(0, 6, 0, 20));
 
-        LinearLayout temperature = card();
-        LinearLayout temperatureTitle = new LinearLayout(this);
-        temperatureTitle.setGravity(Gravity.CENTER_VERTICAL);
-        temperatureTitle.addView(icon("thermometer", Design.TEAL, 24), new LinearLayout.LayoutParams(dp(28),dp(28)));
-        TextView temperatureLabel = valueText("Nhiệt độ"); temperatureLabel.setTextSize(18);
-        temperatureTitle.addView(temperatureLabel, fullParams(10,0,0,0));
-        temperature.addView(temperatureTitle);
-        temperatureValue = valueText("— °C"); temperatureValue.setTextSize(38); temperatureValue.setTextColor(Design.TEAL);
-        temperature.addView(temperatureValue, fullParams(0,12,0,6));
-        temperatureNote = mutedText("Đang chờ dữ liệu");
-        temperature.addView(temperatureNote);
-        content.addView(temperature, fullParams(0,0,0,16));
+        addSectionTitle(content, "Nhiệt độ");
+        LinearLayout temperatures = new LinearLayout(this);
+        LinearLayout.LayoutParams tLeft = new LinearLayout.LayoutParams(0, -1, 1); tLeft.setMargins(0,0,dp(6),0);
+        LinearLayout.LayoutParams tRight = new LinearLayout.LayoutParams(0, -1, 1); tRight.setMargins(dp(6),0,0,0);
+        temperatures.addView(temperatureCard("10k", false), tLeft);
+        temperatures.addView(temperatureCard("50k", true), tRight);
+        content.addView(temperatures, fullParams(0,6,0,16));
 
         LinearLayout relayCard = card(); addSectionTitle(relayCard, "Trạng thái rơ-le");
         LinearLayout relays = new LinearLayout(this); relays.setOrientation(LinearLayout.HORIZONTAL);
@@ -1119,13 +1124,28 @@ public final class MainActivity extends Activity {
         content.addView(logs);
         renderDashboard(lastStatus,lastDebug);
         renderTemperature(null); // wait for a fresh response, not cached device state
+        stopCounting();
         renderHistory();
     }
 
-    private LinearLayout timerCard(String label, String channel, int color) {
+    private LinearLayout temperatureCard(String label, boolean second) {
+        LinearLayout box = card();
+        LinearLayout heading = new LinearLayout(this); heading.setGravity(Gravity.CENTER_VERTICAL);
+        TextView name = mutedText(label); name.setTextSize(12);
+        heading.addView(name, new LinearLayout.LayoutParams(0,-2,1));
+        heading.addView(icon("thermometer",Design.TEAL,20), new LinearLayout.LayoutParams(dp(22),dp(22)));
+        box.addView(heading);
+        TextView value = valueText("— °C"); value.setTextSize(27); value.setSingleLine(true);
+        box.addView(value, fullParams(0,12,0,6));
+        TextView note = mutedText("Đang chờ dữ liệu"); note.setTextSize(11);
+        box.addView(note);
+        if (second) { temperature50Value = value; temperature50Note = note; }
+        else { temperatureValue = value; temperatureNote = note; }
+        return box;
+    }
+
+    private LinearLayout timerCard(String channel, int color) {
         LinearLayout card = card();
-        TextView title=mutedText(label); title.setTextColor(color); title.setLetterSpacing(.08f);
-        card.addView(title);
         SevenSegmentView display=new SevenSegmentView(this); display.setSegmentColor(color);
         card.addView(display,new LinearLayout.LayoutParams(-1,dp(64)));
         TextView unit=mutedText("phút"); card.addView(unit,fullParams(0,6,0,0));
@@ -1198,6 +1218,7 @@ public final class MainActivity extends Activity {
 
         if (debug == null || !debug.optBoolean("enabled", false)) {
             dashboardMode.setText("Đang chờ dữ liệu");
+            stopCounting();
             greenDisplay.setValue(null); redDisplay.setValue(null);
             for (int index = 0; index < relayViews.length; index++) setRelay(relayViews[index], index + 1, null);
             return;
@@ -1218,6 +1239,21 @@ public final class MainActivity extends Activity {
         dashboardMode.setText(friendlyMode(mode));
         greenDisplay.setValue(values.get("green_min"));
         redDisplay.setValue(values.get("red_min"));
+        boolean fresh = debug.optLong("last_rx_age_ms", -1) >= 0 && debug.optLong("last_rx_age_ms", -1) <= 3000;
+        for (int i = 0; fresh && variables != null && i < variables.length(); i++) {
+            JSONObject item = variables.optJSONObject(i);
+            if (item != null && ("mode".equals(item.optString("name")) || "green_min".equals(item.optString("name")) || "red_min".equals(item.optString("name")))) {
+                long age = item.optLong("age_ms", -1);
+                if (age < 0 || age > 3000) fresh = false;
+            }
+        }
+        if (!fresh) stopCounting();
+        else {
+            int active = countdownTracker.update(mode, values.get("green_min"), values.get("red_min"), android.os.SystemClock.elapsedRealtime());
+            greenDisplay.setCounting(active == 1); redDisplay.setCounting(active == 2);
+            mainHandler.removeCallbacks(expireCounting);
+            mainHandler.postDelayed(expireCounting, 5000);
+        }
         setRelay(relayViews[0], 1, values.get("relay1"));
         setRelay(relayViews[1], 2, values.get("relay2"));
         setRelay(relayViews[2], 3, values.get("relay3"));
@@ -1225,16 +1261,20 @@ public final class MainActivity extends Activity {
     }
 
     private void renderTemperature(JSONObject status) {
+        renderSensor(status == null ? null : status.optJSONObject("analog"), temperatureValue, temperatureNote, false);
+        renderSensor(status == null ? null : status.optJSONObject("analog50k"), temperature50Value, temperature50Note, true);
+    }
+
+    private void renderSensor(JSONObject input, TextView temperatureValue, TextView temperatureNote, boolean second) {
         if (temperatureValue == null) return;
         temperatureValue.setText("— °C"); temperatureValue.setTextColor(Design.MUTED);
         temperatureNote.setText("Đang chờ dữ liệu");
-        if (status == null) return;
-        JSONObject input = status.optJSONObject("analog");
-        if (input == null || !input.optBoolean("enabled")) {
+        if (input == null) return;
+        if (!input.optBoolean("enabled")) {
             temperatureNote.setText("Thiết bị chưa hỗ trợ cảm biến này"); return;
         }
         int gpio = input.optInt("gpio", -1);
-        if ((gpio != 1 && gpio != 6) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
+        if ((second ? gpio != 4 : (gpio != 1 && gpio != 6)) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
         long age = input.optLong("age_ms", -1);
         if (age < 0 || age > 2000) return;
         String sensor = input.optString("sensor");
@@ -1822,7 +1862,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.1.4 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.1.5 • Kết nối qua Internet");
         Button license = neutralButton("Giấy phép nguồn mở");
         license.setOnClickListener(v -> {
             try (InputStream stream = getAssets().open("LICENSE.txt")) {
@@ -2231,6 +2271,7 @@ public final class MainActivity extends Activity {
     }
 
     private void stopDashboard() {
+        stopCounting();
         renderTemperature(null);
         dashboardEpoch++;
         mainHandler.removeCallbacks(dashboardRefresh);

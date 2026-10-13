@@ -1,0 +1,44 @@
+{
+  "version": "3.1.5",
+  "version_code": 17,
+  "apk_sha256": "d12421457d2620be9fc51208deb11d559a2769d3d97233188460ace67755cacd",
+  "android_tests": {
+    "ok": true,
+    "platform": "API 35 emulator",
+    "lint_errors": 0,
+    "checks": [
+      "10k and 50k independent values and sensor faults",
+      "stale/null and older firmware compatibility",
+      "countdown decrease detection, reset, settings, missing values, expiry",
+      "only active display animation; stale and stop cleanup restore alpha",
+      "007 -> 7, 025 -> 25, 000 -> 0, unknown distinct from zero",
+      "managed permissions/updates/history regression",
+      "actual view screenshot visually inspected; illustrative data"
+    ]
+  },
+  "firmware": {
+    "build": true,
+    "chip": "esp32c5",
+    "pins": {
+      "DAT": 1,
+      "CLK": 0,
+      "RS": 3,
+      "NTC10K": 6,
+      "NTC50K": 4
+    },
+    "pullup_ohms_both": 10000,
+    "beta_both": 3950,
+    "adc_channels": [
+      5,
+      3
+    ],
+    "app_bytes": 1460432,
+    "factory_bytes": 1572864,
+    "image_hash_valid": true,
+    "image_checksum_valid": true,
+    "hardware_tested": false
+  },
+  "server_changed": false,
+  "ms51_changed": false,
+  "countdown_limitation": "Inferred from displayed number decreases, not an authoritative run/pause flag. Initial minute display can take a minute to identify; fresh unchanged data keeps pulse for at most 70 seconds. No response stops pulse after 5 seconds."
+}

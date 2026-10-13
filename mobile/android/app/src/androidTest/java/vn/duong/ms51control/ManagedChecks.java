@@ -111,6 +111,54 @@ final class ManagedChecks {
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},demo.get("/api/status"));
                     check(((TextView)get(a,"temperatureValue")).getText().toString().equals("— °C"),"Older firmware remains usable");
                     sensor.put("temperature_centi",2500);
+                    JSONObject second = new JSONObject(sensor.toString()).put("gpio",4).put("temperature_centi",3150);
+                    sampleStatus.put("analog50k",second);
+                    invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperature50Value")).getText().toString().equals("31,5 °C"),"Independent 50k reading");
+                    second.put("sensor","open");
+                    invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperature50Value")).getText().toString().equals("— °C"),"50k fault hides only second reading");
+                    check(((TextView)get(a,"temperatureValue")).getText().toString().equals("25,0 °C"),"50k fault preserves 10k");
+                    second.put("sensor","ok").put("age_ms",3000);
+                    invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperature50Value")).getText().toString().equals("— °C"),"50k stale hidden");
+                    second.put("age_ms",100);
+                    CountdownTracker tracker = new CountdownTracker();
+                    check(tracker.update("COOL","25","8",0)==0,"No inferred activity on first sample");
+                    check(tracker.update("COOL","24","8",1000)==1,"Green decreased");
+                    check(tracker.update("COOL","24","8",60000)==1,"Minute holds between decrements");
+                    check(tracker.update("COOL","24","8",72000)==0,"No movement expires");
+                    check(tracker.update("COOL","24","7",73000)==2,"Red decreased");
+                    check(tracker.update("SETTING","24","6",74000)==0,"Settings do not blink");
+                    tracker.update("COOL","24","7",75000);
+                    check(tracker.update("COOL","25","8",76000)==0,"Counter resets do not blink");
+                    check(tracker.update("COOL","N/A","8",77000)==0,"Unknown data does not blink");
+                    check(!texts(page).contains("MÀN HÌNH XANH") && !texts(page).contains("MÀN HÌNH ĐỎ"),"Timer labels removed");
+                    check(texts(page).contains("10k") && texts(page).contains("50k"),"Both small sensor labels");
+                    for(int k=0;k<preview.getJSONArray("variables").length();k++)preview.getJSONArray("variables").getJSONObject(k).put("age_ms",100);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    preview.getJSONArray("variables").getJSONObject(1).put("value","024");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    SevenSegmentView green=(SevenSegmentView)get(a,"greenDisplay"), red=(SevenSegmentView)get(a,"redDisplay");
+                    check(green.isCounting() && !red.isCounting(),"Only moving green display pulses");
+                    preview.put("last_rx_age_ms",5000);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!green.isCounting() && green.getAlpha()==1f,"Stale telemetry cancels pulse and restores alpha");
+                    preview.put("last_rx_age_ms",100);
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    preview.getJSONArray("variables").getJSONObject(2).put("value","007");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!green.isCounting() && red.isCounting(),"Red decrease switches pulse");
+                    java.lang.reflect.Field digits = SevenSegmentView.class.getDeclaredField("text"); digits.setAccessible(true);
+                    for (String[] pair : new String[][]{{"007","  7"},{"025"," 25"},{"000","  0"},{"105","105"}}) {
+                        red.setValue(pair[0]);
+                        check(digits.get(red).equals(pair[1]), "No leading zero digits: " + pair[0]);
+                    }
+                    red.setValue(null); check(digits.get(red).equals("---"), "Unknown display remains distinct from zero");
+
+                    invoke(a,"stopDashboard",new Class[]{});
+                    check(!green.isCounting() && !red.isCounting() && red.getAlpha()==1f,"Leaving dashboard cancels animations");
+                    sensor.put("temperature_centi",2500);
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     // Clearly identify preview data on the saved image.
                     TextView previewLabel=new TextView(a);previewLabel.setText("XEM TRƯỚC · SỐ LIỆU MINH HỌA");previewLabel.setTextColor(Design.TEAL);
@@ -126,7 +174,7 @@ final class ManagedChecks {
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: managed settings/updates and history regression; temperature GPIO1 and GPIO6 normal/negative/zero/open/short/out-of-range/stale/null/old-firmware states, independent of MS51 telemetry.");
+            result.putString("stream","PASS: dual sensor independence/faults/stale data; countdown movement, reset, settings, expiry and animation cleanup; managed settings/updates/history regression.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}
