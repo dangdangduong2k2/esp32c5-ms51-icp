@@ -1009,7 +1009,7 @@ public final class MainActivity extends Activity {
         String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt vận hành"
                 : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị";
         LinearLayout content = createPage("", title,
-                tab == Tab.OVERVIEW ? "Theo dõi bộ điều khiển, ngay trong tầm tay."
+                tab == Tab.OVERVIEW ? "Theo dõi bộ điều khiển"
                 : tab == Tab.SETTINGS ? "Tinh chỉnh cho từng nhu cầu vận hành."
                 : tab == Tab.FIRMWARE ? "Cập nhật phiên bản mới cho thiết bị."
                 : "Thông tin kết nối và bộ điều khiển.");
@@ -1970,7 +1970,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.2.3 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.2.4 • Kết nối qua Internet");
         Button exit = neutralButton("Danh sách thiết bị");
         exit.setOnClickListener(v -> showDevices());
         about.addView(exit, fullParams(0, 12, 0, 0));
