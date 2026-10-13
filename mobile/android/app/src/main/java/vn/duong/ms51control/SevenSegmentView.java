@@ -92,23 +92,16 @@ final class SevenSegmentView extends View {
         float inset = thickness * 0.42f;
         float middle = y + height / 2f;
         String active = segments(character);
-        int inactive = Color.argb(35, Color.red(segmentColor), Color.green(segmentColor), Color.blue(segmentColor));
+        paint.setColor(segmentColor);
 
-        paint.setColor(active.indexOf('a') >= 0 ? segmentColor : inactive);
-        canvas.drawRoundRect(new RectF(x + inset, y, x + width - inset, y + thickness), thickness / 2f, thickness / 2f, paint);
-        paint.setColor(active.indexOf('g') >= 0 ? segmentColor : inactive);
-        canvas.drawRoundRect(new RectF(x + inset, middle - thickness / 2f, x + width - inset, middle + thickness / 2f), thickness / 2f, thickness / 2f, paint);
-        paint.setColor(active.indexOf('d') >= 0 ? segmentColor : inactive);
-        canvas.drawRoundRect(new RectF(x + inset, y + height - thickness, x + width - inset, y + height), thickness / 2f, thickness / 2f, paint);
+        if (active.indexOf('a') >= 0) canvas.drawRoundRect(new RectF(x + inset, y, x + width - inset, y + thickness), thickness / 2f, thickness / 2f, paint);
+        if (active.indexOf('g') >= 0) canvas.drawRoundRect(new RectF(x + inset, middle - thickness / 2f, x + width - inset, middle + thickness / 2f), thickness / 2f, thickness / 2f, paint);
+        if (active.indexOf('d') >= 0) canvas.drawRoundRect(new RectF(x + inset, y + height - thickness, x + width - inset, y + height), thickness / 2f, thickness / 2f, paint);
 
-        paint.setColor(active.indexOf('f') >= 0 ? segmentColor : inactive);
-        canvas.drawRoundRect(new RectF(x, y + inset, x + thickness, middle - inset), thickness / 2f, thickness / 2f, paint);
-        paint.setColor(active.indexOf('b') >= 0 ? segmentColor : inactive);
-        canvas.drawRoundRect(new RectF(x + width - thickness, y + inset, x + width, middle - inset), thickness / 2f, thickness / 2f, paint);
-        paint.setColor(active.indexOf('e') >= 0 ? segmentColor : inactive);
-        canvas.drawRoundRect(new RectF(x, middle + inset, x + thickness, y + height - inset), thickness / 2f, thickness / 2f, paint);
-        paint.setColor(active.indexOf('c') >= 0 ? segmentColor : inactive);
-        canvas.drawRoundRect(new RectF(x + width - thickness, middle + inset, x + width, y + height - inset), thickness / 2f, thickness / 2f, paint);
+        if (active.indexOf('f') >= 0) canvas.drawRoundRect(new RectF(x, y + inset, x + thickness, middle - inset), thickness / 2f, thickness / 2f, paint);
+        if (active.indexOf('b') >= 0) canvas.drawRoundRect(new RectF(x + width - thickness, y + inset, x + width, middle - inset), thickness / 2f, thickness / 2f, paint);
+        if (active.indexOf('e') >= 0) canvas.drawRoundRect(new RectF(x, middle + inset, x + thickness, y + height - inset), thickness / 2f, thickness / 2f, paint);
+        if (active.indexOf('c') >= 0) canvas.drawRoundRect(new RectF(x + width - thickness, middle + inset, x + width, y + height - inset), thickness / 2f, thickness / 2f, paint);
     }
 
     private static String segments(char value) {

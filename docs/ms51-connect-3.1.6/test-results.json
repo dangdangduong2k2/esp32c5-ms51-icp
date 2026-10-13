@@ -1,0 +1,18 @@
+{
+  "version": "3.1.6",
+  "version_code": 18,
+  "apk_sha256": "7728d5ed51fcfd8f153333e4fea6e807944cbc1b07aef93bf7c0d98c46ec33c3",
+  "android_tests": {
+    "ok": true,
+    "platform": "API 35 emulator",
+    "lint_errors": 0,
+    "checks": [
+      "Existing managed checks: dual sensors, countdown, leading zeros, animation cleanup, settings, updates and history",
+      "Preview inspected: inactive segments absent, only lit strokes remain",
+      "APK same signing certificate, upgrade install succeeds"
+    ]
+  },
+  "preview": "overview-preview.png; illustrative data",
+  "firmware_changed": false,
+  "server_changed": false
+}

@@ -1,5 +1,11 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.1.6 · Chỉ hiện nét LED đang sáng
+
+[Tải APK 3.1.6](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.6/MS51-Connect-3.1.6.apk) · [Preview và kiểm thử](docs/ms51-connect-3.1.6/README.md)
+
+Bỏ các thanh LED mờ bên trong chữ số; chỉ giữ nét đang sáng. Cài đè APK, không cần nạp lại C5/MS51 hoặc đổi máy chủ. Hai đầu đo và cách nhận biết ô đếm giữ như 3.1.5.
+
 ## Bản thử nghiệm 3.1.5 · Hai cảm biến và ô đếm gọn hơn
 
 [Tải APK 3.1.5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.5/MS51-Connect-3.1.5.apk) · [Bộ ba file C5](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.1.5/ESP32-C5-DAT1-CLK0-RS3-DUAL-NTC.zip) · [Preview, đấu dây và kiểm thử](docs/ms51-connect-3.1.5/README.md)
