@@ -50,4 +50,12 @@ C5 lưu blob NVS `ms51_trigger/config` gồm magic, nguồn, ngưỡng. MS51 lư
 
 [Kết quả và mã SHA256](test-results.json)
 
+## Sửa lỗi lưu cài đặt — 14/10/2026
+
+Máy chủ trước đây ghép các mục được sửa vào toàn bộ gói GET rồi gửi SET, giữ cả bộ đếm và cờ mật khẩu đang chạy. MS51 yêu cầu các byte trạng thái PIN bằng 0 khi SET, nên có thể báo “cấu hình có giá trị ngoài giới hạn” dù các thông số nhập hợp lệ.
+
+`server/managed.py` chuẩn hóa phần PIN trước khi gửi: khi bật, giữ mật khẩu, chu kỳ, đơn vị và tùy chọn, chỉ xóa trạng thái chạy tại `0xC9..0xCB`, `0xCE..0xCF`, `0xD7..0xD8`; khi tắt, gửi khối `0xC5..0xD8` gồm 20 byte 0 theo giao thức hiện có. Giữ kiểm tra quyền sửa và giới hạn từng mục. Các thiết lập khác và lịch sử không bị chuẩn hóa lại.
+
+Đã chạy 30 kiểm thử server; hàm kiểm tra C thực của MS51 từ chối cấu hình lỗi trước sửa và chấp nhận sau sửa. Đã triển khai VPS, lưu lại cấu hình hiện tại qua HTTPS/MQTT trên thiết bị gặp lỗi, nhận ACK thành công và đọc lại đủ 51 mục không thay đổi; PIN vẫn bật. Đây là bản sửa phía máy chủ, không cần APK hoặc nạp chip mới. Mỗi lần lưu vẫn khởi động lại bộ điều khiển và khởi tạo lại trạng thái đếm PIN theo hành vi SET hiện có.
+
 ![Giao diện Android, số liệu minh họa](overview-preview.png)

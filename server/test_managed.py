@@ -144,8 +144,50 @@ class ManagedTests(AdminTests):
             r=self.client.post(MOBILE+'/settings',json={'revision':revision,'values':{'coolCl':9}},headers=self.mobile_headers)
         self.assertEqual(r.status_code,200,r.text)
         actual=bytes.fromhex(calls[-1][2]['data']);expected=raw[:];expected[1:5]=(9).to_bytes(4,'big')
+        expected[0xC5:0xD9]=bytes(20)  # disabled PIN has a canonical zero block
         self.assertEqual(actual,bytes(expected))
         self.assertNotIn(DEVICE,core.managed_locks)
+
+    def test_settings_pin_runtime_is_reset_but_hidden_pin_configuration_survives(self):
+        revision=self.set_policy(['coolCl'])
+        raw=bytearray(217);raw[0]=2
+        for key,spec in CATALOG.items():
+            raw[spec['offset']:spec['offset']+spec['size']]=spec['min'].to_bytes(spec['size'],'big')
+        for key,value in {'pinEnable':1,'pinPassword':123,'pinPeriod':30,
+                          'pinBackupPassword':690,'pinBackupPeriod':15,'pinWrongLimit':26,
+                          'pinPeriodUnit':1,'pinBackupPeriodUnit':1,'rangeCoolClMax':999}.items():
+            spec=CATALOG[key];raw[spec['offset']:spec['offset']+spec['size']]=value.to_bytes(spec['size'],'big')
+        raw[0xC9:0xCC]=b'\x00\x3b\x01'  # observed elapsed counter 59 + request
+        raw[0xCE:0xD0]=b'\x01\x01'
+        raw[0xD7:0xD9]=b'\xa7\x58'
+        raw[0x2D:0xAB]=bytes(range(126))  # unrelated state and saved history
+        sent=[]
+        def fake(row,uid,rid,method,path,body,lease=None):
+            if method=='GET':return {'ok':True,'data':raw.hex()}
+            sent.append(bytes.fromhex(body['data']))
+            return {'ok':True}
+        with patch.object(core.bridge,'call',side_effect=fake):
+            r=self.client.post(MOBILE+'/settings',json={'revision':revision,'values':{'coolCl':9}},headers=self.mobile_headers)
+        self.assertEqual(r.status_code,200,r.text)
+        expected=raw[:];expected[1:5]=(9).to_bytes(4,'big')
+        for a,b in [(0xC9,0xCC),(0xCE,0xD0),(0xD7,0xD9)]:expected[a:b]=bytes(b-a)
+        self.assertEqual(sent,[bytes(expected)])
+        self.assertNotIn(DEVICE,core.managed_locks)
+
+    def test_settings_disabling_pin_clears_previous_pin_block(self):
+        revision=self.set_policy(['pinEnable'])
+        raw=bytearray(217);raw[0]=2
+        for spec in CATALOG.values():
+            raw[spec['offset']:spec['offset']+spec['size']]=spec['min'].to_bytes(spec['size'],'big')
+        raw[0xC5:0xD9]=b'\x39'*20;raw[0xD4]=1
+        sent=[]
+        def fake(row,uid,rid,method,path,body,lease=None):
+            if method=='GET':return {'ok':True,'data':raw.hex()}
+            sent.append(bytes.fromhex(body['data']));return {'ok':True}
+        with patch.object(core.bridge,'call',side_effect=fake):
+            r=self.client.post(MOBILE+'/settings',json={'revision':revision,'values':{'pinEnable':0}},headers=self.mobile_headers)
+        self.assertEqual(r.status_code,200,r.text)
+        self.assertEqual(sent,[bytes(raw[:0xC5])+bytes(20)])
 
     def test_settings_empty_stale_and_all_hidden(self):
         rev=self.set_policy([])

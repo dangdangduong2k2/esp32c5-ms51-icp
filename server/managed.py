@@ -24,6 +24,18 @@ CREATE TABLE IF NOT EXISTS update_jobs(id TEXT PRIMARY KEY, device TEXT NOT NULL
 """
 
 
+def prepare_pin_for_write(raw):
+    """Match MS51 SET semantics; GET also contains live PIN counters/flags."""
+    if raw[0xD4] == 0:
+        # The disabled-PIN representation is twenty zero bytes in this protocol.
+        raw[0xC5:0xD9] = bytes(20)
+    else:
+        # Preserve passwords, periods, units and options; reset only runtime state.
+        raw[0xC9:0xCC] = bytes(3)  # elapsed period and password request
+        raw[0xCE:0xD0] = bytes(2)  # locked and backup-used flags
+        raw[0xD7:0xD9] = bytes(2)  # runtime request marker and its inverse
+
+
 def parse_hex(content):
     """Same APROM bounds/coverage/record rules as main/ms51_image.c."""
     if not 0 < len(content) <= 98304:
@@ -253,7 +265,9 @@ def install(app, core, admin_identity, audit):
             for stem, current in [('rangeCoolCl','coolCl'),('rangeCoolOp','coolOp'),('rangeDefrostCl','defrostCl'),('rangeDefrostOp','defrostOp'),('rangeStLcd','stLcd'),('rangeStLed','stLed')]:
                 if not values[stem+'Min'] <= values[current] <= values[stem+'Max']:
                     core.fail(400, CATALOG[current]['label'] + ' phải nằm trong giới hạn Min / Max.')
-            # Only selected offsets change; hidden fields, relay mapping and reserved bytes survive.
+            # Preserve unedited settings/history, except PIN runtime state which
+            # MS51 rejects on SET. This follows the existing Android/web codec.
+            prepare_pin_for_write(raw)
             return call(row, user['id'], lease, 'POST', '/api/runtime-config', {'data': raw.hex().upper()})
         finally:
             release_lock(device, lease)
