@@ -91,7 +91,7 @@ final class ManagedChecks {
                     page.setPadding(32,32,32,32);page.setBackgroundColor(Design.BG);
                     invoke(a,"addNavigation",new Class[]{LinearLayout.class},page);
                     invoke(a,"buildOverview",new Class[]{LinearLayout.class},page);
-                    for(int gpio:new int[]{1,6}) for(int temperature:new int[]{-1800,0,2500,12500}) {
+                    for(int gpio:new int[]{1,5,6}) for(int temperature:new int[]{-1800,0,2500,12500}) {
                         sensor.put("gpio",gpio);
                         sensor.put("temperature_centi",temperature);
                         invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,null);
@@ -110,7 +110,7 @@ final class ManagedChecks {
                     check(((TextView)get(a,"temperatureValue")).getText().toString().equals("— °C"),"Null is not zero degrees");
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},demo.get("/api/status"));
                     check(((TextView)get(a,"temperatureValue")).getText().toString().equals("— °C"),"Older firmware remains usable");
-                    sensor.put("temperature_centi",2500);
+                    sensor.put("gpio",5).put("temperature_centi",2500);
                     JSONObject second = new JSONObject(sensor.toString()).put("gpio",4).put("temperature_centi",3150);
                     sampleStatus.put("analog50k",second);
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
@@ -123,10 +123,14 @@ final class ManagedChecks {
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
                     check(((TextView)get(a,"temperature50Value")).getText().toString().equals("— °C"),"50k stale hidden");
                     second.put("age_ms",100);
-                    JSONObject third=new JSONObject(sensor.toString()).put("gpio",5).put("temperature_centi",2875);
+                    JSONObject third=new JSONObject(sensor.toString()).put("gpio",6).put("temperature_centi",2875);
                     sampleStatus.put("analog20k",third);
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
-                    check(((TextView)get(a,"temperature20Value")).getText().toString().equals("28,8 °C"),"Independent 20k IO5 reading");
+                    check(((TextView)get(a,"temperature20Value")).getText().toString().equals("28,8 °C"),"Independent 20k IO6 reading");
+                    check(((TextView)get(a,"temperatureValue")).getText().toString().equals("25,0 °C"),"10k IO5 and 20k IO6 stay distinct");
+                    third.put("gpio",5);invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
+                    check(((TextView)get(a,"temperature20Value")).getText().toString().equals("28,8 °C"),"Legacy 20k IO5 still supported");
+                    third.put("gpio",6);
                     third.put("sensor","short");invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
                     check(((TextView)get(a,"temperature20Value")).getText().toString().equals("— °C"),"20k short hidden");
                     check(((TextView)get(a,"temperature50Value")).getText().toString().equals("31,5 °C"),"20k short leaves 50k intact");

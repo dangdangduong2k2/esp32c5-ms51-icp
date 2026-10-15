@@ -1,5 +1,9 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.3.1 · 10k IO5, 20k IO6, 50k IO4
+
+Đổi cách đấu mới: **NTC 10k → IO5, NTC 20k → IO6, NTC 50k → IO4**. Mỗi nhánh B3950, trở kéo lên 10k tới 3,3 V. Cài APK và nạp C5 3.3.1; giữ MS51/server hiện có. [Tải bản mới và hướng dẫn](docs/ms51-connect-3.3.1/README.md).
+
 ## Bản thử nghiệm 3.3.0 · Ba cảm biến và điều kiện kích
 
 [Tải APK 3.3.0](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.3.0/MS51-Connect-3.3.0.apk) · [Đấu dây, bản nạp và preview](docs/ms51-connect-3.3.0/README.md)

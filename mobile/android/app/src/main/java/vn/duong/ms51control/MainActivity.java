@@ -1460,7 +1460,7 @@ public final class MainActivity extends Activity {
             temperatureNote.setText("Thiết bị chưa hỗ trợ cảm biến này"); return;
         }
         int gpio = input.optInt("gpio", -1);
-        if ((sensorIndex==2 ? gpio != 4 : sensorIndex==1 ? gpio != 5 : (gpio != 1 && gpio != 6)) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
+        if ((sensorIndex==2 ? gpio != 4 : sensorIndex==1 ? (gpio != 5 && gpio != 6) : (gpio != 1 && gpio != 5 && gpio != 6)) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
         long age = input.optLong("age_ms", -1);
         if (age < 0 || age > 2000) return;
         String sensor = input.optString("sensor");
@@ -2048,7 +2048,7 @@ public final class MainActivity extends Activity {
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
         addSectionTitle(about, "MS51 Connect");
-        addHelp(about, "Phiên bản 3.3.0 • Kết nối qua Internet");
+        addHelp(about, "Phiên bản 3.3.1 • Kết nối qua Internet");
         Button exit = neutralButton("Danh sách thiết bị");
         exit.setOnClickListener(v -> showDevices());
         about.addView(exit, fullParams(0, 12, 0, 0));

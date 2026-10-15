@@ -8,12 +8,16 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#if CONFIG_MS51_ANALOG_IO1 || CONFIG_MS51_ANALOG_IO6
+#if CONFIG_MS51_ANALOG_IO1 || CONFIG_MS51_ANALOG_IO6 || CONFIG_MS51_ANALOG_IO5
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "soc/adc_channel.h"
-#if CONFIG_MS51_ANALOG_IO6
+#if CONFIG_MS51_ANALOG_IO5
+#define NTC_GPIO 5
+#define NTC_CHANNEL ADC_CHANNEL_4
+_Static_assert(ADC1_CHANNEL_4_GPIO_NUM == NTC_GPIO, "IO5 must be ADC1 channel 4");
+#elif CONFIG_MS51_ANALOG_IO6
 #define NTC_GPIO 6
 #define NTC_CHANNEL ADC_CHANNEL_5
 _Static_assert(ADC1_CHANNEL_5_GPIO_NUM == NTC_GPIO, "IO6 must be ADC1 channel 5");
@@ -32,7 +36,16 @@ static adc_oneshot_unit_handle_t s_adc;
 #endif
 _Static_assert(ADC1_CHANNEL_3_GPIO_NUM == 4, "IO4 must be ADC1 channel 3");
 #endif
-#if CONFIG_MS51_NTC_20K_IO5
+#if CONFIG_MS51_NTC_20K_IO6
+#define NTC20_GPIO 6
+#define NTC20_CHANNEL ADC_CHANNEL_5
+_Static_assert(ADC1_CHANNEL_5_GPIO_NUM == NTC20_GPIO, "IO6 must be ADC1 channel 5");
+#if CONFIG_MS51_DAT_GPIO == 6 || CONFIG_MS51_CLK_GPIO == 6 || CONFIG_MS51_RST_GPIO == 6
+#error "IO6 NTC conflicts with MS51 pins"
+#endif
+#elif CONFIG_MS51_NTC_20K_IO5
+#define NTC20_GPIO 5
+#define NTC20_CHANNEL ADC_CHANNEL_4
 #if CONFIG_MS51_DAT_GPIO == 5 || CONFIG_MS51_CLK_GPIO == 5 || CONFIG_MS51_RST_GPIO == 5
 #error "IO5 NTC conflicts with MS51 pins"
 #endif
@@ -42,23 +55,23 @@ static const adc_channel_t channels[] = { NTC_CHANNEL,
 #if CONFIG_MS51_NTC_50K_IO4
     ADC_CHANNEL_3,
 #endif
-#if CONFIG_MS51_NTC_20K_IO5
-    ADC_CHANNEL_4,
+#if CONFIG_MS51_NTC_20K_IO5 || CONFIG_MS51_NTC_20K_IO6
+    NTC20_CHANNEL,
 #endif
 };
 static const int gpios[] = { NTC_GPIO,
 #if CONFIG_MS51_NTC_50K_IO4
     4,
 #endif
-#if CONFIG_MS51_NTC_20K_IO5
-    5,
+#if CONFIG_MS51_NTC_20K_IO5 || CONFIG_MS51_NTC_20K_IO6
+    NTC20_GPIO,
 #endif
 };
 static const int nominal[] = { 10000,
 #if CONFIG_MS51_NTC_50K_IO4
     50000,
 #endif
-#if CONFIG_MS51_NTC_20K_IO5
+#if CONFIG_MS51_NTC_20K_IO5 || CONFIG_MS51_NTC_20K_IO6
     20000,
 #endif
 };
@@ -152,7 +165,7 @@ void ms51_analog_50k_json(char *output, size_t size) {
 }
 
 void ms51_analog_20k_json(char *output, size_t size) {
-#if CONFIG_MS51_NTC_20K_IO5
+#if CONFIG_MS51_NTC_20K_IO5 || CONFIG_MS51_NTC_20K_IO6
     sensor_json(SENSOR_COUNT - 1, output, size);
 #else
     snprintf(output,size,"{\"enabled\":false,\"valid\":false}");

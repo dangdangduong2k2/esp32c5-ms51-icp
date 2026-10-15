@@ -20,10 +20,10 @@ static const char *names[] = { "SIG", "10K", "20K", "50K" };
 typedef struct { uint32_t magic, source; int32_t threshold; } config_t;
 static bool supported(unsigned selected) {
     if (selected==0) return true;
-#if CONFIG_MS51_ANALOG_IO1 || CONFIG_MS51_ANALOG_IO6
+#if CONFIG_MS51_ANALOG_IO1 || CONFIG_MS51_ANALOG_IO6 || CONFIG_MS51_ANALOG_IO5
     if(selected==1) return true;
 #endif
-#if CONFIG_MS51_NTC_20K_IO5
+#if CONFIG_MS51_NTC_20K_IO5 || CONFIG_MS51_NTC_20K_IO6
     if(selected==2) return true;
 #endif
 #if CONFIG_MS51_NTC_50K_IO4

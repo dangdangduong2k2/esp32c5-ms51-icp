@@ -1,0 +1,68 @@
+{
+  "version": "3.3.1",
+  "version_code": 29,
+  "apk_sha256": "344d7c276d8380b104fdc3c9d45c5769133e713e39c1cced139726814178a4cb",
+  "assets": {
+    "ESP32-C5-NTC10K-IO5-20K-IO6-50K-IO4-3.3.1.zip": "1d137a7e1b4edbad4665f317b939af5e8655260e076571ee5f1203ea39270e9a",
+    "MS51-Connect-3.3.1.apk": "344d7c276d8380b104fdc3c9d45c5769133e713e39c1cced139726814178a4cb"
+  },
+  "pins": {
+    "NTC10K": 5,
+    "NTC20K": 6,
+    "NTC50K": 4,
+    "DAT": 1,
+    "CLK": 0,
+    "RS": 3
+  },
+  "elf_pin_check": {
+    "gpios": [
+      5,
+      4,
+      6
+    ],
+    "channels": [
+      4,
+      3,
+      5
+    ],
+    "nominal": [
+      10000,
+      50000,
+      20000
+    ]
+  },
+  "flash_files": [
+    {
+      "address": "0x2000",
+      "name": "bootloader.bin",
+      "size": 22224,
+      "sha256": "6eea75dfebe0ebc4279c3415edee42fe425c1330d0ed2da6129136a72ed41faf"
+    },
+    {
+      "address": "0x8000",
+      "name": "partition-table.bin",
+      "size": 3072,
+      "sha256": "a051e6e82b5380e3647d1dbc8a0217c359da226970eb94f2cb0b864d9a712d43"
+    },
+    {
+      "address": "0x10000",
+      "name": "esp32c5-10k-io5-20k-io6-50k-io4.bin",
+      "size": 1464912,
+      "sha256": "dee685ed066f8856a43302bc9a7c245295ec6abe4bd9e2c007454d84cded6c6c"
+    }
+  ],
+  "validation": {
+    "c5_build": "passed, fits factory partition",
+    "android_build": "passed",
+    "android_lint": "passed",
+    "android_tests": "PASS: three independent temperature tiles and faults; trigger form load, edit preservation, save and mode overlap guards; two mode icons, immediate selection, confirmation and timeout; countdown animation; managed settings/updates/history regression.",
+    "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "hardware_tested": false
+  },
+  "changes": {
+    "c5": true,
+    "android": true,
+    "ms51": false,
+    "server": false
+  }
+}
