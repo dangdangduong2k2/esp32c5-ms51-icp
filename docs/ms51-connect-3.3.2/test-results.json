@@ -1,0 +1,13 @@
+{
+  "version": "3.3.2",
+  "version_code": 30,
+  "apk_sha256": "d24dd5a84887bdb89e7ef04ad531c46d20e9199ea075541140c830817b8cffee",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "signing_certificate_matches_previous": true,
+    "scope": "Two checkbox fields now use the existing Tắt/Bật choice renderer; keys, 0/1 values and visibility policy unchanged. No hardware commands or phone UI test performed."
+  }
+}

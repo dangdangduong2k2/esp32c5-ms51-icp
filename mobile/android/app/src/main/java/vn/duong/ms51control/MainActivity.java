@@ -1552,13 +1552,13 @@ public final class MainActivity extends Activity {
         addChoiceField(modes, "Chế độ HDF", "hdf", choices("Tắt", 0, "Bật", 1));
         addChoiceField(modes, "Tỷ lệ thời gian R1 / R2", "onTime", choices("R1:1  R2:1", 0, "R1:2  R2:1", 1, "R1:1  R2:2", 2, "R1:2  R2:2", 3));
         addChoiceField(modes, "Số lần chạm", "touch", choices("1", 0, "2", 1));
-        addCheckField(modes, "Xả đá OP tính giây", "defrostOpSeconds", false);
+        addChoiceField(modes, "Xả đá OP tính giây", "defrostOpSeconds", choices("Tắt", 0, "Bật", 1));
         addCheckField(modes, "Hiện chế độ DF", "showDf", false);
         addCheckField(modes, "Hiện chế độ END", "showEnd", false);
         addCheckField(modes, "Hiện chế độ SL", "showSl", false);
         addCheckField(modes, "Hiện chế độ HCF", "showHcf", false);
         addCheckField(modes, "Hiện chế độ HDF", "showHdf", false);
-        addCheckField(modes, "Hiện ST LED", "showSt", false);
+        addChoiceField(modes, "Hiện ST LED", "showSt", choices("Tắt", 0, "Bật", 1));
         content.addView(modes, fullParams(0, 12, 0, 0));
 
         LinearLayout ranges = card();
