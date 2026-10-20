@@ -1,0 +1,14 @@
+{
+  "version": "3.3.6",
+  "version_code": 34,
+  "apk_sha256": "db3702f0815a430dd0c35ec4a97109048a2a2454b421c5092bba51c8f586eed5",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "signing_certificate_matches_previous": true,
+    "android_managed_checks": "passed on emulator",
+    "scope": "Controller and full enclosure pictured beside operating state; fixed red/cyan 999 labels. Actual timer telemetry unchanged. Emulator preview inspected; no physical device commands."
+  }
+}
