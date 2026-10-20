@@ -188,6 +188,10 @@ uint8_t trigger_source = 0;
 static uint8_t trigger_active = 0, trigger_received = 0;
 static TICK_TYPE trigger_tick;
 uint8_t trigger_set(uint8_t source, uint8_t active);
+uint8_t thermal_set(uint8_t source, uint8_t active, uint8_t valid, uint8_t on);
+void relay3_refresh(void);
+static uint8_t relay3_legacy, relay3_override, relay3_thermal_on;
+static TICK_TYPE relay3_tick;
 uint8_t signal_read(void);
 uint8_t trigger_fresh(void);
 

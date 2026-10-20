@@ -114,7 +114,9 @@ public final class MainActivity extends Activity {
     private int motorSensorIndex;
     private JSONObject temperatureStatus;
     private long temperatureStatusAt;
-    private Spinner triggerSource;
+    private EditText defrostThreshold;
+    private TextView defrostState;
+    private boolean motorSelectionPending;
     private EditText triggerThreshold;
     private TextView triggerState;
     private Button triggerSave;
@@ -1259,68 +1261,87 @@ public final class MainActivity extends Activity {
     }
 
     private void buildTriggerCard(LinearLayout content) {
-        triggerLoaded=false;
-        LinearLayout card=card(); addSectionTitle(card,"Điều kiện kích");
-        card.addView(mutedText("Nguồn tín hiệu"));
-        triggerSource=choiceSpinner(choices("10k",1,"20k",2,"50k",3,"SIG",0));
-        card.addView(triggerSource,fullParams(0,6,0,12));
-        card.addView(mutedText("Ngưỡng nhiệt độ (°C)"));
-        triggerThreshold=textInput("Ví dụ: 25",false);
-        triggerThreshold.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
-        card.addView(triggerThreshold,fullParams(0,6,0,8));
-        triggerState=mutedText("Đang chờ dữ liệu…"); card.addView(triggerState,fullParams(0,0,0,12));
+        triggerLoaded=false; motorSelectionPending=false;
+        LinearLayout row=new LinearLayout(this);
+        LinearLayout cutoff=card(), defrost=card();
+        cutoff.setPadding(dp(12),dp(16),dp(12),dp(16));
+        defrost.setPadding(dp(12),dp(16),dp(12),dp(16));
+        addSectionTitle(cutoff,"Ngưỡng ngắt"); addSectionTitle(defrost,"Ngưỡng xả đá");
+        TextView motor=mutedText("Nhiệt độ động cơ (°C)"), monitor=mutedText("Nhiệt độ giám sát (°C)");
+        motor.setMinLines(2); monitor.setMinLines(2);
+        cutoff.addView(motor); defrost.addView(monitor);
+        triggerThreshold=textInput("Nhập ngưỡng",false);
+        defrostThreshold=textInput("Nhập ngưỡng",false);
+        int input=InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED;
+        triggerThreshold.setInputType(input); defrostThreshold.setInputType(input);
+        cutoff.addView(triggerThreshold,fullParams(0,8,0,8));
+        defrost.addView(defrostThreshold,fullParams(0,8,0,8));
+        triggerState=mutedText("Đang chờ dữ liệu…"); cutoff.addView(triggerState);
+        defrostState=mutedText("Thấp hơn ngưỡng: bật relay 3."); defrost.addView(defrostState);
+        LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,-1,1);left.rightMargin=dp(6);
+        LinearLayout.LayoutParams right=new LinearLayout.LayoutParams(0,-1,1);right.leftMargin=dp(6);
+        row.addView(cutoff,left);row.addView(defrost,right);
+        content.addView(row,fullParams(0,0,0,12));
         triggerSave=primaryButton("Lưu");triggerSave.setEnabled(false);
-        triggerSave.setOnClickListener(v -> saveTrigger());card.addView(triggerSave);
-        triggerSource.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            public void onNothingSelected(android.widget.AdapterView<?> parent) { }
-            public void onItemSelected(android.widget.AdapterView<?> parent, View view,int position,long id) {
-                triggerThreshold.setEnabled(!triggerSaving && ((Choice)triggerSource.getSelectedItem()).value!=0);
-            }
-        });
-        content.addView(card,fullParams(0,0,0,16));
+        triggerSave.setOnClickListener(v -> saveTrigger());
+        content.addView(triggerSave,fullParams(0,0,0,16));
     }
 
     private void renderTrigger(JSONObject status, JSONObject debug) {
         if(triggerSave==null) return;
         JSONObject trigger=status==null ? null : status.optJSONObject("trigger");
-        boolean supported=trigger!=null && trigger.optBoolean("enabled");
+        boolean supported=trigger!=null && trigger.optBoolean("enabled") && trigger.optBoolean("thermal_supported");
         if(supported && !triggerLoaded && !triggerSaving) {
-            String source=trigger.optString("source","SIG");
-            int choice=0; for(int i=0;i<TRIGGER_SOURCES.length;i++) if(TRIGGER_SOURCES[i].equals(source)) choice=i;
-            selectChoice(triggerSource,choice);
+            boolean configured=trigger.optBoolean("thermal_enabled");
+            if(configured) motorSensorIndex="20K".equals(trigger.optString("source")) ? 1 : 0;
             triggerThreshold.setText(java.math.BigDecimal.valueOf(trigger.optInt("threshold_centi",2500),2).stripTrailingZeros().toPlainString());
-            triggerLoaded=true;
+            defrostThreshold.setText(configured ? java.math.BigDecimal.valueOf(trigger.optInt("defrost_centi"),2).stripTrailingZeros().toPlainString() : "");
+            triggerLoaded=true; motorSelectionPending=false; renderTemperatureCards();
         }
-        triggerSource.setEnabled(supported && !triggerSaving);
-        triggerThreshold.setEnabled(supported && !triggerSaving && ((Choice)triggerSource.getSelectedItem()).value!=0);
+        triggerThreshold.setEnabled(supported && !triggerSaving);
+        defrostThreshold.setEnabled(supported && !triggerSaving);
+        if(motorSensorSwitch!=null) motorSensorSwitch.setEnabled(supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
         triggerSave.setEnabled(supported && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting && !status.optBoolean("busy",true));
         mainHandler.removeCallbacks(expireTriggerControls);
         if(triggerSave.isEnabled()) mainHandler.postDelayed(expireTriggerControls,5000);
         if(triggerSaving) triggerState.setText("Đang lưu…");
         else if(!supported) triggerState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        else if(motorSelectionPending) triggerState.setText("Nhấn Lưu để dùng cảm biến "+(motorSensorIndex==0 ? "10k." : "20k."));
+        else if(!trigger.optBoolean("thermal_enabled")) triggerState.setText("Nhập hai ngưỡng rồi nhấn Lưu để áp dụng.");
         else if(!trigger.optBoolean("synced")) triggerState.setText("Đang chờ bộ điều khiển xác nhận.");
-        else if("SIG".equals(trigger.optString("source"))) triggerState.setText("Đang dùng tín hiệu từ chân SIG.");
-        else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến đã chọn · Không kích.");
-        else triggerState.setText(trigger.optBoolean("active") ? "Nhiệt độ vượt ngưỡng · Đang kích." : "Nhiệt độ chưa vượt ngưỡng · Không kích.");
+        else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến động cơ · Không kích.");
+        else triggerState.setText(trigger.optBoolean("active") ? "Vượt ngưỡng · Đang ngắt." : "Chưa vượt ngưỡng.");
+        if(!supported) defrostState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        else if(!trigger.optBoolean("thermal_enabled")) defrostState.setText("Chưa áp dụng · Theo mạch.");
+        else if(!trigger.optBoolean("synced")) defrostState.setText("Đang chờ bộ điều khiển xác nhận.");
+        else if(!trigger.optBoolean("defrost_valid")) defrostState.setText("Cảm biến lỗi · Relay 3 theo mạch.");
+        else defrostState.setText(trigger.optBoolean("defrost_active") ? "Dưới ngưỡng · Relay 3 bật." : "Từ ngưỡng trở lên · Relay 3 tắt.");
     }
 
+    private int readTemperatureLimit(EditText field) {
+        try {
+            int value=new java.math.BigDecimal(field.getText().toString().trim().replace(',','.')).movePointRight(2).intValueExact();
+            if(value < -5500 || value > 12500) throw new IllegalArgumentException();
+            return value;
+        } catch(Exception invalid) {
+            field.setError("Nhập từ -55 đến 125 °C, tối đa 2 số lẻ.");
+            throw new IllegalArgumentException();
+        }
+    }
     private void saveTrigger() {
         if(triggerSaving || modeChanging || pendingMode!=null || managedUpdateStarting || !triggerLoaded || triggerSave==null || !triggerSave.isEnabled() || !foreground || screen!=Screen.CONTROL || tab!=Tab.OVERVIEW) return;
-        int selected=((Choice)triggerSource.getSelectedItem()).value;
-        int threshold=2500;
-        try {
-            if(selected!=0) threshold=new java.math.BigDecimal(triggerThreshold.getText().toString().trim().replace(',','.')).movePointRight(2).intValueExact();
-            else if(lastStatus!=null && lastStatus.optJSONObject("trigger")!=null) threshold=lastStatus.getJSONObject("trigger").optInt("threshold_centi",2500);
-            if(threshold < -5500 || threshold > 12500) throw new IllegalArgumentException();
-        } catch(Exception invalid) { triggerThreshold.setError("Nhập từ -55 đến 125 °C, tối đa 2 số lẻ."); return; }
-        final int value=threshold, token=controlEpoch;
+        final int cutoff, defrost;
+        try { cutoff=readTemperatureLimit(triggerThreshold); defrost=readTemperatureLimit(defrostThreshold); }
+        catch(IllegalArgumentException invalid) { return; }
+        final int selected=motorSensorIndex+1, token=controlEpoch;
         final EspApi session=api.snapshot(15000);
         triggerSaving=true; renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);
         io.execute(() -> {
             if(!currentControl(token)) return;
             try {
-                session.post("/api/trigger",new JSONObject().put("source",TRIGGER_SOURCES[selected]).put("threshold_centi",value));
-                onControl(token,() -> { triggerSaving=false;triggerLoaded=false;showMessage("Đã lưu điều kiện kích.");refreshDashboard(); });
+                session.post("/api/thermal",new JSONObject().put("source",TRIGGER_SOURCES[selected])
+                        .put("threshold_centi",cutoff).put("defrost_centi",defrost));
+                onControl(token,() -> { triggerSaving=false;triggerLoaded=false;showMessage("Đã lưu ngưỡng nhiệt độ.");refreshDashboard(); });
             } catch(Exception error) {
                 onControl(token,() -> { triggerSaving=false;renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);showMessage("Chưa xác nhận lưu. "+errorMessage(error));refreshDashboard(); });
             }
@@ -1343,7 +1364,10 @@ public final class MainActivity extends Activity {
             motorSensorSwitch.setBackground(rounded(0xFFE8F4F1,dp(24)));
             motorSensorSwitch.setContentDescription(motorSensorIndex==0 ? "Đổi sang cảm biến 20k" : "Đổi sang cảm biến 10k");
             motorSensorSwitch.setOnClickListener(v -> {
+                if(triggerSaving || modeChanging || pendingMode!=null || managedUpdateStarting) return;
                 motorSensorIndex = motorSensorIndex==0 ? 1 : 0;
+                motorSelectionPending=true;
+                if(triggerState!=null) triggerState.setText("Nhấn Lưu để áp dụng cảm biến "+(motorSensorIndex==0 ? "10k." : "20k."));
                 getSharedPreferences("temperature_display",MODE_PRIVATE).edit()
                         .putBoolean(motorSensorPreferenceKey(),motorSensorIndex==1).apply();
                 renderTemperatureCards();

@@ -14,6 +14,35 @@ HEX = b':0400000001020304F2\n:00000001FF\n'
 
 
 class ManagedTests(AdminTests):
+    def test_thermal_threshold_validation_and_ownership(self):
+        body={'id':'c'*32,'method':'POST','path':'/api/thermal',
+              'body':{'source':'10K','threshold_centi':3000,'defrost_centi':500}}
+        with patch.object(core.bridge,'call',return_value={'ok':True}) as call:
+            for source in ('10K','20K'):
+                body['body']['source']=source
+                for boundary in (-5500,12500):
+                    body['body']['defrost_centi']=boundary
+                    self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+            call.reset_mock()
+            valid={'source':'10K','threshold_centi':3000,'defrost_centi':500}
+            invalid=[{},dict(valid,source='SIG'),dict(valid,source='50K'),dict(valid,extra=1)]
+            for key in ('threshold_centi','defrost_centi'):
+                for value in (-5501,12501,True,False,None,3.5,'20'):
+                    invalid.append(dict(valid,**{key:value}))
+            for value in invalid:
+                body['body']=value
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,400)
+            body['body']=valid
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body).status_code,401)
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile('bob')).status_code,404)
+            with core.lock:
+                core.db.execute("INSERT INTO update_jobs VALUES(?,?,?,?,?,?,?)",('job-thermal',DEVICE,'u1','test','running','',time.time()))
+                core.db.commit()
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,409)
+            call.assert_not_called()
+            with core.lock:
+                core.db.execute("DELETE FROM update_jobs WHERE id='job-thermal'");core.db.commit()
+
     def setUp(self):
         super().setUp()
         core.managed_locks.clear()

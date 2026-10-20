@@ -75,7 +75,8 @@ uint8_t TM2_read_SDA(void) { return PIN_read(SDA2_PIN); }
 #define RL2_TOGGLE()	PIN_toggle(RL2_PIN)
 #define RL2_SET(s)   	PIN_write(RL2_PIN, s)
 
-#define RL3_ON()      do { PIN_write(RL3_PIN, RL_OUTPUT_LEVEL(RL3_ACTIVE_LEVEL, 1u)); RL3_output_is_on = 1; } while (0)
-#define RL3_OFF()    	do { PIN_write(RL3_PIN, RL_OUTPUT_LEVEL(RL3_ACTIVE_LEVEL, 0u)); RL3_output_is_on = 0; } while (0)
+void relay3_request(uint8_t on);
+#define RL3_ON() relay3_request(1)
+#define RL3_OFF() relay3_request(0)
 #define RL3_TOGGLE() 	PIN_toggle(RL3_PIN)
 #define RL3_SET(s)   	PIN_write(RL3_PIN, s)

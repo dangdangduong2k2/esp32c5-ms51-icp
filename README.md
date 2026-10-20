@@ -1,5 +1,11 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Bản thử nghiệm 3.4.0 · Ngưỡng ngắt và ngưỡng xả đá
+
+[Tải APK 3.4.0](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.4.0/MS51-Connect-3.4.0.apk) · [Bản nạp, hành vi và kiểm thử](docs/ms51-connect-3.4.0/README.md)
+
+Ngưỡng ngắt dùng cảm biến động cơ 10k/20k đang chọn. Ngưỡng xả đá dùng 50k, bật riêng relay 3 khi nhiệt độ thấp hơn ngưỡng, tắt khi bằng/cao hơn; cảm biến lỗi hoặc mất liên lạc thì trở về điều khiển theo mạch. Bấm **Lưu** để áp dụng cảm biến và hai ngưỡng. Cần cập nhật APK, C5 và MS51; giữ chân 10k IO5, 20k IO6, 50k IO4.
+
 ## Bản thử nghiệm 3.3.1 · 10k IO5, 20k IO6, 50k IO4
 
 Đổi cách đấu mới: **NTC 10k → IO5, NTC 20k → IO6, NTC 50k → IO4**. Mỗi nhánh B3950, trở kéo lên 10k tới 3,3 V. Cài APK và nạp C5 3.3.1; giữ MS51/server hiện có. [Tải bản mới và hướng dẫn](docs/ms51-connect-3.3.1/README.md).

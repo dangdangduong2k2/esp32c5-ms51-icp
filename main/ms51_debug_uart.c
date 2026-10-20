@@ -27,6 +27,7 @@ static const char *TAG = "ms51_debug_uart";
 #define MS51_RUNTIME_RESPONSE_SOF 0xA6u
 #define MS51_RUNTIME_COMMAND_GET 0x47u
 #define MS51_RUNTIME_COMMAND_SET 0x53u
+#define MS51_RUNTIME_COMMAND_THERMAL 0x55u
 #define MS51_RUNTIME_COMMAND_TRIGGER 0x54u
 #define MS51_RUNTIME_COMMAND_MODE 0x4Du
 #define MS51_RUNTIME_REQUEST_MAX_SIZE (1u + 1u + 1u + 1u + MS51_RUNTIME_CONFIG_SIZE + 2u)
@@ -291,7 +292,7 @@ static bool process_runtime_response_byte_locked(uint8_t byte)
         return true;
 
     case MS51_RUNTIME_RX_COMMAND:
-        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET && byte != MS51_RUNTIME_COMMAND_MODE && byte != MS51_RUNTIME_COMMAND_TRIGGER) {
+        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET && byte != MS51_RUNTIME_COMMAND_MODE && byte != MS51_RUNTIME_COMMAND_TRIGGER && byte != MS51_RUNTIME_COMMAND_THERMAL) {
             ++s_state.dropped_lines;
             reset_runtime_parser_locked();
             return true;
@@ -479,16 +480,17 @@ static esp_err_t runtime_config_request(uint8_t command, const uint8_t *payload,
         (payload_length != 0u && payload == NULL)) {
         return ESP_ERR_INVALID_STATE;
     }
-    if ((command == MS51_RUNTIME_COMMAND_TRIGGER && (payload_length != 2u || payload[0] > 3u || payload[1] > 1u)) ||
+    if ((command == MS51_RUNTIME_COMMAND_THERMAL && (payload_length != 4u || payload[0] < 1u || payload[0] > 2u || payload[1] > 1u || payload[2] > 1u || payload[3] > 1u)) ||
+        (command == MS51_RUNTIME_COMMAND_TRIGGER && (payload_length != 2u || payload[0] > 3u || payload[1] > 1u)) ||
         (command == MS51_RUNTIME_COMMAND_MODE && (payload_length != 1u || payload[0] > 1u)) ||
         (command == MS51_RUNTIME_COMMAND_GET && payload_length != 0u) ||
         (command == MS51_RUNTIME_COMMAND_SET && payload_length != MS51_RUNTIME_CONFIG_SIZE) ||
-        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET && command != MS51_RUNTIME_COMMAND_MODE && command != MS51_RUNTIME_COMMAND_TRIGGER)) {
+        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET && command != MS51_RUNTIME_COMMAND_MODE && command != MS51_RUNTIME_COMMAND_TRIGGER && command != MS51_RUNTIME_COMMAND_THERMAL)) {
         return ESP_ERR_INVALID_ARG;
     }
 
     const TickType_t response_timeout = pdMS_TO_TICKS(
-        command == MS51_RUNTIME_COMMAND_TRIGGER ? 500u : MS51_RUNTIME_RESPONSE_TIMEOUT_MS);
+        (command == MS51_RUNTIME_COMMAND_TRIGGER || command == MS51_RUNTIME_COMMAND_THERMAL) ? 500u : MS51_RUNTIME_RESPONSE_TIMEOUT_MS);
     if (xSemaphoreTake(s_state.command_mutex,
                        response_timeout) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
@@ -733,4 +735,9 @@ esp_err_t ms51_debug_uart_set_trigger(uint8_t source, bool active, uint8_t *stat
 {
     const uint8_t payload[] = { source, active ? 1 : 0 };
     return runtime_config_request(MS51_RUNTIME_COMMAND_TRIGGER, payload, 2, NULL, status);
+}
+
+esp_err_t ms51_debug_uart_set_thermal(uint8_t source, bool cutoff, bool valid, bool on, uint8_t *status) {
+    uint8_t payload[]={source,cutoff,valid,on};
+    return runtime_config_request(MS51_RUNTIME_COMMAND_THERMAL,payload,sizeof(payload),NULL,status);
 }

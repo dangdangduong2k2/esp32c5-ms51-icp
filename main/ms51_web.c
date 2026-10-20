@@ -701,7 +701,7 @@ static esp_err_t status_handler(httpd_req_t *request)
                  uplink.nat_enabled ? "true" : "false", MDNS_HOSTNAME_FQDN,
                  s_mdns_started ? "true" : "false");
     }
-    char analog[192], analog50k[192], analog20k[192], trigger[224];
+    char analog[192], analog50k[192], analog20k[192], trigger[512];
     ms51_analog_json(analog, sizeof(analog));
     ms51_analog_50k_json(analog50k, sizeof(analog50k));
     ms51_analog_20k_json(analog20k,sizeof(analog20k));
@@ -1123,6 +1123,32 @@ static esp_err_t runtime_config_set_handler(httpd_req_t *request)
     return send_json(request,
                      "{\"ok\":true,\"message\":\"Đã lưu EEPROM và MS51 đang khởi động lại để áp dụng cấu hình.\"}",
                      NULL);
+}
+
+static esp_err_t thermal_handler(httpd_req_t *request)
+{
+    if(wrong_device(request)) return ESP_OK;
+    char body[HTTP_JSON_BODY_SIZE];
+    if(receive_json(request,body,sizeof(body))!=ESP_OK)
+        return send_error_json(request,"400 Bad Request","Invalid request.",ESP_ERR_INVALID_ARG);
+    cJSON *json=cJSON_Parse(body);
+    const cJSON *source=cJSON_GetObjectItemCaseSensitive(json,"source");
+    const cJSON *cutoff=cJSON_GetObjectItemCaseSensitive(json,"threshold_centi");
+    const cJSON *defrost=cJSON_GetObjectItemCaseSensitive(json,"defrost_centi");
+    int selected=!cJSON_IsString(source) ? 0 : !strcmp(source->valuestring,"10K") ? 1 :
+        !strcmp(source->valuestring,"20K") ? 2 : 0;
+    bool valid=selected && cJSON_GetArraySize(json)==3 && cJSON_IsNumber(cutoff) && cJSON_IsNumber(defrost) &&
+        cutoff->valuedouble>=-5500 && cutoff->valuedouble<=12500 && cutoff->valuedouble==cutoff->valueint &&
+        defrost->valuedouble>=-5500 && defrost->valuedouble<=12500 && defrost->valuedouble==defrost->valueint;
+    int c=valid ? cutoff->valueint : 0, d=valid ? defrost->valueint : 0;
+    cJSON_Delete(json);
+    if(!valid) return send_error_json(request,"400 Bad Request","Invalid thresholds.",ESP_ERR_INVALID_ARG);
+    esp_err_t error=ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
+    if(error!=ESP_OK) return send_error_json(request,"409 Conflict","Device is busy.",error);
+    error=ms51_thermal_configure(selected,c,d);
+    ms51_operation_unlock();
+    if(error!=ESP_OK) return send_error_json(request,"409 Conflict","Update controller or retry.",error);
+    return send_json(request,"{\"ok\":true}",NULL);
 }
 
 static esp_err_t trigger_handler(httpd_req_t *request)
@@ -2172,7 +2198,7 @@ static esp_err_t start_http_server(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = 8192;
-    config.max_uri_handlers = 17;
+    config.max_uri_handlers = 18;
     config.max_open_sockets = 4;
     config.lru_purge_enable = true;
     config.recv_wait_timeout = 20;
@@ -2193,6 +2219,7 @@ static esp_err_t start_http_server(void)
         {.uri = "/api/uplink/scan", .method = HTTP_GET, .handler = wifi_scan_handler},
         {.uri = "/api/uplink", .method = HTTP_POST, .handler = uplink_handler},
         {.uri = "/api/upload", .method = HTTP_POST, .handler = upload_handler},
+        {.uri = "/api/thermal", .method = HTTP_POST, .handler = thermal_handler},
         {.uri = "/api/trigger", .method = HTTP_POST, .handler = trigger_handler},
         {.uri = "/api/mode", .method = HTTP_POST, .handler = mode_handler},
         {.uri = "/api/info", .method = HTTP_POST, .handler = info_handler},

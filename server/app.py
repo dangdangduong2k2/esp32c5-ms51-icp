@@ -480,7 +480,7 @@ class Rpc(BaseModel):
 
 
 GET_PATHS = {"/api/status", "/api/debug", "/api/runtime-config"}
-POST_PATHS = {"/api/trigger", "/api/mode", "/api/info", "/api/reset", "/api/runtime-config", "/api/program", "/api/verify", "/api/program-full", "/api/erase"}
+POST_PATHS = {"/api/thermal", "/api/trigger", "/api/mode", "/api/info", "/api/reset", "/api/runtime-config", "/api/program", "/api/verify", "/api/program-full", "/api/erase"}
 
 
 @app.post("/devices/{device}/request")
@@ -496,12 +496,18 @@ def rpc(device: str, data: Rpc, request: Request):
                 fail(403, 'Admin chưa cấp quyền cài đặt cho thiết bị này.')
     if not (data.method == "GET" and data.path in GET_PATHS or data.method == "POST" and data.path in POST_PATHS):
         fail(400, "Lệnh này chỉ dùng khi kết nối trực tiếp với thiết bị.")
-    if data.path in {'/api/mode','/api/trigger'}:
+    if data.path in {'/api/mode','/api/trigger','/api/thermal'}:
         with lock:
             if db.execute("SELECT 1 FROM update_jobs WHERE device=? AND state='running'", (device,)).fetchone():
                 fail(409, 'Thiết bị đang cập nhật. Vui lòng đợi hoàn tất.')
     if data.path == '/api/mode' and (data.method != 'POST' or set(data.body) != {'mode'} or data.body.get('mode') not in ('COOL', 'ICE_FLUSH')):
         fail(400, 'Chế độ không hợp lệ.')
+    if data.path == '/api/thermal':
+        body = data.body
+        if (set(body) != {'source','threshold_centi','defrost_centi'} or body.get('source') not in ('10K','20K') or
+            any(type(body.get(key)) is not int or not -5500 <= body[key] <= 12500
+                for key in ('threshold_centi','defrost_centi'))):
+            fail(400, 'Cảm biến hoặc ngưỡng nhiệt độ không hợp lệ.')
     if data.path == '/api/trigger':
         body = data.body
         if (set(body) != {'source','threshold_centi'} or body.get('source') not in ('SIG','10K','20K','50K') or

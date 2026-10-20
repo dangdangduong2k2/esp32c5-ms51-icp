@@ -1,0 +1,87 @@
+{
+  "version": "3.4.0",
+  "version_code": 36,
+  "apk_sha256": "09aaa80cbf7075e13e4bdd3ab9f0e80ace260e45149bf952e927fc93d77c35a6",
+  "assets": {
+    "ESP32-C5-THERMAL-3.4.0.zip": "1399803aeeb3eb4638397c1d5ca3b5daacce9920b94e309453e1380fa4d3148d",
+    "MS51-Connect-3.4.0.apk": "09aaa80cbf7075e13e4bdd3ab9f0e80ace260e45149bf952e927fc93d77c35a6",
+    "MS51-Thermal-Control-3.4.0.hex": "5bcc9bd3699e99e5f8e7ba085eb67f988326f27ab6597b12c4c6e11d08799233"
+  },
+  "firmware_changed": true,
+  "server_changed": true,
+  "flash_files": [
+    {
+      "address": "0x2000",
+      "file": "bootloader.bin",
+      "sha256": "6eea75dfebe0ebc4279c3415edee42fe425c1330d0ed2da6129136a72ed41faf"
+    },
+    {
+      "address": "0x8000",
+      "file": "partition-table.bin",
+      "sha256": "a051e6e82b5380e3647d1dbc8a0217c359da226970eb94f2cb0b864d9a712d43"
+    },
+    {
+      "address": "0x10000",
+      "file": "esp32c5-thermal-3.4.0.bin",
+      "sha256": "73aa41f1404c8169994263097b1b46d252e4a0631c38c7e98f20e91f9153341c"
+    }
+  ],
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed",
+    "signing_certificate_matches_previous": true,
+    "emulator": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "server_tests": 33,
+    "host_c": "PASS: SIG, NTC conversion/faults, relay 3 arbitration across machine writes, sensor fault fallback, 3s lease timeout, clock rollover, startup and invalid frames",
+    "hardware": "PASS: authenticated HTTPS/MQTT thresholds, actual relay 3 ON/OFF and source 10k/20k confirmed; GPIO5/6/4 verified; MS51 public config unchanged; prior trigger restored; temporary session removed.",
+    "c5_flash": {
+      "result": "PASS",
+      "app_sha256": "73aa41f1404c8169994263097b1b46d252e4a0631c38c7e98f20e91f9153341c",
+      "flash_verified": true,
+      "nvs_preserved": true,
+      "pins": {
+        "10k": 5,
+        "20k": 6,
+        "50k": 4
+      }
+    },
+    "ms51_build": "27875 code bytes; 0 errors, 0 warnings",
+    "ms51_public_config_unchanged": true,
+    "live_thresholds": [
+      {
+        "source": "10K",
+        "cutoff": 3200,
+        "defrost": 3363,
+        "relay3": "ON",
+        "mode": "COOL",
+        "synced": true
+      },
+      {
+        "source": "20K",
+        "cutoff": 3200,
+        "defrost": 2763,
+        "relay3": "OFF",
+        "mode": "COOL",
+        "synced": true
+      },
+      {
+        "restored": true,
+        "thermal_enabled": false,
+        "source": "10K",
+        "cutoff": 3200
+      }
+    ],
+    "deploy": {
+      "health": {
+        "ok": true,
+        "mqtt": true,
+        "protocol": 1
+      },
+      "server_sha256": "f7ff6b415fbf7aeb9eef8caae18a7f10e8dbbce8ce2d9f765b2c0d8c31b8a391",
+      "backup": "/opt/ms51-thermal-deploy-20261021"
+    },
+    "physical_contacts_measured": false,
+    "physical_sensor_disconnect_tested": false,
+    "full_power_cycle_tested": false
+  }
+}

@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-#define MS51_DEBUG_MAX_VARIABLES 12u
+#define MS51_DEBUG_MAX_VARIABLES 16u
 #define MS51_DEBUG_MAX_LOG_LINES 8u
 #define MS51_DEBUG_VARIABLE_NAME_SIZE 20u
 #define MS51_DEBUG_VARIABLE_VALUE_SIZE 44u
@@ -79,3 +79,5 @@ esp_err_t ms51_debug_uart_set_mode(uint8_t mode, uint8_t *target_status);
 #ifdef __cplusplus
 }
 #endif
+
+esp_err_t ms51_debug_uart_set_thermal(uint8_t source, bool cutoff, bool valid, bool on, uint8_t *status);

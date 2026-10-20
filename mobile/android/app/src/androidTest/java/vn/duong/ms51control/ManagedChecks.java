@@ -177,12 +177,25 @@ final class ManagedChecks {
                     motorSwitch.performClick();
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
                     check(texts(page).contains("Nhiệt độ động cơ") && texts(page).contains("Nhiệt độ giám sát"),"Both requested temperature titles");
-                    sampleStatus.put("trigger",new JSONObject().put("enabled",true).put("source","20K").put("threshold_centi",3000).put("synced",true).put("sensor_valid",true).put("active",false));
+                    sampleStatus.put("trigger",new JSONObject().put("enabled",true).put("source","20K").put("thermal_supported",true).put("thermal_enabled",true).put("defrost_centi",500).put("defrost_valid",true).put("defrost_active",false).put("threshold_centi",3000).put("synced",true).put("sensor_valid",true).put("active",false));
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     android.widget.EditText threshold=(android.widget.EditText)get(a,"triggerThreshold");
                     check(threshold.getText().toString().equals("30"),"Stored threshold loaded");
+                    android.widget.EditText defrostLimit=(android.widget.EditText)get(a,"defrostThreshold");
+                    check(defrostLimit.getText().toString().equals("5"),"Stored defrost threshold loaded");
+                    check((Integer)get(a,"motorSensorIndex")==1,"Saved motor control source overrides local display choice");
+                    check(texts(page).contains("Ngưỡng ngắt") && texts(page).contains("Ngưỡng xả đá")
+                            && !texts(page).contains("Nguồn tín hiệu"),"Two thresholds replace source selector");
+                    sampleStatus.getJSONObject("trigger").put("defrost_valid",false);
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(((TextView)get(a,"defrostState")).getText().toString().contains("theo mạch"),"Sensor fault shows machine fallback");
+                    sampleStatus.getJSONObject("trigger").put("defrost_valid",true).put("defrost_active",true);
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(((TextView)get(a,"defrostState")).getText().toString().contains("bật"),"Below threshold shows relay on");
+                    defrostLimit.setText("8");
                     threshold.setText("35");invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(threshold.getText().toString().equals("35"),"Polling preserves an edited threshold");
+                    check(defrostLimit.getText().toString().equals("8"),"Polling preserves edited defrost limit");
                     set(a,"triggerSaving",true);invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(!((Button)get(a,"triggerSave")).isEnabled() && !threshold.isEnabled(),"Save blocks overlapping edits");
                     set(a,"triggerSaving",false);set(a,"triggerLoaded",false);
@@ -197,7 +210,7 @@ final class ManagedChecks {
                     check(tracker.update("COOL",null,"4","8",null)==0,"Old firmware does not guess from digit decrease");
                     check(tracker.update("COOL","GREEN","N/A","8",null)==0,"Non-numeric display does not blink");
                     check(!texts(page).contains("MÀN HÌNH XANH") && !texts(page).contains("MÀN HÌNH ĐỎ"),"Timer labels removed");
-                    check(texts(page).contains("10k") && texts(page).contains("50k"),"Both small sensor labels");
+                    check(texts(page).contains("20k") && texts(page).contains("50k"),"Both small sensor labels");
                     JSONObject activeTimer = new JSONObject().put("name","countdown_active").put("value","GREEN").put("age_ms",100);
                     preview.getJSONArray("variables").put(activeTimer);
                     for(int k=0;k<preview.getJSONArray("variables").length();k++)preview.getJSONArray("variables").getJSONObject(k).put("age_ms",100);
@@ -283,6 +296,11 @@ final class ManagedChecks {
                     invoke(a,"stopDashboard",new Class[]{});
                     check(!green.isCounting() && !red.isCounting() && red.getAlpha()==1f,"Leaving dashboard cancels animations");
                     sensor.put("temperature_centi",2500);
+                    sampleStatus.getJSONObject("trigger").put("defrost_active",false);
+                    for(int n=0;n<preview.getJSONArray("variables").length();n++) {
+                        JSONObject item=preview.getJSONArray("variables").getJSONObject(n);
+                        if("relay3".equals(item.optString("name"))) item.put("value","OFF").put("age_ms",100);
+                    }
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     // Clearly identify preview data on the saved image.
                     TextView previewLabel=new TextView(a);previewLabel.setText("XEM TRƯỚC · SỐ LIỆU MINH HỌA");previewLabel.setTextColor(Design.TEAL);
@@ -308,7 +326,7 @@ final class ManagedChecks {
                 } catch(Throwable error) {failure.set(error);}
             });
             if(failure.get()!=null)throw new AssertionError(failure.get());
-            result.putString("stream","PASS: three independent temperature tiles and faults; trigger form load, edit preservation, save and mode overlap guards; two mode icons, immediate selection, confirmation and timeout; countdown animation; managed settings/updates/history regression.");
+            result.putString("stream","PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.");
             test.finish(-1,result);
         } catch(Throwable error) {result.putString("stream","FAIL: "+error);test.finish(0,result);}
         finally {if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}

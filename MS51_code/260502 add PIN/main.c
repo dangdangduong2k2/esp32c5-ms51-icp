@@ -495,6 +495,32 @@ uint8_t trigger_set(uint8_t source, uint8_t active)
     return 1;
 }
 
+/* A leased temperature override never overwrites the machine's requested state.
+ * Every normal relay write passes this arbiter, including settings/shutdown loops. */
+void relay3_refresh(void)
+{
+    uint8_t on = relay3_legacy;
+    if (relay3_override && (TICK_TYPE)(trigger_now() - relay3_tick) < 3000UL)
+        on = relay3_thermal_on;
+    PIN_write(RL3_PIN, RL_OUTPUT_LEVEL(RL3_ACTIVE_LEVEL, on));
+    RL3_output_is_on = on;
+}
+void relay3_request(uint8_t on)
+{
+    relay3_legacy = on ? 1 : 0;
+    relay3_refresh();
+}
+uint8_t thermal_set(uint8_t source, uint8_t active, uint8_t valid, uint8_t on)
+{
+    if (source < 1 || source > 2 || active > 1 || valid > 1 || on > 1) return 0;
+    if (!trigger_set(source, active)) return 0;
+    relay3_override = valid;
+    relay3_thermal_on = on;
+    relay3_tick = trigger_now();
+    relay3_refresh();
+    return 1;
+}
+
 /* Ownership survives reboot; the boot switch sample is only a baseline. */
 static uint8_t mode_owner_valid(void)
 {
