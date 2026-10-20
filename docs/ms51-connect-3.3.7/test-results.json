@@ -1,0 +1,14 @@
+{
+  "version": "3.3.7",
+  "version_code": 35,
+  "apk_sha256": "dc7d1bbf029743f6cd0692aee55509be51635e324ca33098808782894ce0c485",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "signing_certificate_matches_previous": true,
+    "android_managed_checks": "passed on emulator",
+    "scope": "Two temperature cards; motor 10k/20k selection, label and persistence; selected sensor fault has no automatic fallback; stale or missing snapshots cannot reappear on switch; 50k independent; trigger, mode, countdown and permission regression. Preview inspected; no physical device commands."
+  }
+}

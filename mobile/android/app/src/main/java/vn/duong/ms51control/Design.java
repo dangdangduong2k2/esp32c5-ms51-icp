@@ -96,6 +96,8 @@ final class Design {
                     c.drawArc(1,3,23,23,225,90,false,p); c.drawArc(5,8,19,22,225,90,false,p);
                     c.drawArc(9,13,15,19,225,90,false,p); p.setStyle(Paint.Style.FILL); c.drawCircle(12,20,1,p); break;
                 case "arrow": path(c,5,12,19,12); path(c,14,7,19,12,14,17); break;
+                case "swap":
+                    path(c,4,7,20,7,16,3); path(c,20,17,4,17,8,21); break;
                 case "refresh":
                     c.drawArc(4,4,20,20,40,285,false,p); path(c,16,3,20,5,19,9); break;
                 case "snowflake":

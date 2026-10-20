@@ -1,6 +1,8 @@
-# MS51 Connect 3.3.6
+# MS51 Connect 3.3.7
 
-Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 34, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 35, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+
+3.3.7 gộp 10k/20k vào một ô **Nhiệt độ động cơ**, chỉ hiển thị cảm biến đang chọn. Nút hai mũi tên chuyển 10k ↔ 20k; nhãn cho biết loại đang xem. Lựa chọn được nhớ trên điện thoại theo tài khoản và thiết bị. **Nhiệt độ giám sát** là ô 50k riêng. Đổi ô xem không ghi xuống mạch, không đổi Điều kiện kích, không tự thay cảm biến khi đầu vào lỗi. Dữ liệu cũ/mất kết nối vẫn hiện chờ dữ liệu. Chỉ cập nhật APK.
 
 3.3.6 thêm ảnh thiết bị kèm toàn bộ hộp trong suốt bên phải trạng thái trong thẻ Tổng quan. Ảnh tách nền từ hình người dùng cung cấp, hiển thị nguyên hình theo tỷ lệ và được đóng gói trong APK. Chữ trạng thái tự xuống dòng ở bên trái. Các số trên ảnh sản phẩm là minh họa cố định; hai ô thời gian phía dưới vẫn lấy dữ liệu từ mạch. Chỉ cập nhật APK.
 

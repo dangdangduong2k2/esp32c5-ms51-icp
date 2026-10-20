@@ -109,7 +109,11 @@ public final class MainActivity extends Activity {
     private TextView dashboardLogs;
     private TextView temperatureValue;
     private TextView temperatureNote;
-    private TextView temperature50Value, temperature50Note, temperature20Value, temperature20Note;
+    private TextView temperature50Value, temperature50Note, motorSensorLabel;
+    private android.widget.ImageButton motorSensorSwitch;
+    private int motorSensorIndex;
+    private JSONObject temperatureStatus;
+    private long temperatureStatusAt;
     private Spinner triggerSource;
     private EditText triggerThreshold;
     private TextView triggerState;
@@ -318,6 +322,7 @@ public final class MainActivity extends Activity {
         deviceAccess = new JSONObject(); managedUpdateStarting = false; modeChanging = false; pendingMode = null; modeAwaitingConfirmation = false; triggerLoaded=false; triggerSaving=false; mainHandler.removeCallbacks(expireModeConfirmation); ++accessViewEpoch;
         configLoaded = false; runtimeConfig = RuntimeConfigCodec.defaults();
         lastStatus = null; lastDebug = null; imageGeneration = 0;
+        temperatureStatus = null; motorSensorIndex = 0;
         lastHistory = null; nextHistoryRead = 0; historyError = "";
         selectedFirmwareUri = null; selectedFirmwareName = "";
         configInputs.clear(); configChoices.clear(); configChecks.clear(); pinDependentViews.clear();
@@ -1218,11 +1223,13 @@ public final class MainActivity extends Activity {
 
         addSectionTitle(content, "Nhiệt độ");
         LinearLayout temperatures = new LinearLayout(this);
-        String[] sensorLabels = {"10k","20k","50k"};
-        for(int i=0;i<3;i++) {
+        motorSensorIndex = getSharedPreferences("temperature_display",MODE_PRIVATE)
+                .getBoolean(motorSensorPreferenceKey(),false) ? 1 : 0;
+        String[] sensorLabels = {"Nhiệt độ động cơ","Nhiệt độ giám sát"};
+        for(int i=0;i<2;i++) {
             LinearLayout.LayoutParams param = new LinearLayout.LayoutParams(0,-1,1);
             if(i>0) param.setMargins(dp(8),0,0,0);
-            temperatures.addView(temperatureCard(sensorLabels[i],i),param);
+            temperatures.addView(temperatureCard(sensorLabels[i],i==0 ? 0 : 2),param);
         }
         content.addView(temperatures, fullParams(0,6,0,16));
         buildTriggerCard(content);
@@ -1322,20 +1329,44 @@ public final class MainActivity extends Activity {
 
     private LinearLayout temperatureCard(String label, int sensorIndex) {
         LinearLayout box = card(); box.setPadding(dp(10),dp(16),dp(10),dp(16));
+        TextView title = mutedText(label); title.setTextSize(13); title.setMinLines(2);
+        title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+        box.addView(title);
         LinearLayout heading = new LinearLayout(this); heading.setGravity(Gravity.CENTER_VERTICAL);
-        TextView name = mutedText(label); name.setTextSize(12);
+        TextView name = mutedText(sensorIndex==0 ? (motorSensorIndex==0 ? "10k" : "20k") : "50k"); name.setTextSize(12);
         heading.addView(name, new LinearLayout.LayoutParams(0,-2,1));
-        heading.addView(icon("thermometer",Design.TEAL,20), new LinearLayout.LayoutParams(dp(22),dp(22)));
+        if (sensorIndex==0) {
+            motorSensorLabel = name;
+            motorSensorSwitch = new android.widget.ImageButton(this);
+            motorSensorSwitch.setImageDrawable(new Design.Icon("swap",Design.TEAL));
+            motorSensorSwitch.setPadding(dp(13),dp(13),dp(13),dp(13));
+            motorSensorSwitch.setBackground(rounded(0xFFE8F4F1,dp(24)));
+            motorSensorSwitch.setContentDescription(motorSensorIndex==0 ? "Đổi sang cảm biến 20k" : "Đổi sang cảm biến 10k");
+            motorSensorSwitch.setOnClickListener(v -> {
+                motorSensorIndex = motorSensorIndex==0 ? 1 : 0;
+                getSharedPreferences("temperature_display",MODE_PRIVATE).edit()
+                        .putBoolean(motorSensorPreferenceKey(),motorSensorIndex==1).apply();
+                renderTemperatureCards();
+            });
+            heading.addView(motorSensorSwitch,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        } else {
+            ImageView symbol = icon("thermometer",Design.TEAL,20);
+            symbol.setPadding(dp(13),dp(13),dp(13),dp(13));
+            heading.addView(symbol,new LinearLayout.LayoutParams(dp(48),dp(48)));
+        }
         box.addView(heading);
         TextView value = valueText("— °C"); value.setTextSize(20); value.setSingleLine(true);
         if(Build.VERSION.SDK_INT>=26) value.setAutoSizeTextTypeUniformWithConfiguration(13,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         box.addView(value, fullParams(0,12,0,6));
         TextView note = mutedText("Đang chờ dữ liệu"); note.setTextSize(11);
         box.addView(note);
-        if(sensorIndex==1) { temperature20Value=value; temperature20Note=note; }
-        else if (sensorIndex==2) { temperature50Value = value; temperature50Note = note; }
+        if (sensorIndex==2) { temperature50Value = value; temperature50Note = note; }
         else { temperatureValue = value; temperatureNote = note; }
         return box;
+    }
+
+    private String motorSensorPreferenceKey() {
+        return accountId + ":" + (activeDevice==null ? "" : activeDevice.id);
     }
 
     private LinearLayout timerCard(String channel, int color) {
@@ -1472,9 +1503,19 @@ public final class MainActivity extends Activity {
     }
 
     private void renderTemperature(JSONObject status) {
-        renderSensor(status == null ? null : status.optJSONObject("analog"), temperatureValue, temperatureNote, 0);
+        temperatureStatus = status;
+        temperatureStatusAt = android.os.SystemClock.elapsedRealtime();
+        renderTemperatureCards();
+    }
+
+    private void renderTemperatureCards() {
+        JSONObject status = android.os.SystemClock.elapsedRealtime()-temperatureStatusAt > 2000 ? null : temperatureStatus;
+        if (motorSensorLabel != null) motorSensorLabel.setText(motorSensorIndex==0 ? "10k" : "20k");
+        if (motorSensorSwitch != null) motorSensorSwitch.setContentDescription(motorSensorIndex==0
+                ? "Đổi sang cảm biến 20k" : "Đổi sang cảm biến 10k");
+        renderSensor(status == null ? null : status.optJSONObject(motorSensorIndex==0 ? "analog" : "analog20k"),
+                temperatureValue, temperatureNote, motorSensorIndex);
         renderSensor(status == null ? null : status.optJSONObject("analog50k"), temperature50Value, temperature50Note, 2);
-        renderSensor(status == null ? null : status.optJSONObject("analog20k"), temperature20Value, temperature20Note, 1);
     }
 
     private void renderSensor(JSONObject input, TextView temperatureValue, TextView temperatureNote, int sensorIndex) {
@@ -1488,7 +1529,8 @@ public final class MainActivity extends Activity {
         int gpio = input.optInt("gpio", -1);
         if ((sensorIndex==2 ? gpio != 4 : sensorIndex==1 ? (gpio != 5 && gpio != 6) : (gpio != 1 && gpio != 5 && gpio != 6)) || !input.optBoolean("valid") || input.isNull("age_ms")) return;
         long age = input.optLong("age_ms", -1);
-        if (age < 0 || age > 2000) return;
+        long elapsed = android.os.SystemClock.elapsedRealtime()-temperatureStatusAt;
+        if (age < 0 || age > 2000 || elapsed > 2000-age) return;
         String sensor = input.optString("sensor");
         if ("open".equals(sensor) || "short".equals(sensor)) {
             temperatureNote.setText("Kiểm tra dây cảm biến"); return;
