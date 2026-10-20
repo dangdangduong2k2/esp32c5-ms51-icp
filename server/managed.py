@@ -13,6 +13,35 @@ from fastapi import HTTPException, Request
 from pydantic import BaseModel, Field
 
 CATALOG = json.loads(Path(__file__).with_name('settings_catalog.json').read_text(encoding='utf-8'))
+# These are MCU menu flags, not additional app visibility permissions.
+# The parent field alone controls whether its setting appears in the app.
+MODE_DISPLAY_FIELDS = {
+    'showDf': 'df', 'showEnd': 'end', 'showSl': 'displayMode',
+    'showHcf': 'hcfMode', 'showHdf': 'hdf',
+}
+ACCESS_CATALOG = {key: spec for key, spec in CATALOG.items() if key not in MODE_DISPLAY_FIELDS}
+
+
+def visible_settings(keys):
+    return [key for key in keys if key in ACCESS_CATALOG]
+
+
+def migrate_mode_permissions(db):
+    """Refresh existing app views without granting any previously hidden mode."""
+    rows = db.execute('SELECT d.id,p.visible,p.revision FROM devices d '
+                      'LEFT JOIN device_policies p ON p.device=d.id').fetchall()
+    for row in rows:
+        if row['visible'] is None:
+            db.execute('INSERT INTO device_policies VALUES(?,?,1)',
+                       (row['id'], json.dumps(list(ACCESS_CATALOG))))
+        else:
+            old = json.loads(row['visible'])
+            new = visible_settings(old)
+            if new != old:
+                db.execute('UPDATE device_policies SET visible=?,revision=revision+1 WHERE device=?',
+                           (json.dumps(new), row['id']))
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS device_policies(device TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
  visible TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1);
@@ -99,13 +128,15 @@ def install(app, core, admin_identity, audit):
     db, lock = core.db, core.lock
     with lock:
         db.executescript(SCHEMA)
+        migrate_mode_permissions(db)
         # An interrupted process must never claim success or automatically replay programming.
         db.execute("UPDATE update_jobs SET state='unknown',message='Máy chủ đã khởi động lại. Cần admin kiểm tra rồi cấp lại bản cập nhật.' WHERE state='running'")
         db.commit()
 
     def policy(device):
         row = db.execute('SELECT * FROM device_policies WHERE device=?', (device,)).fetchone()
-        return {'visible': json.loads(row['visible']) if row else list(CATALOG), 'revision': row['revision'] if row else 0}
+        return {'visible': visible_settings(json.loads(row['visible'])) if row else list(ACCESS_CATALOG),
+                'revision': row['revision'] if row else 0}
 
     def release_view(device):
         row = db.execute('SELECT id,filename,sha256,created,installed FROM device_releases WHERE device=?', (device,)).fetchone()
@@ -146,7 +177,7 @@ def install(app, core, admin_identity, audit):
     def admin_access(uid: str, device: str, request: Request):
         admin_device(uid, device, request)
         with lock:
-            return {'ok': True, 'catalog': CATALOG, **policy(device), 'firmware': release_view(device), 'job': job_view(device)}
+            return {'ok': True, 'catalog': ACCESS_CATALOG, **policy(device), 'firmware': release_view(device), 'job': job_view(device)}
 
     @app.post('/admin/api/users/{uid}/devices/{device}/access')
     def admin_policy(uid: str, device: str, data: PolicyEdit, request: Request):
@@ -160,7 +191,7 @@ def install(app, core, admin_identity, audit):
             if policy(device)['revision'] != data.revision:
                 core.fail(409, 'Quyền vừa được thay đổi. Đóng rồi mở lại mục Cấp quyền.')
             db.execute('INSERT INTO device_policies VALUES(?,?,?) ON CONFLICT(device) DO UPDATE SET visible=excluded.visible,revision=excluded.revision',
-                       (device, json.dumps(data.visible), data.revision + 1))
+                       (device, json.dumps(visible_settings(data.visible)), data.revision + 1))
             audit(who['username'], 'device.policy', device)
             db.commit()
         return {'ok': True, 'revision': data.revision + 1}

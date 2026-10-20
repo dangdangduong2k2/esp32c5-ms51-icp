@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from test_admin import AdminTests, core, temporary
-from managed import CATALOG, parse_hex
+from managed import CATALOG, ACCESS_CATALOG, MODE_DISPLAY_FIELDS, migrate_mode_permissions, parse_hex
 
 DEVICE = 'ms51-111111111111'
 ADMIN = 'admin/api/users/u1/devices/' + DEVICE
@@ -79,8 +79,8 @@ class ManagedTests(AdminTests):
 
     def test_policy_validation_and_stale_admin(self):
         data = self.client.get(ADMIN + '/access').json()
-        self.assertEqual(len(data['catalog']), 51)
-        self.assertEqual(len(data['visible']), 51)
+        self.assertEqual(len(data['catalog']), 46)
+        self.assertEqual(len(data['visible']), 46)
         rev = self.set_policy(['coolCl', 'rangeCoolClMin'])
         mobile = self.client.get(MOBILE+'/access', headers=self.mobile_headers).json()
         self.assertEqual(mobile['visible'], ['coolCl','rangeCoolClMin'])
@@ -88,6 +88,49 @@ class ManagedTests(AdminTests):
         for fields in (['unknown'], ['coolCl','coolCl']):
             self.assertEqual(self.client.post(ADMIN+'/access', json={'visible':fields,'revision':rev}, headers=self.headers).status_code, 400)
         self.assertEqual(self.client.post(ADMIN+'/access', json={'visible':[],'revision':0}, headers=self.headers).status_code, 409)
+
+    def test_modes_have_one_permission_and_no_separate_display_controls(self):
+        initial = self.client.get(ADMIN+'/access').json()
+        for old, parent in MODE_DISPLAY_FIELDS.items():
+            self.assertNotIn(old, initial['catalog'])
+            self.assertIn(parent, initial['catalog'])
+            # A cached admin may still submit the removed checkbox: it cannot
+            # expose that checkbox or implicitly grant the associated mode.
+            rev = self.set_policy([old])
+            mobile = self.client.get(MOBILE+'/access', headers=self.mobile_headers).json()
+            self.assertEqual(mobile['visible'], [])
+            self.assertEqual(mobile['revision'], rev)
+            rev = self.set_policy([parent, old])
+            mobile = self.client.get(MOBILE+'/access', headers=self.mobile_headers).json()
+            self.assertEqual(mobile['visible'], [parent])
+            with patch.object(core.bridge, 'call') as call:
+                r = self.client.post(MOBILE+'/settings', json={'revision':rev, 'values':{old:1}},
+                                     headers=self.mobile_headers)
+                self.assertEqual(r.status_code, 403)
+                call.assert_not_called()
+        self.assertIn('showSt', initial['catalog'])
+        self.assertIn('defrostOpSeconds', initial['catalog'])
+
+    def test_mode_permission_migration_preserves_parent_choices_and_is_idempotent(self):
+        with core.lock:
+            core.db.execute('INSERT INTO device_policies VALUES(?,?,7)',
+                            (DEVICE, '["df","showDf","showEnd","displayMode","pinEnable"]'))
+            migrate_mode_permissions(core.db)
+            core.db.commit()
+        data = self.client.get(ADMIN+'/access').json()
+        self.assertEqual(data['visible'], ['df','displayMode','pinEnable'])
+        self.assertEqual(data['revision'], 8)
+        with core.lock:
+            migrate_mode_permissions(core.db)
+            core.db.commit()
+        self.assertEqual(self.client.get(ADMIN+'/access').json()['revision'], 8)
+        with core.lock:
+            core.db.execute('DELETE FROM device_policies WHERE device=?', (DEVICE,))
+            migrate_mode_permissions(core.db)
+            core.db.commit()
+        data = self.client.get(ADMIN+'/access').json()
+        self.assertEqual(data['revision'], 1)
+        self.assertEqual(data['visible'], list(ACCESS_CATALOG))
 
     def test_history_uint32_offsets_and_hidden_settings(self):
         self.set_policy([])
