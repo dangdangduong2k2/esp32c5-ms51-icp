@@ -1,0 +1,13 @@
+{
+  "version": "3.3.3",
+  "version_code": 31,
+  "apk_sha256": "1f11cb87dd697b29541aececa01ebf3be55afe6eb44f0edef3dafbf02b563b3c",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "signing_certificate_matches_previous": true,
+    "scope": "Red timer moved left and relabeled Thời gian chờ; green timer moved right and relabeled Thời gian hoạt động. Existing value and blink bindings unchanged. Label rows reserve two lines for alignment. No hardware commands or phone UI test performed."
+  }
+}

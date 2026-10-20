@@ -1198,7 +1198,7 @@ public final class MainActivity extends Activity {
         LinearLayout red = timerCard("red", 0xFFCF5A68);
         LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, -2, 1); left.setMargins(0,0,dp(6),0);
         LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, -2, 1); right.setMargins(dp(6),0,0,0);
-        timers.addView(green,left); timers.addView(red,right);
+        timers.addView(red,left); timers.addView(green,right);
         content.addView(timers, fullParams(0, 6, 0, 20));
 
         addSectionTitle(content, "Nhiệt độ");
@@ -1325,8 +1325,9 @@ public final class MainActivity extends Activity {
 
     private LinearLayout timerCard(String channel, int color) {
         LinearLayout card = card();
-        TextView label = mutedText("green".equals(channel) ? "OP" : "CL");
+        TextView label = mutedText("green".equals(channel) ? "Thời gian hoạt động" : "Thời gian chờ");
         label.setTextSize(12); label.setTextColor(color); label.setTypeface(Typeface.DEFAULT_BOLD);
+        label.setMinLines(2);
         card.addView(label, fullParams(0,0,0,8));
         SevenSegmentView display=new SevenSegmentView(this); display.setSegmentColor(color);
         card.addView(display,new LinearLayout.LayoutParams(-1,dp(64)));
