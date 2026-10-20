@@ -87,10 +87,34 @@ final class ManagedChecks {
                     set(a,"lastDebug",preview);
                     long[] sample=new long[30]; sample[0]=7620; sample[1]=5460; sample[2]=8400;
                     set(a,"lastHistory",sample);
+                    set(a,"activeDevice",new DeviceStore.Device("preview","MS51 1FE4E0","","",""));
                     LinearLayout page=new LinearLayout(a);page.setOrientation(LinearLayout.VERTICAL);
                     page.setPadding(32,32,32,32);page.setBackgroundColor(Design.BG);
                     invoke(a,"addNavigation",new Class[]{LinearLayout.class},page);
                     invoke(a,"buildOverview",new Class[]{LinearLayout.class},page);
+                    check(texts(page).contains("Bộ điều khiển MS51 1FE4E0"),"Device name belongs in hero heading");
+                    check(!texts(page).contains("Chế độ vận hành hiện tại"),"Removed redundant subtitle");
+                    JSONObject uplink=sampleStatus.getJSONObject("wifi").getJSONObject("uplink");
+                    int[] signals={-40,-55,-56,-67,-68,-75,-76,-100,0,-127};
+                    int[] levels={4,4,3,3,2,2,1,1,0,0};
+                    TextView connection=(TextView)get(a,"dashboardConnection");
+                    for(int i=0;i<signals.length;i++) {
+                        uplink.put("rssi",signals[i]);
+                        invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                        check(Design.WifiSignal.level(true,signals[i])==levels[i],"RSSI threshold "+signals[i]);
+                        check(connection.getCompoundDrawables()[0] instanceof Design.WifiSignal,"Signal icon precedes SSID");
+                        String description=connection.getContentDescription().toString();
+                        check(levels[i]==0 ? description.contains("chưa có") : description.contains(levels[i]+" trên 4"),"Signal accessibility matches reading");
+                    }
+                    uplink.remove("rssi");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(connection.getContentDescription().toString().contains("chưa có"),"Missing RSSI cannot show full signal");
+                    uplink.put("rssi",-40).put("state","disconnected");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(connection.getContentDescription().toString().contains("chưa có"),"Disconnected ignores cached RSSI");
+                    invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},null,null);
+                    check(connection.getContentDescription().toString().contains("chưa có"),"Lost status clears signal");
+                    uplink.put("rssi",-62).put("state","connected");
                     for(int gpio:new int[]{1,5,6}) for(int temperature:new int[]{-1800,0,2500,12500}) {
                         sensor.put("gpio",gpio);
                         sensor.put("temperature_centi",temperature);

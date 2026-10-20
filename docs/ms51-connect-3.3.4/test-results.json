@@ -1,0 +1,14 @@
+{
+  "version": "3.3.4",
+  "version_code": 32,
+  "apk_sha256": "ac52d07e8bb6a050e71db9cf0ae38ec7d9894ad6ed0e39f741edb3d2f6124415",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "signing_certificate_matches_previous": true,
+    "android_managed_checks": "passed on emulator",
+    "scope": "Hero heading and subtitle; RSSI boundaries, invalid/missing/disconnected readings; existing managed settings, telemetry and countdown regression. No physical device commands."
+  }
+}

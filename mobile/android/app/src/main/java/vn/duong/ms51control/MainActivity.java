@@ -1014,8 +1014,10 @@ public final class MainActivity extends Activity {
                 : tab == Tab.SETTINGS ? ""
                 : tab == Tab.FIRMWARE ? "Cập nhật phiên bản mới cho thiết bị."
                 : "Thông tin kết nối và bộ điều khiển.");
-        TextView deviceName = mutedText(activeDevice == null ? "" : activeDevice.name);
-        deviceName.setTextColor(Design.TEAL); content.addView(deviceName, fullParams(0,0,0,12));
+        if (tab != Tab.OVERVIEW) {
+            TextView deviceName = mutedText(activeDevice == null ? "" : activeDevice.name);
+            deviceName.setTextColor(Design.TEAL); content.addView(deviceName, fullParams(0,0,0,12));
+        }
         addNavigation(content);
         switch (tab) {
             case OVERVIEW:
@@ -1173,12 +1175,13 @@ public final class MainActivity extends Activity {
     private void buildOverview(LinearLayout content) {
         LinearLayout hero = card(); hero.setBackground(new Design.Hero());
         hero.setPadding(dp(22), dp(22), dp(22), dp(22));
-        TextView caption = mutedText("BỘ ĐIỀU KHIỂN");
-        caption.setTextColor(0xFFB9D0DD); caption.setLetterSpacing(.10f); hero.addView(caption);
+        String deviceLabel = activeDevice == null ? "" : activeDevice.name.trim();
+        TextView caption = mutedText("Bộ điều khiển" + (deviceLabel.isEmpty() ? "" : " " + deviceLabel));
+        caption.setTextSize(18); caption.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        caption.setTextColor(0xFFD8E7EF); hero.addView(caption);
         dashboardMode = valueText("Đang chờ dữ liệu"); dashboardMode.setTextSize(29);
-        dashboardMode.setTextColor(Color.WHITE); hero.addView(dashboardMode, fullParams(0, 15, 0, 7));
-        TextView detail = bodyText("Chế độ vận hành hiện tại"); detail.setTextColor(0xFFB9D0DD);
-        hero.addView(detail, fullParams(0, 0, 0, 22));
+        dashboardMode.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
+        dashboardMode.setTextColor(Color.WHITE); hero.addView(dashboardMode, fullParams(0, 15, 0, 22));
         View line = new View(this); line.setBackgroundColor(0x30FFFFFF);
         hero.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
         dashboardConnection = bodyText("Đang đọc trạng thái…");
@@ -1399,6 +1402,16 @@ public final class MainActivity extends Activity {
         String ssid = uplink.optString("ssid", uplinkSsid);
         String network = ssid.isEmpty() ? "Chưa nhận Wi‑Fi" : ssid;
         dashboardConnection.setText(network);
+        Object signal = uplink.opt("rssi");
+        int rssi = signal instanceof Number ? ((Number) signal).intValue() : 0;
+        int level = Design.WifiSignal.level("connected".equals(uplink.optString("state")), rssi);
+        Design.WifiSignal wifiIcon = new Design.WifiSignal(level, Design.MINT);
+        wifiIcon.setBounds(0, 0, dp(22), dp(22));
+        dashboardConnection.setCompoundDrawables(wifiIcon, null, null, null);
+        dashboardConnection.setCompoundDrawablePadding(dp(8));
+        dashboardConnection.setContentDescription(network + (level > 0
+                ? ", tín hiệu " + level + " trên 4 vạch, " + rssi + " dBm"
+                : ", chưa có dữ liệu tín hiệu Wi-Fi"));
 
         if (debug == null || !debug.optBoolean("enabled", false)) {
             dashboardMode.setText("Đang chờ dữ liệu");

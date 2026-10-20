@@ -41,6 +41,39 @@ final class Design {
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 
+    /** Four signal levels: dot plus three arcs. No reading uses a crossed-out icon. */
+    static final class WifiSignal extends Drawable {
+        private final Paint paint = new Paint(3);
+        private final int level, color;
+        private int alpha = 255;
+        WifiSignal(int level, int color) { this.level = level; this.color = color; }
+        static int level(boolean connected, int rssi) {
+            if (!connected || rssi >= 0 || rssi < -126) return 0;
+            return rssi >= -55 ? 4 : rssi >= -67 ? 3 : rssi >= -75 ? 2 : 1;
+        }
+        @Override public void draw(Canvas canvas) {
+            Rect b = getBounds();
+            canvas.save(); canvas.translate(b.left, b.top); canvas.scale(b.width()/24f, b.height()/24f);
+            paint.setColor(color); paint.setStrokeWidth(1.8f); paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStyle(Paint.Style.STROKE);
+            for (int arc = 1; arc <= 3; arc++) {
+                paint.setAlpha(level >= arc + 1 ? alpha : alpha * 28 / 100);
+                float radius = 4 + arc * 4;
+                canvas.drawArc(12-radius,20-radius,12+radius,20+radius,225,90,false,paint);
+            }
+            paint.setStyle(Paint.Style.FILL); paint.setAlpha(level > 0 ? alpha : alpha * 28 / 100);
+            canvas.drawCircle(12,20,1.3f,paint);
+            if (level == 0) {
+                paint.setStyle(Paint.Style.STROKE); paint.setAlpha(alpha);
+                canvas.drawLine(4,4,20,22,paint);
+            }
+            canvas.restore();
+        }
+        @Override public void setAlpha(int value) { alpha = value; invalidateSelf(); }
+        @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); invalidateSelf(); }
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
+    }
+
     static final class Icon extends Drawable {
         private final Paint p = new Paint(3);
         private final String name;

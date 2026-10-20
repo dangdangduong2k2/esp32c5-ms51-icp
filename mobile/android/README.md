@@ -1,6 +1,8 @@
-# MS51 Connect 3.3.3
+# MS51 Connect 3.3.4
 
-Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 31, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 32, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.
+
+3.3.4 chuyển tên thiết bị vào sau **Bộ điều khiển** trong thẻ Tổng quan, chữ 18sp medium và dòng trạng thái 29sp bold; bỏ dòng **Chế độ vận hành hiện tại**. Biểu tượng Wi-Fi đứng trước SSID, lấy RSSI của C5 từ `wifi.uplink.rssi` khi `state=connected`: từ −55 dBm là 4 mức, từ −67 là 3, từ −75 là 2, thấp hơn là 1. Thiếu RSSI, RSSI không hợp lệ hoặc mất kết nối hiện biểu tượng gạch chéo. Đây là số đo do firmware báo, không phải tín hiệu Wi-Fi của điện thoại. Chỉ cập nhật APK.
 
 3.3.3 đưa ô LED đỏ sang trái, đổi nhãn CL thành **Thời gian chờ**; ô LED xanh ở bên phải, đổi nhãn OP thành **Thời gian hoạt động**. Giá trị và trạng thái nhấp nháy vẫn gắn với đúng màu như trước. Chỉ cập nhật APK.
 
