@@ -1,0 +1,13 @@
+{
+  "version": "3.3.5",
+  "version_code": 33,
+  "apk_sha256": "1a844b7f3f88087b423fb248d103a0a571b302a7c3c3ef46461edb38526c0dcf",
+  "firmware_changed": false,
+  "server_changed": false,
+  "validation": {
+    "build": "passed",
+    "lint": "passed",
+    "signing_certificate_matches_previous": true,
+    "scope": "Remove / connect from shared header and overview subtitle. Preserve weighted spacer for home logout alignment. No new tests or physical-device checks for this text-only change."
+  }
+}

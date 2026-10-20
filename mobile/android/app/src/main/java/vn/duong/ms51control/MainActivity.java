@@ -1010,7 +1010,7 @@ public final class MainActivity extends Activity {
         String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt vận hành"
                 : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị";
         LinearLayout content = createPage("", title,
-                tab == Tab.OVERVIEW ? "Theo dõi bộ điều khiển"
+                tab == Tab.OVERVIEW ? ""
                 : tab == Tab.SETTINGS ? ""
                 : tab == Tab.FIRMWARE ? "Cập nhật phiên bản mới cho thiết bị."
                 : "Thông tin kết nối và bộ điều khiển.");
@@ -2108,8 +2108,7 @@ public final class MainActivity extends Activity {
         brand.addView(logo,new LinearLayout.LayoutParams(dp(27),dp(27)));
         TextView wordmark=valueText("MS51"); wordmark.setTextSize(19); wordmark.setLetterSpacing(.04f);
         brand.addView(wordmark,wrapParams(10,0,0,0));
-        TextView connect=bodyText(" / connect"); connect.setTextSize(16);
-        brand.addView(connect,new LinearLayout.LayoutParams(0,-2,1));
+        brand.addView(new View(this),new LinearLayout.LayoutParams(0,0,1));
         if (screen == Screen.HOME) {
             Button signOut = neutralButton("Đăng xuất");
             signOut.setTextSize(12); signOut.setTextColor(Design.TEAL);
