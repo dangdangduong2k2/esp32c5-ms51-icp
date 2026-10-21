@@ -1831,15 +1831,44 @@ public final class MainActivity extends Activity {
         LinearLayout cell=settingCell(parent,label,false);
         EditText input = numberInput(label); input.setContentDescription(label);
         configInputs.put(key, input);
-        cell.addView(input, fullParams(0,0,0,0));
+        cell.addView(new NumberStepper(this,input,label,() -> settingBounds(key)), fullParams(0,0,0,0));
     }
 
     private void addPinNumberField(LinearLayout parent, String label, String key) {
         if (!settingVisible(key)) return;
         LinearLayout cell=settingCell(parent,label,false);
         EditText input = numberInput(label); input.setContentDescription(label);
-        configInputs.put(key, input); pinDependentViews.add(cell.getChildAt(0)); pinDependentViews.add(input);
-        cell.addView(input, fullParams(0,0,0,0));
+        NumberStepper stepper=new NumberStepper(this,input,label,() -> settingBounds(key));
+        configInputs.put(key, input); pinDependentViews.add(cell.getChildAt(0)); pinDependentViews.add(stepper);
+        cell.addView(stepper, fullParams(0,0,0,0));
+    }
+
+    private int editedSettingValue(String key) {
+        EditText input=configInputs.get(key);
+        if(input!=null) try { return Integer.parseInt(input.getText().toString().trim()); } catch(NumberFormatException ignored) { }
+        return configValue(key);
+    }
+
+    private int[] settingBounds(String key) {
+        int min=0,max=999;
+        if(key.equals("delaySt")) { min=1;max=255; }
+        else if(key.equals("stLed") || key.equals("stLcd") || key.equals("delayDf") || key.startsWith("rangeSt")) max=90;
+        else if(key.equals("greenBrightness") || key.equals("redBrightness")) max=7;
+        else if(key.equals("pinWrongLimit")) { min=1;max=99; }
+        else if(key.equals("coolCl") || key.equals("coolOp") || key.equals("defrostCl") || key.equals("defrostOp") || key.equals("hcfTime") || key.equals("pinBackupPeriod") || key.startsWith("range")) min=1;
+        String prefix=null;
+        switch(key) {
+            case "coolCl":prefix="rangeCoolCl";break;
+            case "coolOp":prefix="rangeCoolOp";break;
+            case "defrostCl":prefix="rangeDefrostCl";break;
+            case "defrostOp":prefix="rangeDefrostOp";break;
+            case "stLed":prefix="rangeStLed";break;
+            case "stLcd":prefix="rangeStLcd";break;
+        }
+        if(prefix!=null) { min=Math.max(min,editedSettingValue(prefix+"Min"));max=Math.min(max,editedSettingValue(prefix+"Max")); }
+        if(key.startsWith("range") && key.endsWith("Min")) max=Math.min(max,editedSettingValue(key.substring(0,key.length()-3)+"Max"));
+        if(key.startsWith("range") && key.endsWith("Max")) min=Math.max(min,editedSettingValue(key.substring(0,key.length()-3)+"Min"));
+        return new int[]{min,max};
     }
 
     private void addChoiceField(LinearLayout parent, String label, String key, Choice[] choices) {
@@ -2708,6 +2737,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         foreground = false;
+        for(EditText input:configInputs.values()) if(input.getParent() instanceof NumberStepper) ((NumberStepper)input.getParent()).stopRepeating();
         stopHome();
         stopDashboard();
         super.onPause();

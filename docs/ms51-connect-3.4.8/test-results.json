@@ -1,0 +1,15 @@
+{
+  "version": "3.4.8",
+  "version_code": 42,
+  "apk_sha256": "d6c831dd14ade7beb23fb645be3a400e7355fdda6070a98bc9fb9b46e1c00dfa",
+  "scope": "Android numeric settings controls",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed, no errors",
+    "signing_certificate_matches_previous": true,
+    "emulator": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "stepper": "PASS: single-unit taps, accelerating hold, release/cancel/disable/detach stop, bounded values, manual editing and accessibility click.",
+    "hardware_reflashed": false,
+    "user_phone_tested": false
+  }
+}

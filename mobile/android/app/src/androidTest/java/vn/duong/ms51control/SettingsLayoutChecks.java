@@ -34,7 +34,7 @@ final class SettingsLayoutChecks {
         ManagedChecks.check(inside(numbers.get("hcfTime"),advanced) && inside(numbers.get("tryTime"),advanced),"Other timing fields are in advanced settings");
         if(a.getResources().getConfiguration().screenWidthDp>=340 && a.getResources().getConfiguration().fontScale<1.3f) {
             for(String[] pair:new String[][]{{"coolCl","coolOp"},{"defrostCl","defrostOp"},{"stLed","stLcd"},{"rangeCoolClMin","rangeCoolClMax"}})
-                ManagedChecks.check(numbers.get(pair[0]).getParent().getParent()==numbers.get(pair[1]).getParent().getParent(),"Related settings share a row: "+pair[0]);
+                ManagedChecks.check(row(numbers.get(pair[0]))==row(numbers.get(pair[1])),"Related settings share a row: "+pair[0]);
         }
         java.lang.reflect.Method collect=MainActivity.class.getDeclaredMethod("collectRuntimeConfigValues");collect.setAccessible(true);
         ManagedChecks.check(collect.invoke(a).equals(config.values),"Rearranging settings preserves all values");
@@ -44,6 +44,7 @@ final class SettingsLayoutChecks {
         checks.get("pinEnable").setChecked(true);
         ManagedChecks.check(numbers.get("pinPassword").isEnabled(),"Nested PIN fields enable correctly");
         capture(a,page,"settings-preview.png",2600);
+        for(EditText field:numbers.values()) ManagedChecks.check(field.getWidth()>0 && field.getHeight()>0 && field.getLayout().getLineLeft(0)<field.getWidth(),"Numeric value remains visible: "+field.getContentDescription());
         capture(a,(View)advanced,"settings-advanced-preview.png",10000);
 
         ManagedChecks.set(a,"deviceAccess",new JSONObject().put("visible",new JSONArray().put("coolCl").put("rangeCoolClMin")));
@@ -51,7 +52,7 @@ final class SettingsLayoutChecks {
         ManagedChecks.invoke(a,"buildSettings",new Class[]{LinearLayout.class},limited);
         ManagedChecks.check(limited.getChildAt(1).getVisibility()==View.VISIBLE && limited.getChildAt(2).getVisibility()==View.GONE,"Nested allowed fields remain visible, empty advanced section hidden");
         Map<String,EditText> limitedNumbers=(Map<String,EditText>)ManagedChecks.get(a,"configInputs");
-        ViewGroup loneRow=(ViewGroup)limitedNumbers.get("coolCl").getParent().getParent();
+        ViewGroup loneRow=row(limitedNumbers.get("coolCl"));
         ManagedChecks.check(loneRow.getChildCount()==1 && limitedNumbers.size()==2,"Hidden fields leave no empty cells");
         ManagedChecks.set(a,"deviceAccess",previousAccess);
         ManagedChecks.set(a,"runtimeConfig",previousConfig);
@@ -60,6 +61,7 @@ final class SettingsLayoutChecks {
         for(View current=child;current!=null;current=current.getParent() instanceof View ? (View)current.getParent() : null) if(current==ancestor)return true;
         return false;
     }
+    private static ViewGroup row(EditText field) { return (ViewGroup)field.getParent().getParent().getParent(); }
     private static void capture(MainActivity a,View view,String name,int maxHeight) throws Exception {
         view.measure(View.MeasureSpec.makeMeasureSpec(1080,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
         view.layout(0,0,1080,view.getMeasuredHeight());
