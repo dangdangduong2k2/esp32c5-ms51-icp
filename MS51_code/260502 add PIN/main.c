@@ -459,7 +459,7 @@ uint16_t adc_average(uint8_t chanel)
 	return (uint16_t)result;
 }
 
-/* A temperature source is a leased virtual active-low SIG, never a GPIO drive. */
+/* Keep the existing app command format; motor thresholds no longer replace SIG. */
 static uint8_t trigger_owner_valid(void)
 {
     return eData.trigger_mark == 0xB6 && eData.trigger_source <= 3 &&
@@ -478,8 +478,8 @@ uint8_t trigger_fresh(void)
 }
 uint8_t signal_read(void)
 {
-    if (trigger_source == 0) return PIN_read(SIG_PIN);
-    return (trigger_fresh() && trigger_active) ? 0 : 1;
+    /* SIG always follows the physical input, including after restart or an app save. */
+    return PIN_read(SIG_PIN);
 }
 uint8_t trigger_set(uint8_t source, uint8_t active)
 {

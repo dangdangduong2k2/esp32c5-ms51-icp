@@ -1,5 +1,9 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## MS51 3.4.1 · Trở lại SIG vật lý
+
+MS51 luôn đọc chân SIG P0.1 như cũ; ngưỡng nhiệt độ động cơ không thay tín hiệu này. Giữ nguyên app/C5 3.4.0 và phần 50k điều khiển relay 3. [File HEX, phạm vi thay đổi và kiểm thử](docs/ms51-physical-sig-3.4.1/README.md). Bản này chỉ xuất file, chưa nạp lên bo.
+
 ## Bản thử nghiệm 3.4.0 · Ngưỡng ngắt và ngưỡng xả đá
 
 [Tải APK 3.4.0](https://github.com/dangdangduong2k2/esp32c5-ms51-icp/releases/download/v3.4.0/MS51-Connect-3.4.0.apk) · [Bản nạp, hành vi và kiểm thử](docs/ms51-connect-3.4.0/README.md)

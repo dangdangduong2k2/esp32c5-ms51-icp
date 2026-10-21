@@ -1,0 +1,10 @@
+{
+  "version": "3.4.1",
+  "scope": "MS51 only; APK and C5 remain 3.4.0",
+  "hex_sha256": "e80a84ffe9482d7557ae94614f068362a11592bfb7f44bd07ce4e6d2638cd15d",
+  "highest_address": "0x6cb5",
+  "build": "27829 code bytes; 0 errors, 0 warnings",
+  "tests": "PASS: physical SIG at both levels despite all saved sources, trigger/thermal commands, expiry and restart; NTC conversion/faults; independent relay 3 arbitration, sensor fallback, lease expiry, rollover and invalid frames",
+  "hardware_flashed": false,
+  "user_source_mirrored": true
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Host tests of the actual MS51 virtual SIG functions and C5 NTC conversion."""
+"""Host tests of physical SIG priority, relay 3 leases and C5 NTC conversion."""
 from pathlib import Path
 import os, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
@@ -30,22 +30,26 @@ void AP_EEPROM_Commit(void) { commits++; }
 checks=r"""
 const char *ms51_ntc_temperature(int,int,int,int*);
 int main(void) {
- assert(signal_read()==1);physical_pin=0;assert(signal_read()==0);
- assert(trigger_set(2,0));assert(signal_read()==1); // physical low ignored
- assert(trigger_set(2,1));assert(signal_read()==0);assert(commits==1);
- now=2999;assert(signal_read()==0);now=3000;assert(signal_read()==1);
- assert(trigger_set(2,1));assert(signal_read()==0);assert(commits==1);
- trigger_received=0;trigger_source=trigger_owner_valid()?eData.trigger_source:0;
- assert(trigger_source==2 && signal_read()==1); // reboot fails inactive until heartbeat
- assert(!trigger_set(4,1));assert(!trigger_set(1,2));assert(commits==1);
- now=0xfffffff0u;assert(trigger_set(1,1));now=20;assert(signal_read()==0);
- now=4000;assert(signal_read()==1);assert(trigger_set(0,0));assert(signal_read()==0);
+ // Neither old trigger commands nor new thermal commands can override either pin level.
+ for(int level=0;level<2;level++) {
+   physical_pin=level;
+   for(int source=0;source<4;source++) for(int active=0;active<2;active++) {
+     assert(trigger_set(source,active)); assert(signal_read()==level);
+     now+=3001;assert(signal_read()==level); // expired heartbeat
+     trigger_received=0;trigger_source=trigger_owner_valid()?eData.trigger_source:0;
+     assert(signal_read()==level); // restored old temperature selection on restart
+   }
+   for(int source=1;source<=2;source++) for(int active=0;active<2;active++) {
+     assert(thermal_set(source,active,0,0));assert(signal_read()==level);
+   }
+ }
+ assert(!trigger_set(4,1));assert(!trigger_set(1,2));
  physical_pin=1;assert(signal_read()==1);
  // The final arbiter holds the physical output despite repeated mode writes.
  relay3_request(0);assert(!relay3_pin);
  assert(thermal_set(1,0,1,1));assert(relay3_pin && RL3_output_is_on);
  for(int mode=0;mode<9;mode++) { relay3_request(0); assert(relay3_pin); }
- assert(thermal_set(2,1,1,0)); assert(!relay3_pin && signal_read()==0);
+ assert(thermal_set(2,1,1,0)); assert(!relay3_pin && signal_read()==1);
  for(int mode=0;mode<9;mode++) { relay3_request(1); assert(!relay3_pin); }
  assert(thermal_set(2,1,0,0));assert(relay3_pin); // sensor fault restores latest machine demand
  assert(thermal_set(2,0,1,0));assert(!relay3_pin);
@@ -72,4 +76,4 @@ with tempfile.TemporaryDirectory() as directory:
     p=Path(directory);(p/'test.c').write_text('#include <stdlib.h>\n'+prefix+source[start:end]+checks,encoding='utf-8')
     subprocess.run([os.environ.get('CC','gcc'),'-std=c99','-Wall','-Wextra','-Werror',str(p/'test.c'),str(root/'main/ms51_ntc.c'),'-lm','-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test')],check=True)
-print('PASS: SIG, NTC conversion/faults, relay 3 arbitration across machine writes, sensor fault fallback, 3s lease timeout, clock rollover, startup and invalid frames')
+print('PASS: physical SIG at both levels despite all saved sources, trigger/thermal commands, expiry and restart; NTC conversion/faults; independent relay 3 arbitration, sensor fallback, lease expiry, rollover and invalid frames')

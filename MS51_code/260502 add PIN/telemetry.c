@@ -300,9 +300,9 @@ static void telemetry_build_snapshot(void)
 	telemetry_append_var_text("relay2", relay2_on ? "ON" : "OFF");
 	telemetry_append_var_text("relay3", relay3_on ? "ON" : "OFF");
     telemetry_append_var_u16("thermal_v", 1);
-    telemetry_append_var_u16("sig_source", trigger_source);
+    telemetry_append_var_u16("sig_source", 0); /* physical SIG, regardless of saved app source */
     telemetry_append_var_text("sig_active", signal_read() ? "OFF" : "ON");
-    telemetry_append_var_u16("sig_link", trigger_source == 0 || trigger_fresh());
+    telemetry_append_var_u16("sig_link", 1); /* physical input needs no temperature heartbeat */
 }
 
 static void telemetry_start_transmit(void)
