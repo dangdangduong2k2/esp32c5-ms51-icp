@@ -35,6 +35,7 @@ final class ManagedChecks {
                     check(((Map<?,?>)get(a,"configChecks")).isEmpty(),"Hidden toggles omitted");
                     check(!texts(content).contains("Mật khẩu dự phòng"),"Hidden PIN field label omitted");
                     check(!texts(content).contains("Làm lạnh CL · Max"),"Min/Max independently hidden");
+                    SettingsLayoutChecks.run(a);
                     JSONObject firmware=new JSONObject().put("id","test-release");
                     for(String state:new String[]{"none","available","running","unknown","success"}) {
                         JSONObject access=new JSONObject().put("update_available",!state.equals("none")&&!state.equals("success"));

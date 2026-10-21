@@ -1679,43 +1679,60 @@ public final class MainActivity extends Activity {
         intro.addView(topRow, fullParams(0, 10, 0, 0));
         content.addView(intro, fullParams(0, 0, 0, 0));
 
-        LinearLayout timing = card();
-        addSectionTitle(timing, "Thời gian hoạt động");
+        LinearLayout timing = settingsSection("Thời gian hoạt động");
         addNumberField(timing, "Làm lạnh CL (phút)", "coolCl");
         addNumberField(timing, "Làm lạnh OP (phút)", "coolOp");
+        finishSettingsRow(timing);
         addNumberField(timing, "Xả đá CL (phút)", "defrostCl");
         addNumberField(timing, "Xả đá OP (phút / giây)", "defrostOp");
+        finishSettingsRow(timing);
         addNumberField(timing, "Thời gian chờ ST (100 ms)", "delaySt");
+        finishSettingsRow(timing);
         addNumberField(timing, "ST LED (100 ms)", "stLed");
         addNumberField(timing, "ST LCD (100 ms)", "stLcd");
-        addNumberField(timing, "Tự khóa", "lockTime");
-        addNumberField(timing, "Độ sáng LED xanh", "greenBrightness");
-        addNumberField(timing, "Độ sáng LED đỏ", "redBrightness");
-        addNumberField(timing, "Thời gian thử lại", "tryTime");
-        addChoiceField(timing, "Đơn vị thử lại", "tryUnit", choices("Giờ", 0, "Ngày", 1));
-        addNumberField(timing, "Thời gian HCF OP", "hcfTime");
-        addNumberField(timing, "Trễ bật xả đá", "delayDf");
-        content.addView(timing, fullParams(0, 12, 0, 0));
+        content.addView(timing, fullParams(0,12,0,0));
 
-        LinearLayout modes = card();
-        addSectionTitle(modes, "Chế độ và hiển thị");
-        addChoiceField(modes, "Chế độ DF", "df", choices("Tắt", 0, "Bật", 1));
-        addChoiceField(modes, "Chế độ END", "end", choices("Tắt", 0, "Bật", 1));
-        addChoiceField(modes, "Bắt đầu làm lạnh", "coolStart", choices("CL", 0, "OP", 1));
-        addChoiceField(modes, "Bắt đầu xả đá", "defrostStart", choices("CL", 0, "OP", 1));
-        addChoiceField(modes, "Kiểu màn hình", "displayMode", choices("LCD", 0, "LED", 1));
-        addChoiceField(modes, "Chế độ HCF", "hcfMode", choices("H", 0, "CF", 1));
-        addChoiceField(modes, "Chế độ HDF", "hdf", choices("Tắt", 0, "Bật", 1));
-        addChoiceField(modes, "Tỷ lệ thời gian R1 / R2", "onTime", choices("R1:1  R2:1", 0, "R1:2  R2:1", 1, "R1:1  R2:2", 2, "R1:2  R2:2", 3));
-        addChoiceField(modes, "Số lần chạm", "touch", choices("1", 0, "2", 1));
-        addChoiceField(modes, "Xả đá OP tính giây", "defrostOpSeconds", choices("Tắt", 0, "Bật", 1));
-        addCheckField(modes, "Hiện chế độ DF", "showDf", false);
-        addCheckField(modes, "Hiện chế độ END", "showEnd", false);
-        addCheckField(modes, "Hiện chế độ SL", "showSl", false);
-        addCheckField(modes, "Hiện chế độ HCF", "showHcf", false);
-        addCheckField(modes, "Hiện chế độ HDF", "showHdf", false);
-        addChoiceField(modes, "Hiện ST LED", "showSt", choices("Tắt", 0, "Bật", 1));
-        content.addView(modes, fullParams(0, 12, 0, 0));
+        LinearLayout advanced = settingsSection("Cài đặt nâng cao");
+        LinearLayout modes=new LinearLayout(this); modes.setOrientation(LinearLayout.VERTICAL);
+        addChoiceField(modes, "Bắt đầu làm lạnh", "coolStart", choices("CL",0,"OP",1));
+        addChoiceField(modes, "Bắt đầu xả đá", "defrostStart", choices("CL",0,"OP",1));
+        finishSettingsRow(modes);
+        addChoiceField(modes, "Chế độ DF", "df", choices("Tắt",0,"Bật",1));
+        addChoiceField(modes, "Chế độ END", "end", choices("Tắt",0,"Bật",1));
+        finishSettingsRow(modes);
+        addChoiceField(modes, "Chế độ HDF", "hdf", choices("Tắt",0,"Bật",1));
+        addNumberField(modes, "Trễ bật xả đá", "delayDf");
+        finishSettingsRow(modes);
+        addChoiceField(modes, "Xả đá OP tính giây", "defrostOpSeconds", choices("Tắt",0,"Bật",1));
+        addChoiceField(modes, "Tỷ lệ thời gian Nguồn / Khởi động", "onTime", choices("R1:1  R2:1",0,"R1:2  R2:1",1,"R1:1  R2:2",2,"R1:2  R2:2",3));
+        addSettingsSubgroup(advanced,"Chu trình",modes);
+
+        LinearLayout hcf=new LinearLayout(this); hcf.setOrientation(LinearLayout.VERTICAL);
+        addChoiceField(hcf,"Chế độ HCF","hcfMode",choices("H",0,"CF",1));
+        addNumberField(hcf,"Thời gian HCF OP","hcfTime");
+        addSettingsSubgroup(advanced,"HCF",hcf);
+
+        LinearLayout display=new LinearLayout(this); display.setOrientation(LinearLayout.VERTICAL);
+        addChoiceField(display,"Kiểu màn hình","displayMode",choices("LCD",0,"LED",1));
+        addChoiceField(display,"Hiện ST LED","showSt",choices("Tắt",0,"Bật",1));
+        finishSettingsRow(display);
+        addNumberField(display,"Độ sáng LED đỏ","redBrightness");
+        addNumberField(display,"Độ sáng LED xanh","greenBrightness");
+        finishSettingsRow(display);
+        addNumberField(display,"Tự khóa","lockTime");
+        addChoiceField(display,"Số lần chạm","touch",choices("1",0,"2",1));
+        addCheckField(display,"Hiện chế độ DF","showDf",false);
+        addCheckField(display,"Hiện chế độ END","showEnd",false);
+        addCheckField(display,"Hiện chế độ SL","showSl",false);
+        addCheckField(display,"Hiện chế độ HCF","showHcf",false);
+        addCheckField(display,"Hiện chế độ HDF","showHdf",false);
+        addSettingsSubgroup(advanced,"Hiển thị và thao tác",display);
+
+        LinearLayout retry=new LinearLayout(this); retry.setOrientation(LinearLayout.VERTICAL);
+        addNumberField(retry,"Thời gian thử lại","tryTime");
+        addChoiceField(retry,"Đơn vị thử lại","tryUnit",choices("Giờ",0,"Ngày",1));
+        addSettingsSubgroup(advanced,"Thử lại",retry);
+        content.addView(advanced, fullParams(0,12,0,0));
 
         LinearLayout ranges = card();
         addSectionTitle(ranges, "Giới hạn thời gian (Min / Max)");
@@ -1735,6 +1752,7 @@ public final class MainActivity extends Activity {
         addPinNumberField(pin, "Chu kỳ yêu cầu mật khẩu", "pinPeriod");
         addPinChoiceField(pin, "Đơn vị chu kỳ", "pinPeriodUnit", choices("Giờ", 0, "Ngày", 1));
         addPinNumberField(pin, "Mật khẩu dự phòng", "pinBackupPassword");
+        finishSettingsRow(pin);
         addPinNumberField(pin, "Thời gian dự phòng", "pinBackupPeriod");
         addPinChoiceField(pin, "Đơn vị dự phòng", "pinBackupPeriodUnit", choices("Giờ", 0, "Ngày", 1));
         CheckBox periodShow = addCheckField(pin, "Hiện phần chỉnh chu kỳ mật khẩu", "pinPeriodShow", true);
@@ -1742,58 +1760,102 @@ public final class MainActivity extends Activity {
         pinEnable.setOnCheckedChangeListener((buttonView, isChecked) -> syncPinControls());
         addHelp(pin, "Chỉ các mục được người quản lý cấp quyền mới có thể chỉnh sửa.");
         content.addView(pin, fullParams(0, 12, 0, 0));
-        for (LinearLayout section : new LinearLayout[]{timing, modes, ranges, pin}) {
-            boolean hasFields = false;
-            for (int i=0;i<section.getChildCount();i++) {
-                View child=section.getChildAt(i);
-                if (child instanceof EditText || child instanceof Spinner || child instanceof CheckBox) hasFields=true;
-            }
-            if (!hasFields) section.setVisibility(View.GONE);
+        for (LinearLayout section : new LinearLayout[]{timing, advanced, ranges, pin}) {
+            if (!hasSettingControls(section)) section.setVisibility(View.GONE);
         }
         applyRuntimeConfigToViews();
     }
 
+    private LinearLayout settingsSection(String title) {
+        LinearLayout section=card(); addSectionTitle(section,title); return section;
+    }
+
+    private void addSettingsSubgroup(LinearLayout parent,String title,LinearLayout fields) {
+        if(!hasSettingControls(fields)) return;
+        View line=new View(this); line.setBackgroundColor(0xFFE7EEF1);
+        LinearLayout.LayoutParams rule=new LinearLayout.LayoutParams(-1,dp(1)); rule.setMargins(0,dp(12),0,dp(12));
+        parent.addView(line,rule);
+        TextView label=valueText(title); label.setTextSize(14); label.setTextColor(Design.TEAL);
+        parent.addView(label); parent.addView(fields);
+    }
+
+    private boolean hasSettingControls(View view) {
+        if(view instanceof EditText || view instanceof Spinner || view instanceof CheckBox) return true;
+        if(view instanceof ViewGroup) {
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++) if(hasSettingControls(group.getChildAt(i))) return true;
+        }
+        return false;
+    }
+
+    private boolean compactSettings() {
+        android.content.res.Configuration configuration=getResources().getConfiguration();
+        return configuration.screenWidthDp>=340 && configuration.fontScale<1.3f;
+    }
+
+    private void finishSettingsRow(LinearLayout parent) {
+        if(parent.getChildCount()>0) parent.getChildAt(parent.getChildCount()-1).setTag(null);
+    }
+
+    private LinearLayout settingCell(LinearLayout parent,String label,boolean wide) {
+        boolean compact=compactSettings() && !wide;
+        LinearLayout row=null;
+        if(compact && parent.getChildCount()>0) {
+            View last=parent.getChildAt(parent.getChildCount()-1);
+            if("settings-pair".equals(last.getTag()) && ((LinearLayout)last).getChildCount()==1) row=(LinearLayout)last;
+        }
+        if(row==null) {
+            row=new LinearLayout(this);
+            if(compact) row.setTag("settings-pair");
+            parent.addView(row,fullParams(0,8,0,0));
+        }
+        LinearLayout cell=new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);
+        if(row.getChildCount()>0) params.leftMargin=dp(10);
+        row.addView(cell,params);
+        TextView fieldLabel=mutedText(label); fieldLabel.setTextSize(12);
+        if(compact) fieldLabel.setMinLines(2);
+        cell.addView(fieldLabel,fullParams(0,0,0,4));
+        return cell;
+    }
+
     private void addRangeFields(LinearLayout parent, String label, String key) {
-        addNumberField(parent, label + " · Min", key + "Min");
-        addNumberField(parent, label + " · Max", key + "Max");
+        LinearLayout pair=new LinearLayout(this); pair.setOrientation(LinearLayout.VERTICAL);
+        addNumberField(pair, label + " · Min", key + "Min");
+        addNumberField(pair, label + " · Max", key + "Max");
+        if(hasSettingControls(pair)) parent.addView(pair);
     }
 
     private void addNumberField(LinearLayout parent, String label, String key) {
         if (!settingVisible(key)) return;
-        TextView fieldLabel = mutedText(label);
-        parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
-        EditText input = numberInput(label);
+        LinearLayout cell=settingCell(parent,label,false);
+        EditText input = numberInput(label); input.setContentDescription(label);
         configInputs.put(key, input);
-        parent.addView(input, fullParams(0, 0, 0, 0));
+        cell.addView(input, fullParams(0,0,0,0));
     }
 
     private void addPinNumberField(LinearLayout parent, String label, String key) {
         if (!settingVisible(key)) return;
-        TextView fieldLabel = mutedText(label);
-        parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
-        EditText input = numberInput(label);
-        configInputs.put(key, input); pinDependentViews.add(fieldLabel); pinDependentViews.add(input);
-        parent.addView(input, fullParams(0, 0, 0, 0));
+        LinearLayout cell=settingCell(parent,label,false);
+        EditText input = numberInput(label); input.setContentDescription(label);
+        configInputs.put(key, input); pinDependentViews.add(cell.getChildAt(0)); pinDependentViews.add(input);
+        cell.addView(input, fullParams(0,0,0,0));
     }
 
     private void addChoiceField(LinearLayout parent, String label, String key, Choice[] choices) {
         if (!settingVisible(key)) return;
-        TextView fieldLabel = mutedText(label);
-        parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
-        Spinner spinner = choiceSpinner(choices);
-        spinner.setContentDescription(label);
+        LinearLayout cell=settingCell(parent,label,"onTime".equals(key));
+        Spinner spinner = choiceSpinner(choices); spinner.setContentDescription(label);
         configChoices.put(key, spinner);
-        parent.addView(spinner, fullParams(0, 0, 0, 0));
+        cell.addView(spinner, fullParams(0,0,0,0));
     }
 
     private void addPinChoiceField(LinearLayout parent, String label, String key, Choice[] choices) {
         if (!settingVisible(key)) return;
-        TextView fieldLabel = mutedText(label);
-        parent.addView(fieldLabel, fullParams(0, 10, 0, 2));
-        Spinner spinner = choiceSpinner(choices);
-        spinner.setContentDescription(label);
-        configChoices.put(key, spinner); pinDependentViews.add(fieldLabel); pinDependentViews.add(spinner);
-        parent.addView(spinner, fullParams(0, 0, 0, 0));
+        LinearLayout cell=settingCell(parent,label,false);
+        Spinner spinner = choiceSpinner(choices); spinner.setContentDescription(label);
+        configChoices.put(key, spinner); pinDependentViews.add(cell.getChildAt(0)); pinDependentViews.add(spinner);
+        cell.addView(spinner, fullParams(0,0,0,0));
     }
 
     private CheckBox addCheckField(LinearLayout parent, String label, String key, boolean pinRelated) {

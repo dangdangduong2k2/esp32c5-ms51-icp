@@ -1,0 +1,15 @@
+{
+  "version": "3.4.7",
+  "version_code": 41,
+  "apk_sha256": "72b17435d372a411fac9bfe971266cacf119d063982f50566d873804213363be",
+  "scope": "Android settings layout only",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed, no errors",
+    "signing_certificate_matches_previous": true,
+    "emulator": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "settings_checks": "seven fields, related pairs, hidden/empty groups, unchanged values, PIN dependency",
+    "hardware_reflashed": false,
+    "user_phone_tested": false
+  }
+}
