@@ -1182,6 +1182,11 @@ public final class MainActivity extends Activity {
     }
 
     private void buildOverview(LinearLayout content) {
+        // Give automatic focus recovery a home outside the scrolling form. Explicit
+        // taps and keyboard/accessibility navigation can still focus its children.
+        pageRoot.setFocusableInTouchMode(true);
+        pageRoot.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
+        pageRoot.requestFocus();
         LinearLayout hero = card(); hero.setBackground(new Design.Hero());
         hero.setPadding(dp(22), dp(22), dp(22), dp(22));
         String deviceLabel = activeDevice == null ? "" : activeDevice.name.trim();
@@ -1303,6 +1308,7 @@ public final class MainActivity extends Activity {
 
     private void renderTrigger(JSONObject status, JSONObject debug) {
         if(triggerSave==null) return;
+        releaseOffscreenDashboardFocus();
         JSONObject trigger=status==null ? null : status.optJSONObject("trigger");
         boolean supported=trigger!=null && trigger.optBoolean("enabled") && trigger.optBoolean("thermal_supported");
         if(supported && !triggerLoaded && !triggerSaving) {
@@ -1484,6 +1490,7 @@ public final class MainActivity extends Activity {
 
     private void renderDashboard(JSONObject status, JSONObject debug) {
         if (dashboardConnection == null) return;
+        releaseOffscreenDashboardFocus();
         renderTemperature(status);
         renderModeControls(status, debug);
         renderTrigger(status, debug);
@@ -1548,6 +1555,16 @@ public final class MainActivity extends Activity {
 
     }
 
+    private void releaseOffscreenDashboardFocus() {
+        View focused=getCurrentFocus();
+        if(focused==null || focused==pageRoot || pageRoot==null) return;
+        // TextView.setText can request that an old cursor/selection be brought
+        // back onscreen on the next layout. Never follow an offscreen cursor
+        // during telemetry/history/late-save updates; keep visible editing intact.
+        android.graphics.Rect visible=new android.graphics.Rect();
+        if(!focused.getGlobalVisibleRect(visible)) pageRoot.requestFocus();
+    }
+
     private void renderTemperature(JSONObject status) {
         temperatureStatus = status;
         temperatureStatusAt = android.os.SystemClock.elapsedRealtime();
@@ -1597,7 +1614,10 @@ public final class MainActivity extends Activity {
         String text = DeviceHistory.text(lastHistory);
         if (!historyError.isEmpty()) text = (lastHistory == null ? "Chưa đọc được nhật ký." : "Dữ liệu lần đọc trước:\n" + text)
                 + "\n\nChưa làm mới: " + historyError;
-        dashboardLogs.setText(text);
+        if(!android.text.TextUtils.equals(dashboardLogs.getText(),text)) {
+            releaseOffscreenDashboardFocus();
+            dashboardLogs.setText(text);
+        }
     }
 
     private void setRelay(TextView relay, int number, String rawValue) {

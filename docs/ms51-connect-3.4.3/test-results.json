@@ -1,0 +1,15 @@
+{
+  "version": "3.4.3",
+  "version_code": 38,
+  "apk_sha256": "06dd303bd5dd97a5622a552b7410fca23794bf08ba6bdcd8ddfd3b079fe7cff6",
+  "scope": "Android only; C5/MS51 stay 3.4.2",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed, no errors",
+    "signing_certificate_matches_previous": true,
+    "before_fix": "FAIL: java.lang.AssertionError: java.lang.AssertionError: Late saved values moved scroll to 722",
+    "scroll_regression": "PASS: attached dashboard preserves top/mid-page scroll during initial polling, late Save acknowledgement, history changes and disconnect/reconnect; explicit input focus, visible editing and draft/caret preserved.",
+    "managed_regression": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "user_phone_tested": false
+  }
+}
