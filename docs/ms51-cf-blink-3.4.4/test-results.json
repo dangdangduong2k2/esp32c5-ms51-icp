@@ -1,0 +1,15 @@
+{
+  "version": "3.4.4",
+  "scope": "MS51 only; Android 3.4.3 and C5 3.4.2 unchanged",
+  "hex_sha256": "1e49639fdab34b5568499ef1f08b76165a8295f0f505e0f004f62a788ac5e04a",
+  "highest_address": "0x6d58",
+  "build": "27992 code bytes; 0 errors, 0 warnings",
+  "host_tests": "PASS: CF/H OP counts with zero/unchanged digits; CL, standalone defrost and hDF; actual hold, stopped, settings, history, popup and nonnumeric display do not blink\nPASS: OP1 safety eligibility, disabled/expired/legacy disarm, OP2/CL isolation, HCF hold and rollover; physical SIG at both levels despite all saved sources, trigger/thermal commands, expiry and restart; NTC conversion/faults; independent relay 3 arbitration, sensor fallback, lease expiry, rollover and invalid frames\nPASS: C5 v1/v2 migration disabled, v3 persistence on/off, motor selection, strict greater-than, invalid sensor disarm, independent R3, stale/old capability rejection, NVS failure and JSON capacity",
+  "android_tests": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+  "hardware_flashed": true,
+  "program_verify_passed": true,
+  "config_preserved": true,
+  "observed_hardware_phase": "CL / countdown_active=RED",
+  "physical_phone_cf_blink_observed": false,
+  "user_source_mirrored": true
+}

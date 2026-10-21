@@ -215,6 +215,8 @@ final class ManagedChecks {
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     CountdownTracker tracker = new CountdownTracker();
                     check(tracker.update("COOL","GREEN","5","8",null)==1,"First sample at five already counts");
+                    for (int i=0;i<120;i++) check(tracker.update("COOL","GREEN","0","8",null)==1,"CF OP keeps blinking with fixed zero display");
+                    check(tracker.update("COOL","NONE","0","8",null)==0,"CF actual hold stops fixed-zero blink");
                     for (int i=0;i<120;i++) check(tracker.update("COOL","GREEN","5","8",null)==1,"Unchanged minutes keep blinking");
                     check(tracker.update("COOL","RED","5","8",null)==2,"Phase change switches immediately without digit change");
                     check(tracker.update("COOL","NONE","5","8",null)==0,"Paused timer stops with unchanged digits");

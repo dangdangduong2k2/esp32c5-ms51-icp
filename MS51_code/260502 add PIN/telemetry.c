@@ -261,12 +261,9 @@ static const char code *telemetry_countdown_active(void)
 	if ((program != COOL && program != ICE_FLUSH) || !program_init ||
 		eData.shutdown || hcf_mode_timeout || countdown == 0 || show_his || popup_timeout)
 		return "NONE";
-	/* In HCF OP, the green display is deliberately fixed at zero. */
+	/* HCF OP still counts even when its green display stays at zero. */
 	if (progress == OP)
 	{
-		if (eData.HCF && (switch_state == SW_IDLE || switch_state == SW_COOL ||
-			(switch_state == SW_ICE_FLUSH && eData.hDF)))
-			return "NONE";
 		return telemetry_display_number(&GREEN, &displayed) ? "GREEN" : "NONE";
 	}
 	if (progress == CL)
