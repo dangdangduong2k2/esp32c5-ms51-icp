@@ -1231,16 +1231,8 @@ public final class MainActivity extends Activity {
         content.addView(timers, fullParams(0, 6, 0, 20));
 
         addSectionTitle(content, "Nhiệt độ");
-        LinearLayout temperatures = new LinearLayout(this);
         motorSensorIndex = getSharedPreferences("temperature_display",MODE_PRIVATE)
                 .getBoolean(motorSensorPreferenceKey(),false) ? 1 : 0;
-        String[] sensorLabels = {"Nhiệt độ động cơ","Nhiệt độ giám sát"};
-        for(int i=0;i<2;i++) {
-            LinearLayout.LayoutParams param = new LinearLayout.LayoutParams(0,-1,1);
-            if(i>0) param.setMargins(dp(8),0,0,0);
-            temperatures.addView(temperatureCard(sensorLabels[i],i==0 ? 0 : 2),param);
-        }
-        content.addView(temperatures, fullParams(0,6,0,16));
         buildTriggerCard(content);
 
         LinearLayout relayCard = card(); addSectionTitle(relayCard, "Trạng thái rơ-le");
@@ -1270,9 +1262,13 @@ public final class MainActivity extends Activity {
     private void buildTriggerCard(LinearLayout content) {
         triggerLoaded=false; motorSelectionPending=false; safetyDraftPending=false; defrostDraftPending=false;
         LinearLayout row=new LinearLayout(this);
-        LinearLayout cutoff=card(), defrost=card();
-        cutoff.setPadding(dp(12),dp(16),dp(12),dp(16));
-        defrost.setPadding(dp(12),dp(16),dp(12),dp(16));
+        LinearLayout cutoff=temperatureCard("Nhiệt độ động cơ",0);
+        LinearLayout defrost=temperatureCard("Nhiệt độ giám sát",2);
+        for(LinearLayout column : new LinearLayout[]{cutoff,defrost}) {
+            View divider=new View(this); divider.setBackgroundColor(0xFFE7EEF1);
+            LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));
+            line.setMargins(0,dp(16),0,dp(8)); column.addView(divider,line);
+        }
         LinearLayout safetyHeader=new LinearLayout(this); safetyHeader.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         TextView safetyLabel=mutedText("Bật / tắt"); safetyLabel.setTextSize(12);
         safetyHeader.addView(safetyLabel,new LinearLayout.LayoutParams(0,-2,1));
@@ -1310,7 +1306,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,-1,1);left.rightMargin=dp(6);
         LinearLayout.LayoutParams right=new LinearLayout.LayoutParams(0,-1,1);right.leftMargin=dp(6);
         row.addView(cutoff,left);row.addView(defrost,right);
-        content.addView(row,fullParams(0,0,0,12));
+        content.addView(row,fullParams(0,6,0,12));
         triggerSave=primaryButton("Lưu");triggerSave.setEnabled(false);
         triggerSave.setOnClickListener(v -> saveTrigger());
         content.addView(triggerSave,fullParams(0,0,0,16));
@@ -1402,7 +1398,7 @@ public final class MainActivity extends Activity {
     }
 
     private LinearLayout temperatureCard(String label, int sensorIndex) {
-        LinearLayout box = card(); box.setPadding(dp(10),dp(16),dp(10),dp(16));
+        LinearLayout box = card(); box.setPadding(dp(12),dp(16),dp(12),dp(16));
         TextView title = mutedText(label); title.setTextSize(13); title.setMinLines(2);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
         box.addView(title);
@@ -1435,7 +1431,7 @@ public final class MainActivity extends Activity {
         TextView value = valueText("— °C"); value.setTextSize(20); value.setSingleLine(true);
         if(Build.VERSION.SDK_INT>=26) value.setAutoSizeTextTypeUniformWithConfiguration(13,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         box.addView(value, fullParams(0,12,0,6));
-        TextView note = mutedText("Đang chờ dữ liệu"); note.setTextSize(11);
+        TextView note = mutedText("Đang chờ dữ liệu"); note.setTextSize(11); note.setMinLines(2);
         box.addView(note);
         if (sensorIndex==2) { temperature50Value = value; temperature50Note = note; }
         else { temperatureValue = value; temperatureNote = note; }

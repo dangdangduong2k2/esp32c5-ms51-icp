@@ -1,0 +1,15 @@
+{
+  "version": "3.4.6",
+  "version_code": 40,
+  "apk_sha256": "aae4de1fae00369959665424714591d9097a9b351fb5135ec585e806a314c8fc",
+  "scope": "Android layout only",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed, no errors",
+    "signing_certificate_matches_previous": true,
+    "emulator": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "scroll": "PASS: attached dashboard preserves top/mid-page scroll during initial polling, late Save acknowledgement, history changes and disconnect/reconnect; explicit input focus, visible editing and draft/caret preserved.",
+    "hardware_reflashed": false,
+    "user_phone_tested": false
+  }
+}
