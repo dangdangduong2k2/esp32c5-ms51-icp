@@ -490,6 +490,7 @@ uint8_t trigger_set(uint8_t source, uint8_t active)
         AP_EEPROM_Commit();
         if (!trigger_owner_valid() || eData.trigger_source != source) return 0;
     }
+    safety_active = 0; /* Legacy commands never enable the safety function. */
     trigger_source = source; trigger_active = active;
     trigger_tick = trigger_now(); trigger_received = 1;
     return 1;
@@ -518,6 +519,25 @@ uint8_t thermal_set(uint8_t source, uint8_t active, uint8_t valid, uint8_t on)
     relay3_thermal_on = on;
     relay3_tick = trigger_now();
     relay3_refresh();
+    return 1;
+}
+
+/* Safety uses a separate command so old temperature/SIG commands cannot arm it. */
+uint8_t safety_set(uint8_t source, uint8_t active, uint8_t valid, uint8_t on)
+{
+    if (!thermal_set(source, active, valid, on)) return 0;
+    safety_active = active;
+    return 1;
+}
+static uint8_t safety_finish_op1(void)
+{
+    if (!safety_active || !trigger_fresh() || !program_init || progress != OP ||
+        (program != COOL && !(program == ICE_FLUSH && eData.hDF))) return 0;
+    /* Run the normal expiry path immediately, including when HCF held the timer. */
+    hcf_mode_timeout = 0;
+    hcf_mode = 0;
+    countdown = 1;
+    ticks_reset(&tick);
     return 1;
 }
 
@@ -677,7 +697,7 @@ void countdown_timer(void)
 	uint8_t i;
 	static uint8_t lock_reset_value = 0;
 	static uint8_t lock_increase_sig_index = 1;
-	if (tick_timeout(&tick, 100))
+	if (safety_finish_op1() || tick_timeout(&tick, 100))
 	{
 		if (hcf_mode_timeout == 0)
 		{

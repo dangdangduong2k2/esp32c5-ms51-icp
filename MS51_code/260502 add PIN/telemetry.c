@@ -31,6 +31,7 @@
 #define TELEMETRY_COMMAND_GET       0x47u /* 'G' */
 #define TELEMETRY_COMMAND_SET       0x53u /* 'S' */
 #define TELEMETRY_COMMAND_THERMAL 0x55u
+#define TELEMETRY_COMMAND_SAFETY 0x56u
 #define TELEMETRY_COMMAND_TRIGGER 0x54u /* source, active; renewed every 500 ms */
 #define TELEMETRY_COMMAND_MODE      0x4Du /* M: one byte COOL=0, ICE_FLUSH=1 */
 
@@ -300,6 +301,7 @@ static void telemetry_build_snapshot(void)
 	telemetry_append_var_text("relay2", relay2_on ? "ON" : "OFF");
 	telemetry_append_var_text("relay3", relay3_on ? "ON" : "OFF");
     telemetry_append_var_u16("thermal_v", 1);
+    telemetry_append_var_u16("safe_v", 1);
     telemetry_append_var_u16("sig_source", 0); /* physical SIG, regardless of saved app source */
     telemetry_append_var_text("sig_active", signal_read() ? "OFF" : "ON");
     telemetry_append_var_u16("sig_link", 1); /* physical input needs no temperature heartbeat */
@@ -481,6 +483,13 @@ static void telemetry_finish_config_command(void)
 		telemetry_schedule_config_response(telemetry_pending_command,
 			telemetry_pending_sequence, TELEMETRY_STATUS_OK, 1, 0);
 	}
+    else if (telemetry_pending_command == TELEMETRY_COMMAND_SAFETY)
+    {
+        telemetry_schedule_config_response(telemetry_pending_command,
+            telemetry_pending_sequence, safety_set(telemetry_rx_payload[0],telemetry_rx_payload[1],
+            telemetry_rx_payload[2],telemetry_rx_payload[3]) ?
+            TELEMETRY_STATUS_OK : TELEMETRY_STATUS_BAD_CONFIG, 0, 0);
+    }
     else if (telemetry_pending_command == TELEMETRY_COMMAND_THERMAL)
     {
         telemetry_schedule_config_response(telemetry_pending_command,
@@ -545,7 +554,7 @@ static void telemetry_process_command_byte(uint8_t value)
 		}
 		break;
 	case telemetry_rx_state_command:
-		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET && value != TELEMETRY_COMMAND_MODE && value != TELEMETRY_COMMAND_TRIGGER && value != TELEMETRY_COMMAND_THERMAL)
+		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET && value != TELEMETRY_COMMAND_MODE && value != TELEMETRY_COMMAND_TRIGGER && value != TELEMETRY_COMMAND_THERMAL && value != TELEMETRY_COMMAND_SAFETY)
 		{
 			telemetry_reset_rx_parser();
 			break;
@@ -562,7 +571,7 @@ static void telemetry_process_command_byte(uint8_t value)
 	case telemetry_rx_state_length:
 		telemetry_rx_length = value;
 		telemetry_rx_crc = telemetry_crc16_update(telemetry_rx_crc, value);
-		if ((telemetry_rx_command == TELEMETRY_COMMAND_THERMAL && value != 4) ||
+		if (((telemetry_rx_command == TELEMETRY_COMMAND_THERMAL || telemetry_rx_command == TELEMETRY_COMMAND_SAFETY) && value != 4) ||
             (telemetry_rx_command == TELEMETRY_COMMAND_TRIGGER && value != 2) ||
             (telemetry_rx_command == TELEMETRY_COMMAND_MODE && value != 1) ||
 			(telemetry_rx_command == TELEMETRY_COMMAND_GET && value != 0) ||

@@ -25,7 +25,13 @@ class ManagedTests(AdminTests):
                     self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
             call.reset_mock()
             valid={'source':'10K','threshold_centi':3000,'defrost_centi':500}
+            for enabled in (True,False):
+                body['body']=dict(valid,safety_enabled=enabled)
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+                self.assertIs(call.call_args.args[-1]['safety_enabled'],enabled)
+            call.reset_mock()
             invalid=[{},dict(valid,source='SIG'),dict(valid,source='50K'),dict(valid,extra=1)]
+            invalid += [dict(valid,safety_enabled=v) for v in (0,1,None,'true',[],{})]
             for key in ('threshold_centi','defrost_centi'):
                 for value in (-5501,12501,True,False,None,3.5,'20'):
                     invalid.append(dict(valid,**{key:value}))

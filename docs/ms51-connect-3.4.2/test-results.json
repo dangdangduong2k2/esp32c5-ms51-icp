@@ -1,0 +1,49 @@
+{
+  "version": "3.4.2",
+  "version_code": 37,
+  "apk_sha256": "940a54595b6d8134ad713ecd9e390f0bd7080834cc2a3b532c47c43117924d84",
+  "assets": {
+    "ESP32-C5-SAFETY-3.4.2.zip": "601d4526da72d868f8ee601bb61f07532561853432548c049375d9f2b06ba3c0",
+    "MS51-Connect-3.4.2.apk": "940a54595b6d8134ad713ecd9e390f0bd7080834cc2a3b532c47c43117924d84",
+    "MS51-Safety-OP1-3.4.2.hex": "e14b922baa2e87309510171df8cf500efe16dddaea4f841c7e86fd0f060ae93e"
+  },
+  "flash_files": [
+    {
+      "address": "0x2000",
+      "file": "bootloader.bin",
+      "sha256": "6eea75dfebe0ebc4279c3415edee42fe425c1330d0ed2da6129136a72ed41faf"
+    },
+    {
+      "address": "0x8000",
+      "file": "partition-table.bin",
+      "sha256": "a051e6e82b5380e3647d1dbc8a0217c359da226970eb94f2cb0b864d9a712d43"
+    },
+    {
+      "address": "0x10000",
+      "file": "esp32c5-safety-3.4.2.bin",
+      "sha256": "b8f04b422479b0c70a1acab39f48c76606ee8c1f62f8d656813827534cf5a639"
+    }
+  ],
+  "ms51_highest_address": "0x6d75",
+  "user_source_mirrored": true,
+  "validation": {
+    "android_build": "passed",
+    "lint": "0 errors; 40 warnings",
+    "signing_certificate_matches_previous": true,
+    "emulator": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "server_tests": 33,
+    "host_c": "PASS: OP1 safety eligibility, disabled/expired/legacy disarm, OP2/CL isolation, HCF hold and rollover; physical SIG at both levels despite all saved sources, trigger/thermal commands, expiry and restart; NTC conversion/faults; independent relay 3 arbitration, sensor fallback, lease expiry, rollover and invalid frames\nPASS: C5 v1/v2 migration disabled, v3 persistence on/off, motor selection, strict greater-than, invalid sensor disarm, independent R3, stale/old capability rejection, NVS failure and JSON capacity",
+    "ms51_build": "28021 code bytes; 0 errors, 0 warnings",
+    "deploy": {
+      "health": {
+        "ok": true,
+        "mqtt": true,
+        "protocol": 1
+      },
+      "server_sha256": "0bb17da95c253a79310dc4853adbe8945ad455a239a31a33f975d8dd4ebfcb42",
+      "backup": "/opt/ms51-safety-deploy-20261021"
+    },
+    "hardware_flashed": false,
+    "hardware_tested": false
+  }
+}

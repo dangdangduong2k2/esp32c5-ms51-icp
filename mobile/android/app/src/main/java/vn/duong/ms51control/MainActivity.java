@@ -120,6 +120,8 @@ public final class MainActivity extends Activity {
     private EditText triggerThreshold;
     private TextView triggerState;
     private Button triggerSave;
+    private android.widget.Switch safetySwitch;
+    private boolean safetyDraftPending;
     private boolean triggerLoaded, triggerSaving;
     private static final String[] TRIGGER_SOURCES = {"SIG","10K","20K","50K"};
     private final Runnable expireTriggerControls = () -> { if(triggerSave!=null) triggerSave.setEnabled(false); };
@@ -1261,12 +1263,24 @@ public final class MainActivity extends Activity {
     }
 
     private void buildTriggerCard(LinearLayout content) {
-        triggerLoaded=false; motorSelectionPending=false;
+        triggerLoaded=false; motorSelectionPending=false; safetyDraftPending=false;
         LinearLayout row=new LinearLayout(this);
         LinearLayout cutoff=card(), defrost=card();
         cutoff.setPadding(dp(12),dp(16),dp(12),dp(16));
         defrost.setPadding(dp(12),dp(16),dp(12),dp(16));
-        addSectionTitle(cutoff,"Ngưỡng ngắt"); addSectionTitle(defrost,"Ngưỡng xả đá");
+        LinearLayout safetyHeader=new LinearLayout(this); safetyHeader.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        TextView safetyLabel=mutedText("Bật / tắt"); safetyLabel.setTextSize(12);
+        safetyHeader.addView(safetyLabel,new LinearLayout.LayoutParams(0,-2,1));
+        safetySwitch=new android.widget.Switch(this); safetySwitch.setShowText(false);
+        safetySwitch.setContentDescription("Bật hoặc tắt ngưỡng an toàn");
+        safetySwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(Design.TEAL));
+        safetyHeader.addView(safetySwitch,new LinearLayout.LayoutParams(-2,dp(48)));
+        cutoff.addView(safetyHeader);
+        android.view.View spacer=new android.view.View(this); defrost.addView(spacer,new LinearLayout.LayoutParams(1,dp(48)));
+        addSectionTitle(cutoff,"Ngưỡng an toàn"); addSectionTitle(defrost,"Ngưỡng xả đá");
+        safetySwitch.setOnCheckedChangeListener((button,checked) -> {
+            if(triggerLoaded) { safetyDraftPending=true; renderTrigger(lastStatus,lastDebug); }
+        });
         TextView motor=mutedText("Nhiệt độ động cơ (°C)"), monitor=mutedText("Nhiệt độ giám sát (°C)");
         motor.setMinLines(2); monitor.setMinLines(2);
         cutoff.addView(motor); defrost.addView(monitor);
@@ -1296,9 +1310,13 @@ public final class MainActivity extends Activity {
             if(configured) motorSensorIndex="20K".equals(trigger.optString("source")) ? 1 : 0;
             triggerThreshold.setText(java.math.BigDecimal.valueOf(trigger.optInt("threshold_centi",2500),2).stripTrailingZeros().toPlainString());
             defrostThreshold.setText(configured ? java.math.BigDecimal.valueOf(trigger.optInt("defrost_centi"),2).stripTrailingZeros().toPlainString() : "");
-            triggerLoaded=true; motorSelectionPending=false; renderTemperatureCards();
+            safetySwitch.setChecked(trigger.optBoolean("safety_enabled"));
+            safetyDraftPending=false; triggerLoaded=true; motorSelectionPending=false; renderTemperatureCards();
         }
-        triggerThreshold.setEnabled(supported && !triggerSaving);
+        boolean safetySupported=supported && trigger.optBoolean("safety_supported");
+        boolean canEdit=supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting;
+        safetySwitch.setEnabled(canEdit && safetySupported);
+        triggerThreshold.setEnabled(canEdit && safetySupported && safetySwitch.isChecked());
         defrostThreshold.setEnabled(supported && !triggerSaving);
         if(motorSensorSwitch!=null) motorSensorSwitch.setEnabled(supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
         triggerSave.setEnabled(supported && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting && !status.optBoolean("busy",true));
@@ -1306,11 +1324,14 @@ public final class MainActivity extends Activity {
         if(triggerSave.isEnabled()) mainHandler.postDelayed(expireTriggerControls,5000);
         if(triggerSaving) triggerState.setText("Đang lưu…");
         else if(!supported) triggerState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        else if(safetyDraftPending) triggerState.setText("Nhấn Lưu để áp dụng thay đổi.");
+        else if(!safetySupported) triggerState.setText("Cần cập nhật thiết bị để dùng ngưỡng an toàn.");
         else if(motorSelectionPending) triggerState.setText("Nhấn Lưu để dùng cảm biến "+(motorSensorIndex==0 ? "10k." : "20k."));
         else if(!trigger.optBoolean("thermal_enabled")) triggerState.setText("Nhập hai ngưỡng rồi nhấn Lưu để áp dụng.");
+        else if(!trigger.optBoolean("safety_enabled")) triggerState.setText("Đã tắt · Chạy theo chu trình.");
         else if(!trigger.optBoolean("synced")) triggerState.setText("Đang chờ bộ điều khiển xác nhận.");
-        else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến động cơ · Không kích.");
-        else triggerState.setText(trigger.optBoolean("active") ? "Vượt ngưỡng · Đang ngắt." : "Chưa vượt ngưỡng.");
+        else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến động cơ · Không chuyển bước.");
+        else triggerState.setText(trigger.optBoolean("active") ? "Vượt ngưỡng · Kết thúc OP1 khi đang chạy." : "Vượt ngưỡng sẽ kết thúc OP1.");
         if(!supported) defrostState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
         else if(!trigger.optBoolean("thermal_enabled")) defrostState.setText("Chưa áp dụng · Theo mạch.");
         else if(!trigger.optBoolean("synced")) defrostState.setText("Đang chờ bộ điều khiển xác nhận.");
@@ -1333,6 +1354,7 @@ public final class MainActivity extends Activity {
         final int cutoff, defrost;
         try { cutoff=readTemperatureLimit(triggerThreshold); defrost=readTemperatureLimit(defrostThreshold); }
         catch(IllegalArgumentException invalid) { return; }
+        final boolean safety=safetySwitch.isChecked();
         final int selected=motorSensorIndex+1, token=controlEpoch;
         final EspApi session=api.snapshot(15000);
         triggerSaving=true; renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);
@@ -1340,7 +1362,7 @@ public final class MainActivity extends Activity {
             if(!currentControl(token)) return;
             try {
                 session.post("/api/thermal",new JSONObject().put("source",TRIGGER_SOURCES[selected])
-                        .put("threshold_centi",cutoff).put("defrost_centi",defrost));
+                        .put("threshold_centi",cutoff).put("defrost_centi",defrost).put("safety_enabled",safety));
                 onControl(token,() -> { triggerSaving=false;triggerLoaded=false;showMessage("Đã lưu ngưỡng nhiệt độ.");refreshDashboard(); });
             } catch(Exception error) {
                 onControl(token,() -> { triggerSaving=false;renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);showMessage("Chưa xác nhận lưu. "+errorMessage(error));refreshDashboard(); });

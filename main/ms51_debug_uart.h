@@ -81,3 +81,5 @@ esp_err_t ms51_debug_uart_set_mode(uint8_t mode, uint8_t *target_status);
 #endif
 
 esp_err_t ms51_debug_uart_set_thermal(uint8_t source, bool cutoff, bool valid, bool on, uint8_t *status);
+
+esp_err_t ms51_debug_uart_set_safety(unsigned source, bool active, bool valid, bool on, uint8_t *status);
