@@ -120,8 +120,8 @@ public final class MainActivity extends Activity {
     private EditText triggerThreshold;
     private TextView triggerState;
     private Button triggerSave;
-    private android.widget.Switch safetySwitch;
-    private boolean safetyDraftPending;
+    private android.widget.Switch safetySwitch, defrostSwitch;
+    private boolean safetyDraftPending, defrostDraftPending;
     private boolean triggerLoaded, triggerSaving;
     private static final String[] TRIGGER_SOURCES = {"SIG","10K","20K","50K"};
     private final Runnable expireTriggerControls = () -> { if(triggerSave!=null) triggerSave.setEnabled(false); };
@@ -1268,7 +1268,7 @@ public final class MainActivity extends Activity {
     }
 
     private void buildTriggerCard(LinearLayout content) {
-        triggerLoaded=false; motorSelectionPending=false; safetyDraftPending=false;
+        triggerLoaded=false; motorSelectionPending=false; safetyDraftPending=false; defrostDraftPending=false;
         LinearLayout row=new LinearLayout(this);
         LinearLayout cutoff=card(), defrost=card();
         cutoff.setPadding(dp(12),dp(16),dp(12),dp(16));
@@ -1281,7 +1281,17 @@ public final class MainActivity extends Activity {
         safetySwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(Design.TEAL));
         safetyHeader.addView(safetySwitch,new LinearLayout.LayoutParams(-2,dp(48)));
         cutoff.addView(safetyHeader);
-        android.view.View spacer=new android.view.View(this); defrost.addView(spacer,new LinearLayout.LayoutParams(1,dp(48)));
+        LinearLayout defrostHeader=new LinearLayout(this); defrostHeader.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        TextView defrostLabel=mutedText("Bật / tắt"); defrostLabel.setTextSize(12);
+        defrostHeader.addView(defrostLabel,new LinearLayout.LayoutParams(0,-2,1));
+        defrostSwitch=new android.widget.Switch(this); defrostSwitch.setShowText(false);
+        defrostSwitch.setContentDescription("Bật hoặc tắt ngưỡng xả đá");
+        defrostSwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(Design.TEAL));
+        defrostHeader.addView(defrostSwitch,new LinearLayout.LayoutParams(-2,dp(48)));
+        defrost.addView(defrostHeader);
+        defrostSwitch.setOnCheckedChangeListener((button,checked) -> {
+            if(triggerLoaded) { defrostDraftPending=true; renderTrigger(lastStatus,lastDebug); }
+        });
         addSectionTitle(cutoff,"Ngưỡng an toàn"); addSectionTitle(defrost,"Ngưỡng xả đá");
         safetySwitch.setOnCheckedChangeListener((button,checked) -> {
             if(triggerLoaded) { safetyDraftPending=true; renderTrigger(lastStatus,lastDebug); }
@@ -1296,7 +1306,7 @@ public final class MainActivity extends Activity {
         cutoff.addView(triggerThreshold,fullParams(0,8,0,8));
         defrost.addView(defrostThreshold,fullParams(0,8,0,8));
         triggerState=mutedText("Đang chờ dữ liệu…"); cutoff.addView(triggerState);
-        defrostState=mutedText("Thấp hơn ngưỡng: bật relay 3."); defrost.addView(defrostState);
+        defrostState=mutedText("Thấp hơn ngưỡng: bật Xả đá."); defrost.addView(defrostState);
         LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,-1,1);left.rightMargin=dp(6);
         LinearLayout.LayoutParams right=new LinearLayout.LayoutParams(0,-1,1);right.leftMargin=dp(6);
         row.addView(cutoff,left);row.addView(defrost,right);
@@ -1317,13 +1327,15 @@ public final class MainActivity extends Activity {
             triggerThreshold.setText(java.math.BigDecimal.valueOf(trigger.optInt("threshold_centi",2500),2).stripTrailingZeros().toPlainString());
             defrostThreshold.setText(configured ? java.math.BigDecimal.valueOf(trigger.optInt("defrost_centi"),2).stripTrailingZeros().toPlainString() : "");
             safetySwitch.setChecked(trigger.optBoolean("safety_enabled"));
-            safetyDraftPending=false; triggerLoaded=true; motorSelectionPending=false; renderTemperatureCards();
+            defrostSwitch.setChecked(trigger.optBoolean("defrost_enabled",configured));
+            defrostDraftPending=false; safetyDraftPending=false; triggerLoaded=true; motorSelectionPending=false; renderTemperatureCards();
         }
         boolean safetySupported=supported && trigger.optBoolean("safety_supported");
         boolean canEdit=supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting;
         safetySwitch.setEnabled(canEdit && safetySupported);
         triggerThreshold.setEnabled(canEdit && safetySupported && safetySwitch.isChecked());
-        defrostThreshold.setEnabled(supported && !triggerSaving);
+        defrostSwitch.setEnabled(canEdit && trigger.has("defrost_enabled"));
+        defrostThreshold.setEnabled(canEdit && defrostSwitch.isChecked());
         if(motorSensorSwitch!=null) motorSensorSwitch.setEnabled(supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
         triggerSave.setEnabled(supported && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting && !status.optBoolean("busy",true));
         mainHandler.removeCallbacks(expireTriggerControls);
@@ -1338,11 +1350,15 @@ public final class MainActivity extends Activity {
         else if(!trigger.optBoolean("synced")) triggerState.setText("Đang chờ bộ điều khiển xác nhận.");
         else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến động cơ · Không chuyển bước.");
         else triggerState.setText(trigger.optBoolean("active") ? "Vượt ngưỡng · Kết thúc OP1 khi đang chạy." : "Vượt ngưỡng sẽ kết thúc OP1.");
-        if(!supported) defrostState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        if(triggerSaving) defrostState.setText("Đang lưu…");
+        else if(!supported) defrostState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        else if(defrostDraftPending) defrostState.setText("Nhấn Lưu để áp dụng thay đổi.");
+        else if(!trigger.has("defrost_enabled")) defrostState.setText("Cần cập nhật thiết bị để bật/tắt ngưỡng.");
         else if(!trigger.optBoolean("thermal_enabled")) defrostState.setText("Chưa áp dụng · Theo mạch.");
+        else if(!trigger.optBoolean("defrost_enabled")) defrostState.setText("Đã tắt · Xả đá theo mạch.");
         else if(!trigger.optBoolean("synced")) defrostState.setText("Đang chờ bộ điều khiển xác nhận.");
-        else if(!trigger.optBoolean("defrost_valid")) defrostState.setText("Cảm biến lỗi · Relay 3 theo mạch.");
-        else defrostState.setText(trigger.optBoolean("defrost_active") ? "Dưới ngưỡng · Relay 3 bật." : "Từ ngưỡng trở lên · Relay 3 tắt.");
+        else if(!trigger.optBoolean("defrost_valid")) defrostState.setText("Cảm biến lỗi · Xả đá theo mạch.");
+        else defrostState.setText(trigger.optBoolean("defrost_active") ? "Dưới ngưỡng · Xả đá bật." : "Từ ngưỡng trở lên · Xả đá tắt.");
     }
 
     private int readTemperatureLimit(EditText field) {
@@ -1358,17 +1374,26 @@ public final class MainActivity extends Activity {
     private void saveTrigger() {
         if(triggerSaving || modeChanging || pendingMode!=null || managedUpdateStarting || !triggerLoaded || triggerSave==null || !triggerSave.isEnabled() || !foreground || screen!=Screen.CONTROL || tab!=Tab.OVERVIEW) return;
         final int cutoff, defrost;
-        try { cutoff=readTemperatureLimit(triggerThreshold); defrost=readTemperatureLimit(defrostThreshold); }
+        try {
+            cutoff=readTemperatureLimit(triggerThreshold);
+            // An unused blank limit must not prevent switching off monitoring.
+            defrost=!defrostSwitch.isChecked() && defrostThreshold.getText().toString().trim().isEmpty()
+                    ? 0 : readTemperatureLimit(defrostThreshold);
+        }
         catch(IllegalArgumentException invalid) { return; }
-        final boolean safety=safetySwitch.isChecked();
+        final boolean safety=safetySwitch.isChecked(), defrostEnabled=defrostSwitch.isChecked();
+        JSONObject storedTrigger=lastStatus==null ? null : lastStatus.optJSONObject("trigger");
+        final boolean supportsDefrostToggle=storedTrigger!=null && storedTrigger.has("defrost_enabled");
         final int selected=motorSensorIndex+1, token=controlEpoch;
         final EspApi session=api.snapshot(15000);
         triggerSaving=true; renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);
         io.execute(() -> {
             if(!currentControl(token)) return;
             try {
-                session.post("/api/thermal",new JSONObject().put("source",TRIGGER_SOURCES[selected])
-                        .put("threshold_centi",cutoff).put("defrost_centi",defrost).put("safety_enabled",safety));
+                JSONObject request=new JSONObject().put("source",TRIGGER_SOURCES[selected])
+                        .put("threshold_centi",cutoff).put("defrost_centi",defrost).put("safety_enabled",safety);
+                if(supportsDefrostToggle) request.put("defrost_enabled",defrostEnabled);
+                session.post("/api/thermal",request);
                 onControl(token,() -> { triggerSaving=false;triggerLoaded=false;showMessage("Đã lưu ngưỡng nhiệt độ.");refreshDashboard(); });
             } catch(Exception error) {
                 onControl(token,() -> { triggerSaving=false;renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);showMessage("Chưa xác nhận lưu. "+errorMessage(error));refreshDashboard(); });
@@ -1624,12 +1649,13 @@ public final class MainActivity extends Activity {
         if (relay == null) return;
         boolean known = rawValue != null && !"null".equals(rawValue);
         boolean on = known && ("on".equalsIgnoreCase(rawValue) || "1".equals(rawValue) || "true".equalsIgnoreCase(rawValue));
-        relay.setText("Rơ-le " + number + "\n" + (known ? (on ? "BẬT" : "TẮT") : "Chờ dữ liệu"));
+        String name = number == 1 ? "Nguồn" : number == 2 ? "Khởi động" : "Xả đá";
+        relay.setText(name + "\n" + (known ? (on ? "BẬT" : "TẮT") : "Chờ dữ liệu"));
         Design.Icon symbol = new Design.Icon("power", on ? Design.TEAL : Design.MUTED);
         symbol.setBounds(0, 0, dp(30), dp(30));
         relay.setCompoundDrawables(null, symbol, null, null);
         relay.setCompoundDrawablePadding(dp(10));
-        relay.setContentDescription("Rơ-le " + number + (known ? (on ? " đang bật" : " đang tắt") : " đang chờ dữ liệu"));
+        relay.setContentDescription(name + (known ? (on ? " đang bật" : " đang tắt") : " đang chờ dữ liệu"));
         relay.setTextColor(on ? Design.TEAL : Design.MUTED);
         relay.setBackground(rounded(on ? 0xFFE0F4EC : 0xFFF1F4F7, dp(14)));
     }

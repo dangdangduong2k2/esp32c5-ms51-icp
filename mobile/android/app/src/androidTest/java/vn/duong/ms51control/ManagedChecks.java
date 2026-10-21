@@ -177,7 +177,7 @@ final class ManagedChecks {
                     motorSwitch.performClick();
                     invoke(a,"renderTemperature",new Class[]{JSONObject.class},sampleStatus);
                     check(texts(page).contains("Nhiệt độ động cơ") && texts(page).contains("Nhiệt độ giám sát"),"Both requested temperature titles");
-                    sampleStatus.put("trigger",new JSONObject().put("enabled",true).put("source","20K").put("safety_supported",true).put("safety_enabled",true).put("thermal_supported",true).put("thermal_enabled",true).put("defrost_centi",500).put("defrost_valid",true).put("defrost_active",false).put("threshold_centi",3000).put("synced",true).put("sensor_valid",true).put("active",false));
+                    sampleStatus.put("trigger",new JSONObject().put("enabled",true).put("source","20K").put("safety_supported",true).put("safety_enabled",true).put("thermal_supported",true).put("thermal_enabled",true).put("defrost_enabled",true).put("defrost_centi",500).put("defrost_valid",true).put("defrost_active",false).put("threshold_centi",3000).put("synced",true).put("sensor_valid",true).put("active",false));
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     android.widget.EditText threshold=(android.widget.EditText)get(a,"triggerThreshold");
                     check(threshold.getText().toString().equals("30"),"Stored threshold loaded");
@@ -196,6 +196,23 @@ final class ManagedChecks {
                     sampleStatus.getJSONObject("trigger").put("safety_supported",true);
                     android.widget.EditText defrostLimit=(android.widget.EditText)get(a,"defrostThreshold");
                     check(defrostLimit.getText().toString().equals("5"),"Stored defrost threshold loaded");
+                    android.widget.Switch defrostToggle=(android.widget.Switch)get(a,"defrostSwitch");
+                    check(defrostToggle.isChecked() && defrostToggle.isEnabled(),"Defrost switch loads saved state");
+                    defrostToggle.setChecked(false);
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!defrostToggle.isChecked() && !defrostLimit.isEnabled() && safety.isChecked(),"Defrost draft independent from safety and survives polling");
+                    check(((TextView)get(a,"defrostState")).getText().toString().contains("Nhấn Lưu"),"Unsaved defrost switch is explicit");
+                    set(a,"triggerLoaded",false);
+                    sampleStatus.getJSONObject("trigger").put("defrost_enabled",false);
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!defrostToggle.isChecked() && ((TextView)get(a,"defrostState")).getText().toString().contains("theo mạch"),"Saved OFF restores machine control");
+                    sampleStatus.getJSONObject("trigger").remove("defrost_enabled");
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                    check(!defrostToggle.isEnabled(),"Old C5 cannot change unsupported switch");
+                    sampleStatus.getJSONObject("trigger").put("defrost_enabled",true);
+                    set(a,"triggerLoaded",false);
+                    invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+
                     check((Integer)get(a,"motorSensorIndex")==1,"Saved motor control source overrides local display choice");
                     check(texts(page).contains("Ngưỡng an toàn") && texts(page).contains("Ngưỡng xả đá")
                             && !texts(page).contains("Nguồn tín hiệu"),"Two thresholds replace source selector");

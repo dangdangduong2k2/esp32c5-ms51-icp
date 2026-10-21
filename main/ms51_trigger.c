@@ -17,13 +17,14 @@ static int threshold = 2500;
 static int defrost_threshold;
 static bool thermal_enabled;
 static bool safety_enabled;
+static bool defrost_enabled;
 static int64_t safety_seen;
 static int64_t thermal_seen;
 static int64_t last_ack;
 static bool ready;
 static const char *names[] = { "SIG", "10K", "20K", "50K" };
 typedef struct { uint32_t magic, source; int32_t threshold; } config_t;
-typedef struct { uint32_t magic, source; int32_t threshold, defrost; uint32_t enabled, safety; } thermal_config_t;
+typedef struct { uint32_t magic, source; int32_t threshold, defrost; uint32_t enabled, safety, defrost_enabled; } thermal_config_t;
 static bool supported(unsigned selected) {
     if (selected==0) return true;
 #if CONFIG_MS51_ANALOG_IO1 || CONFIG_MS51_ANALOG_IO6 || CONFIG_MS51_ANALOG_IO5
@@ -37,14 +38,14 @@ static bool supported(unsigned selected) {
 #endif
     return false;
 }
-static esp_err_t save_config(unsigned selected, int limit, int defrost, bool thermal, bool safety) {
+static esp_err_t save_config(unsigned selected, int limit, int defrost, bool thermal, bool safety, bool defrost_on) {
     if (!ready) return ESP_ERR_INVALID_STATE;
     if (!supported(selected) || limit < -5500 || limit > 12500) return ESP_ERR_INVALID_ARG;
     portENTER_CRITICAL(&guard);
-    bool same=source==selected && threshold==limit && thermal_enabled==thermal && defrost_threshold==defrost && safety_enabled==safety;
+    bool same=source==selected && threshold==limit && thermal_enabled==thermal && defrost_threshold==defrost && safety_enabled==safety && defrost_enabled==defrost_on;
     portEXIT_CRITICAL(&guard);
     if(same) return ESP_OK;
-    thermal_config_t data={0x53494733,selected,limit,defrost,thermal,safety};
+    thermal_config_t data={0x53494734,selected,limit,defrost,thermal,safety,defrost_on};
     nvs_handle_t handle;
     esp_err_t error=nvs_open("ms51_trigger",NVS_READWRITE,&handle);
     if(error!=ESP_OK) return error;
@@ -53,15 +54,15 @@ static esp_err_t save_config(unsigned selected, int limit, int defrost, bool the
     nvs_close(handle);
     if(error==ESP_OK) {
         portENTER_CRITICAL(&guard);
-        source=selected; threshold=limit; defrost_threshold=defrost; thermal_enabled=thermal; safety_enabled=safety; last_ack=0;
+        source=selected; threshold=limit; defrost_threshold=defrost; thermal_enabled=thermal; safety_enabled=safety; defrost_enabled=defrost_on; last_ack=0;
         portEXIT_CRITICAL(&guard);
     }
     return error;
 }
 esp_err_t ms51_trigger_configure(unsigned selected, int limit) {
-    return save_config(selected,limit,0,false,false);
+    return save_config(selected,limit,0,false,false,false);
 }
-esp_err_t ms51_thermal_configure(unsigned selected, int limit, int defrost, bool safety) {
+esp_err_t ms51_thermal_configure(unsigned selected, int limit, int defrost, bool safety, bool defrost_on) {
     if(selected<1 || selected>2 || !supported(3) || defrost < -5500 || defrost > 12500)
         return ESP_ERR_INVALID_ARG;
     portENTER_CRITICAL(&guard);
@@ -69,7 +70,7 @@ esp_err_t ms51_thermal_configure(unsigned selected, int limit, int defrost, bool
     portEXIT_CRITICAL(&guard);
     if(!seen || esp_timer_get_time()-seen>=3000000) return ESP_ERR_INVALID_STATE;
     if(safety && (!safe_seen || esp_timer_get_time()-safe_seen>=3000000)) return ESP_ERR_INVALID_STATE;
-    return save_config(selected,limit,defrost,true,safety);
+    return save_config(selected,limit,defrost,true,safety,defrost_on);
 }
 static void trigger_task(void *unused) {
     (void)unused;
@@ -93,13 +94,13 @@ static void trigger_task(void *unused) {
         portEXIT_CRITICAL(&guard);
         if(capable && ms51_operation_lock(0)==ESP_OK) {
             portENTER_CRITICAL(&guard);
-            unsigned selected=source; int limit=threshold, defrost=defrost_threshold; bool thermal=thermal_enabled, safety=safety_enabled;
+            unsigned selected=source; int limit=threshold, defrost=defrost_threshold; bool thermal=thermal_enabled, safety=safety_enabled, defrost_on=defrost_enabled;
             portEXIT_CRITICAL(&guard);
             int temperature=0;
             bool active=selected!=0 && ms51_analog_temperature(selected,&temperature) && temperature>limit;
             uint8_t status=0xff;
             int monitoring=0;
-            bool valid=ms51_analog_temperature(3,&monitoring);
+            bool valid=defrost_on && ms51_analog_temperature(3,&monitoring);
             esp_err_t error;
             if(thermal && safe)
                 error=ms51_debug_uart_set_safety(selected,safety && active,valid,valid && monitoring<defrost,&status);
@@ -125,14 +126,16 @@ esp_err_t ms51_trigger_init(void) {
     nvs_close(handle);
     bool legacy=size==sizeof(config_t) && data.magic==0x53494731;
     bool v2=size==20 && data.magic==0x53494732;
-    bool v3=size==sizeof(data) && data.magic==0x53494733 && data.safety<=1 && (!data.safety || data.enabled);
-    bool current=(v2 || v3) && data.enabled<=1 &&
+    bool v3=size==24 && data.magic==0x53494733;
+    bool v4=size==sizeof(data) && data.magic==0x53494734 && data.defrost_enabled<=1 && (!data.defrost_enabled || data.enabled);
+    bool safety_valid=data.safety<=1 && (!data.safety || data.enabled);
+    bool current=(v2 || ((v3 || v4) && safety_valid)) && data.enabled<=1 &&
         data.defrost>=-5500 && data.defrost<=12500 &&
         (!data.enabled || (data.source>=1 && data.source<=2 && supported(3)));
     if(error==ESP_OK && (legacy || current) &&
         supported(data.source) && data.threshold>=-5500 && data.threshold<=12500) {
         source=data.source; threshold=data.threshold;
-        if(current) { defrost_threshold=data.defrost; thermal_enabled=data.enabled; safety_enabled=v3 && data.safety; }
+        if(current) { defrost_threshold=data.defrost; thermal_enabled=data.enabled; safety_enabled=(v3 || v4) && data.safety; defrost_enabled=v4 ? data.defrost_enabled : data.enabled; }
     }
     if(xTaskCreate(trigger_task,"sig_trigger",4096,NULL,1,NULL)!=pdPASS) return ESP_ERR_NO_MEM;
     ready=true;
@@ -141,7 +144,7 @@ esp_err_t ms51_trigger_init(void) {
 void ms51_trigger_json(char *output,size_t size) {
     portENTER_CRITICAL(&guard);
     unsigned selected=source; int limit=threshold; int64_t ack=last_ack; bool enabled=ready;
-    int defrost=defrost_threshold; bool thermal=thermal_enabled, safety=safety_enabled; int64_t seen=thermal_seen, safe_seen=safety_seen;
+    int defrost=defrost_threshold; bool thermal=thermal_enabled, safety=safety_enabled, defrost_on=defrost_enabled; int64_t seen=thermal_seen, safe_seen=safety_seen;
     portEXIT_CRITICAL(&guard);
     int temperature=0;
     bool valid=selected!=0 && ms51_analog_temperature(selected,&temperature);
@@ -150,10 +153,10 @@ void ms51_trigger_json(char *output,size_t size) {
     bool capable=seen && esp_timer_get_time()-seen<3000000;
     bool safe_capable=safe_seen && esp_timer_get_time()-safe_seen<3000000;
     snprintf(output,size,"{\"enabled\":%s,\"source\":\"%s\",\"threshold_centi\":%d,\"sensor_valid\":%s,\"active\":%s,\"synced\":%s,"
-        "\"thermal_supported\":%s,\"thermal_enabled\":%s,\"defrost_centi\":%d,\"defrost_valid\":%s,\"defrost_active\":%s,\"safety_supported\":%s,\"safety_enabled\":%s}",
+        "\"thermal_supported\":%s,\"thermal_enabled\":%s,\"defrost_centi\":%d,\"defrost_valid\":%s,\"defrost_active\":%s,\"safety_supported\":%s,\"safety_enabled\":%s,\"defrost_enabled\":%s}",
         enabled?"true":"false",names[selected],limit,valid?"true":"false",
         safety && safe_capable && valid && temperature>limit ? "true":"false",synced?"true":"false",
         capable?"true":"false",thermal?"true":"false",defrost,monitor_valid?"true":"false",
-        thermal && monitor_valid && monitoring<defrost?"true":"false",
-        safe_capable?"true":"false",safety?"true":"false");
+        thermal && defrost_on && monitor_valid && monitoring<defrost?"true":"false",
+        safe_capable?"true":"false",safety?"true":"false",defrost_on?"true":"false");
 }

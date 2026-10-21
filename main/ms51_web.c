@@ -1136,18 +1136,21 @@ static esp_err_t thermal_handler(httpd_req_t *request)
     const cJSON *cutoff=cJSON_GetObjectItemCaseSensitive(json,"threshold_centi");
     const cJSON *defrost=cJSON_GetObjectItemCaseSensitive(json,"defrost_centi");
     const cJSON *safety=cJSON_GetObjectItemCaseSensitive(json,"safety_enabled");
+    const cJSON *defrost_on=cJSON_GetObjectItemCaseSensitive(json,"defrost_enabled");
     int selected=!cJSON_IsString(source) ? 0 : !strcmp(source->valuestring,"10K") ? 1 :
         !strcmp(source->valuestring,"20K") ? 2 : 0;
-    bool valid=selected && ((!safety && cJSON_GetArraySize(json)==3) || (cJSON_IsBool(safety) && cJSON_GetArraySize(json)==4)) && cJSON_IsNumber(cutoff) && cJSON_IsNumber(defrost) &&
+    bool valid=selected && (!safety || cJSON_IsBool(safety)) && (!defrost_on || cJSON_IsBool(defrost_on)) &&
+        cJSON_GetArraySize(json)==3+(safety!=NULL)+(defrost_on!=NULL) && cJSON_IsNumber(cutoff) && cJSON_IsNumber(defrost) &&
         cutoff->valuedouble>=-5500 && cutoff->valuedouble<=12500 && cutoff->valuedouble==cutoff->valueint &&
         defrost->valuedouble>=-5500 && defrost->valuedouble<=12500 && defrost->valuedouble==defrost->valueint;
     int c=valid ? cutoff->valueint : 0, d=valid ? defrost->valueint : 0;
     bool safety_enabled=cJSON_IsTrue(safety);
+    bool defrost_enabled=defrost_on ? cJSON_IsTrue(defrost_on) : true; /* Legacy saves enabled monitoring. */
     cJSON_Delete(json);
     if(!valid) return send_error_json(request,"400 Bad Request","Invalid thresholds.",ESP_ERR_INVALID_ARG);
     esp_err_t error=ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if(error!=ESP_OK) return send_error_json(request,"409 Conflict","Device is busy.",error);
-    error=ms51_thermal_configure(selected,c,d,safety_enabled);
+    error=ms51_thermal_configure(selected,c,d,safety_enabled,defrost_enabled);
     ms51_operation_unlock();
     if(error!=ESP_OK) return send_error_json(request,"409 Conflict","Update controller or retry.",error);
     return send_json(request,"{\"ok\":true}",NULL);

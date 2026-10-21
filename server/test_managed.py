@@ -30,8 +30,17 @@ class ManagedTests(AdminTests):
                 self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
                 self.assertIs(call.call_args.args[-1]['safety_enabled'],enabled)
             call.reset_mock()
+            for safety in (True,False):
+                for enabled in (True,False):
+                    body['body']=dict(valid,safety_enabled=safety,defrost_enabled=enabled)
+                    self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+                    self.assertIs(call.call_args.args[-1]['defrost_enabled'],enabled)
+                    self.assertIs(call.call_args.args[-1]['safety_enabled'],safety)
+            body['body']=dict(valid,defrost_enabled=False)
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+            call.reset_mock()
             invalid=[{},dict(valid,source='SIG'),dict(valid,source='50K'),dict(valid,extra=1)]
-            invalid += [dict(valid,safety_enabled=v) for v in (0,1,None,'true',[],{})]
+            invalid += [dict(valid,**{key:v}) for key in ('safety_enabled','defrost_enabled') for v in (0,1,None,'true',[],{})]
             for key in ('threshold_centi','defrost_centi'):
                 for value in (-5501,12501,True,False,None,3.5,'20'):
                     invalid.append(dict(valid,**{key:value}))

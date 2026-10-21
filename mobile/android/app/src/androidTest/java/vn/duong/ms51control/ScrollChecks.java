@@ -30,7 +30,7 @@ final class ScrollChecks {
             EspApi demo=new EspApi();demo.setDemo(true);
             JSONObject status=demo.get("/api/status"),debug=demo.get("/api/debug");
             JSONObject trigger=new JSONObject().put("enabled",true).put("thermal_supported",true).put("safety_supported",true)
-                .put("thermal_enabled",true).put("safety_enabled",true).put("source","10K").put("threshold_centi",3200)
+                .put("thermal_enabled",true).put("defrost_enabled",true).put("safety_enabled",true).put("source","10K").put("threshold_centi",3200)
                 .put("defrost_centi",500).put("sensor_valid",true).put("synced",true).put("defrost_valid",true);
             status.put("trigger",trigger).put("busy",false);
             ScrollView[] scroll={null}; EditText[] field={null};

@@ -1,0 +1,84 @@
+{
+  "version": "3.4.5",
+  "version_code": 39,
+  "apk_sha256": "d380278753c35279e7666ef8ee3c4a0cf794cfe10ea8caec85997eb2abb6a33f",
+  "assets": {
+    "ESP32-C5-DEFROST-TOGGLE-3.4.5.zip": "a0efdda6f36c392c7ec60615cd7536078eb8658efdd6c02b2714fc4fe698f6d2",
+    "MS51-Connect-3.4.5.apk": "d380278753c35279e7666ef8ee3c4a0cf794cfe10ea8caec85997eb2abb6a33f"
+  },
+  "flash_files": [
+    {
+      "address": "0x2000",
+      "file": "bootloader.bin",
+      "sha256": "6eea75dfebe0ebc4279c3415edee42fe425c1330d0ed2da6129136a72ed41faf"
+    },
+    {
+      "address": "0x8000",
+      "file": "partition-table.bin",
+      "sha256": "a051e6e82b5380e3647d1dbc8a0217c359da226970eb94f2cb0b864d9a712d43"
+    },
+    {
+      "address": "0x10000",
+      "file": "esp32c5-defrost-toggle-3.4.5.bin",
+      "sha256": "9f64a8e35c413c464df9bb3badc21f29de34213ec65e37534cd739edd43bda44"
+    }
+  ],
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed, no errors",
+    "signing_certificate_matches_previous": true,
+    "emulator": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "scroll": "PASS: attached dashboard preserves top/mid-page scroll during initial polling, late Save acknowledgement, history changes and disconnect/reconnect; explicit input focus, visible editing and draft/caret preserved.",
+    "server_tests": 33,
+    "host_c": "PASS: CF/H OP counts with zero/unchanged digits; CL, standalone defrost and hDF; actual hold, stopped, settings, history, popup and nonnumeric display do not blink\nPASS: OP1 safety eligibility, disabled/expired/legacy disarm, OP2/CL isolation, HCF hold and rollover; physical SIG at both levels despite all saved sources, trigger/thermal commands, expiry and restart; NTC conversion/faults; independent relay 3 arbitration, sensor fallback, lease expiry, rollover and invalid frames\nPASS: C5 v1/v2/v3 migration, v4 independent safety/defrost persistence on/off, motor selection, strict greater-than, invalid sensor disarm, independent R3, stale/old capability rejection, NVS failure and JSON capacity",
+    "deploy": {
+      "health": {
+        "ok": true,
+        "mqtt": true,
+        "protocol": 1
+      },
+      "server_sha256": "989ee6397b7e0893cbc30727b9c7b646ad6e34d4db99f5bbc6ea0099fe4af4fc",
+      "backup": "/opt/ms51-defrost-toggle-deploy-20261021"
+    },
+    "c5_flash": {
+      "result": "PASS",
+      "app_sha256": "9f64a8e35c413c464df9bb3badc21f29de34213ec65e37534cd739edd43bda44",
+      "flash_verified": true,
+      "nvs_preserved": true,
+      "pins": {
+        "10k": 5,
+        "20k": 6,
+        "50k": 4
+      }
+    },
+    "live_readback": {
+      "result": "PASS",
+      "device_id": "ms51-3844be1fe4e0",
+      "trigger": {
+        "enabled": true,
+        "source": "20K",
+        "threshold_centi": 3100,
+        "sensor_valid": true,
+        "active": false,
+        "synced": true,
+        "thermal_supported": true,
+        "thermal_enabled": true,
+        "defrost_centi": 3100,
+        "defrost_valid": true,
+        "defrost_active": true,
+        "safety_supported": true,
+        "safety_enabled": true,
+        "defrost_enabled": true
+      },
+      "ms51_config_preserved": true,
+      "mqtt": {
+        "protocol": 1,
+        "configured": true,
+        "online": true,
+        "clock_ready": true
+      }
+    },
+    "ms51_reflashed": false,
+    "user_phone_tested": false
+  }
+}
