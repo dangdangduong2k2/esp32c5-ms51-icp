@@ -14,27 +14,41 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 
-/** Editable integer field with cancellable, accelerating press-and-hold arrows. */
+/** Editable numeric field with cancellable, accelerating press-and-hold arrows. */
 final class NumberStepper extends LinearLayout {
     interface Bounds { int[] get(); }
     private final EditText input;
     private final Bounds bounds;
+    private final boolean decimal;
     final Arrow decrease, increase;
     NumberStepper(Context context, EditText input, String label, Bounds bounds) {
-        super(context); this.input=input; this.bounds=bounds;
+        this(context,input,label,bounds,false);
+    }
+    NumberStepper(Context context, EditText input, String label, Bounds bounds, boolean decimal) {
+        super(context); this.input=input; this.bounds=bounds; this.decimal=decimal;
         setOrientation(HORIZONTAL); setGravity(Gravity.CENTER_VERTICAL); setBaselineAligned(false);
         GradientDrawable background=new GradientDrawable(); background.setColor(0xFFF0F4F7); background.setCornerRadius(dp(12)); setBackground(background);
         input.setBackgroundColor(Color.TRANSPARENT); input.setPadding(0,dp(12),0,dp(12)); input.setGravity(Gravity.CENTER);
         input.setHorizontallyScrolling(false); input.setMaxLines(1); input.setHint(null);
         decrease=new Arrow(context,-1,"Giảm "+label); increase=new Arrow(context,1,"Tăng "+label);
-        addView(decrease,new LayoutParams(dp(48),dp(52)));
+        if(decimal) input.setTextSize(14);
+        addView(decrease,new LayoutParams(dp(decimal ? 40 : 48),dp(52)));
         addView(input,new LayoutParams(0,-2,1));
-        addView(increase,new LayoutParams(dp(48),dp(52)));
+        addView(increase,new LayoutParams(dp(decimal ? 40 : 48),dp(52)));
     }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
     private void step(int delta) {
         if(!isEnabled() || !input.isEnabled()) return;
         int[] range=bounds.get(); if(range[0]>range[1]) return;
+        if(decimal) {
+            java.math.BigDecimal low=java.math.BigDecimal.valueOf(range[0]),high=java.math.BigDecimal.valueOf(range[1]);
+            java.math.BigDecimal value;
+            try { value=new java.math.BigDecimal(input.getText().toString().trim().replace(',','.')); }
+            catch(NumberFormatException bad) { value=java.math.BigDecimal.ZERO; }
+            value=value.max(low).min(high).add(java.math.BigDecimal.valueOf(delta)).max(low).min(high);
+            input.setText(value.stripTrailingZeros().toPlainString()); input.setSelection(input.length());
+            return;
+        }
         long current;
         try { current=Long.parseLong(input.getText().toString().trim()); }
         catch(NumberFormatException bad) { current=range[0]; }

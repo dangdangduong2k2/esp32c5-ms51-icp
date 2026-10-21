@@ -1,0 +1,16 @@
+{
+  "version": "3.4.9",
+  "version_code": 43,
+  "apk_sha256": "32bedb17fe38acfaad9fdc661ffcd441b313ea4f8760598c6f151ee0a7464b1c",
+  "scope": "Android threshold controls",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed, no errors",
+    "signing_certificate_matches_previous": true,
+    "emulator": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "stepper": "PASS: single-unit taps, accelerating hold, release/cancel/disable/detach stop, bounded values, manual editing and accessibility click; decimal temperature +/-1, comma, negative values, zero crossing and -55/125 bounds.",
+    "scroll": "PASS: attached dashboard preserves top/mid-page scroll during initial polling, late Save acknowledgement, history changes and disconnect/reconnect; explicit input focus, visible editing and draft/caret preserved.",
+    "hardware_reflashed": false,
+    "user_phone_tested": false
+  }
+}

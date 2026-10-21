@@ -39,7 +39,17 @@ final class StepperChecks {
             SystemClock.sleep(600);test.runOnMainSync(()->stepper.increase.performClick());check(value(test,input)==disabled,"Disable stops repeat and blocks arrows");
             test.runOnMainSync(()->stepper.setEnabled(true));touch(test,stepper.increase,MotionEvent.ACTION_DOWN);
             test.runOnMainSync(()->page[0].removeView(stepper));int detached=value(test,input);SystemClock.sleep(600);check(value(test,input)==detached,"Navigation detaches and stops repeat");
-            result.putString("stream","PASS: single-unit taps, accelerating hold, release/cancel/disable/detach stop, bounded values, manual editing and accessibility click.");test.finish(-1,result);
+            test.runOnMainSync(()->{
+                EditText temperature=new EditText(activity);temperature.setText("-0,5");
+                NumberStepper decimal=new NumberStepper(activity,temperature,"Ngưỡng",()->new int[]{-55,125},true);
+                page[0].addView(decimal);
+                decimal.increase.performClick();check(temperature.getText().toString().equals("0.5"),"Temperature +1 preserves fraction and crosses zero");
+                decimal.decrease.performClick();check(temperature.getText().toString().equals("-0.5"),"Temperature -1 preserves fraction");
+                temperature.setText("124.5");decimal.increase.performClick();check(temperature.getText().toString().equals("125"),"Temperature upper bound");
+                temperature.setText("-54.5");decimal.decrease.performClick();check(temperature.getText().toString().equals("-55"),"Temperature lower bound");
+                decimal.setEnabled(false);decimal.increase.performClick();check(temperature.getText().toString().equals("-55"),"Disabled temperature arrows blocked");
+            });
+            result.putString("stream","PASS: single-unit taps, accelerating hold, release/cancel/disable/detach stop, bounded values, manual editing and accessibility click; decimal temperature +/-1, comma, negative values, zero crossing and -55/125 bounds.");test.finish(-1,result);
         } catch(Throwable error) { result.putString("stream","FAIL: "+error);test.finish(0,result); }
         finally {if(a!=null){MainActivity activity=a;test.runOnMainSync(activity::finish);}}
     }

@@ -1299,8 +1299,8 @@ public final class MainActivity extends Activity {
         defrostThreshold=textInput("Nhập ngưỡng",false);
         int input=InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED;
         triggerThreshold.setInputType(input); defrostThreshold.setInputType(input);
-        cutoff.addView(triggerThreshold,fullParams(0,8,0,8));
-        defrost.addView(defrostThreshold,fullParams(0,8,0,8));
+        cutoff.addView(new NumberStepper(this,triggerThreshold,"Ngưỡng an toàn",() -> new int[]{-55,125},true),fullParams(0,8,0,8));
+        defrost.addView(new NumberStepper(this,defrostThreshold,"Ngưỡng xả đá",() -> new int[]{-55,125},true),fullParams(0,8,0,8));
         triggerState=mutedText("Đang chờ dữ liệu…"); cutoff.addView(triggerState);
         defrostState=mutedText("Thấp hơn ngưỡng: bật Xả đá."); defrost.addView(defrostState);
         LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,-1,1);left.rightMargin=dp(6);
@@ -1329,9 +1329,9 @@ public final class MainActivity extends Activity {
         boolean safetySupported=supported && trigger.optBoolean("safety_supported");
         boolean canEdit=supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting;
         safetySwitch.setEnabled(canEdit && safetySupported);
-        triggerThreshold.setEnabled(canEdit && safetySupported && safetySwitch.isChecked());
+        ((NumberStepper)triggerThreshold.getParent()).setEnabled(canEdit && safetySupported && safetySwitch.isChecked());
         defrostSwitch.setEnabled(canEdit && trigger.has("defrost_enabled"));
-        defrostThreshold.setEnabled(canEdit && defrostSwitch.isChecked());
+        ((NumberStepper)defrostThreshold.getParent()).setEnabled(canEdit && defrostSwitch.isChecked());
         if(motorSensorSwitch!=null) motorSensorSwitch.setEnabled(supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
         triggerSave.setEnabled(supported && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting && !status.optBoolean("busy",true));
         mainHandler.removeCallbacks(expireTriggerControls);
@@ -2738,6 +2738,7 @@ public final class MainActivity extends Activity {
     protected void onPause() {
         foreground = false;
         for(EditText input:configInputs.values()) if(input.getParent() instanceof NumberStepper) ((NumberStepper)input.getParent()).stopRepeating();
+        for(EditText input:new EditText[]{triggerThreshold,defrostThreshold}) if(input!=null && input.getParent() instanceof NumberStepper) ((NumberStepper)input.getParent()).stopRepeating();
         stopHome();
         stopDashboard();
         super.onPause();
