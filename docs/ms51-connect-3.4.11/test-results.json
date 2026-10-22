@@ -1,0 +1,13 @@
+{
+  "version": "3.4.11",
+  "version_code": 45,
+  "apk_sha256": "06aca5eaa0d3490a557a689bbda1be91e4c1ebcea9a2fa7e4a055e223574f9ba",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed",
+    "android_test_build": "passed",
+    "instrumentation_run": false,
+    "signing_certificate_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+    "hardware_reflashed": false
+  }
+}

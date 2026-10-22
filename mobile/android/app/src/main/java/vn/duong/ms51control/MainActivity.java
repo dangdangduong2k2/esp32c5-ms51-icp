@@ -1688,6 +1688,14 @@ public final class MainActivity extends Activity {
         finishSettingsRow(timing);
         content.addView(timing, fullParams(0,12,0,0));
 
+        LinearLayout startup = settingsSection("Cài đặt khởi động");
+        addNumberField(startup, "Thời gian chờ ST (100 ms)", "delaySt");
+        finishSettingsRow(startup);
+        addNumberField(startup, "ST LED (100 ms)", "stLed");
+        addNumberField(startup, "ST LCD (100 ms)", "stLcd");
+        finishSettingsRow(startup);
+        content.addView(startup, fullParams(0,12,0,0));
+
         LinearLayout advanced = settingsSection("Cài đặt nâng cao");
         LinearLayout modes=new LinearLayout(this); modes.setOrientation(LinearLayout.VERTICAL);
         addChoiceField(modes, "Bắt đầu làm lạnh", "coolStart", choices("CL",0,"OP",1));
@@ -1709,11 +1717,6 @@ public final class MainActivity extends Activity {
 
         LinearLayout display=new LinearLayout(this); display.setOrientation(LinearLayout.VERTICAL);
         addChoiceField(display,"Kiểu màn hình","displayMode",choices("LCD",0,"LED",1));
-        finishSettingsRow(display);
-        addNumberField(display, "Thời gian chờ ST (100 ms)", "delaySt");
-        finishSettingsRow(display);
-        addNumberField(display, "ST LED (100 ms)", "stLed");
-        addNumberField(display, "ST LCD (100 ms)", "stLcd");
         finishSettingsRow(display);
         addNumberField(display,"Độ sáng LED đỏ","redBrightness");
         addNumberField(display,"Độ sáng LED xanh","greenBrightness");
@@ -1759,7 +1762,7 @@ public final class MainActivity extends Activity {
         pinEnable.setOnCheckedChangeListener((buttonView, isChecked) -> syncPinControls());
         addHelp(pin, "Chỉ các mục được người quản lý cấp quyền mới có thể chỉnh sửa.");
         content.addView(pin, fullParams(0, 12, 0, 0));
-        for (LinearLayout section : new LinearLayout[]{timing, advanced, ranges, pin}) {
+        for (LinearLayout section : new LinearLayout[]{timing, startup, advanced, ranges, pin}) {
             if (!hasSettingControls(section)) section.setVisibility(View.GONE);
         }
         applyRuntimeConfigToViews();
