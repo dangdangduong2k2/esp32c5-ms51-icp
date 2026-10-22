@@ -27,12 +27,12 @@ final class SettingsLayoutChecks {
         page.setPadding(32,32,32,32);page.setBackgroundColor(Design.BG);
         ManagedChecks.invoke(a,"buildSettings",new Class[]{LinearLayout.class},page);
         Map<String,EditText> numbers=(Map<String,EditText>)ManagedChecks.get(a,"configInputs");
-        View timing=page.getChildAt(1), startup=page.getChildAt(2), advanced=page.getChildAt(3);
+        View timing=page.getChildAt(1), advanced=page.getChildAt(2);
         HashSet<String> actual=new HashSet<>();
         for(Map.Entry<String,EditText> field:numbers.entrySet()) if(inside(field.getValue(),timing)) actual.add(field.getKey());
         ManagedChecks.check(actual.equals(new HashSet<>(Arrays.asList("coolCl","coolOp","defrostCl","defrostOp"))),"Timing contains exactly four cycle parameters");
         ManagedChecks.check(inside(numbers.get("hcfTime"),advanced) && inside(numbers.get("tryTime"),advanced),"Other timing fields are in advanced settings");
-        for(String key:Arrays.asList("delaySt","stLed","stLcd")) ManagedChecks.check(inside(numbers.get(key),startup),"ST timing belongs in startup settings: "+key);
+        for(String key:Arrays.asList("delaySt","stLed","stLcd")) ManagedChecks.check(inside(numbers.get(key),advanced),"ST timing belongs in advanced settings: "+key);
         java.lang.reflect.Method visible=MainActivity.class.getDeclaredMethod("settingVisible",String.class);visible.setAccessible(true);
         for(String key:Arrays.asList("showSt","defrostOpSeconds")) ManagedChecks.check(Boolean.FALSE.equals(visible.invoke(a,key)),"Admin-only option stays hidden even with old policy: "+key);
         if(a.getResources().getConfiguration().screenWidthDp>=340 && a.getResources().getConfiguration().fontScale<1.3f) {
@@ -53,7 +53,7 @@ final class SettingsLayoutChecks {
         ManagedChecks.set(a,"deviceAccess",new JSONObject().put("visible",new JSONArray().put("coolCl").put("rangeCoolClMin")));
         LinearLayout limited=new LinearLayout(a);limited.setOrientation(LinearLayout.VERTICAL);
         ManagedChecks.invoke(a,"buildSettings",new Class[]{LinearLayout.class},limited);
-        ManagedChecks.check(limited.getChildAt(1).getVisibility()==View.VISIBLE && limited.getChildAt(2).getVisibility()==View.GONE && limited.getChildAt(3).getVisibility()==View.GONE,"Nested allowed fields remain visible, empty advanced section hidden");
+        ManagedChecks.check(limited.getChildAt(1).getVisibility()==View.VISIBLE && limited.getChildAt(2).getVisibility()==View.GONE,"Nested allowed fields remain visible, empty advanced section hidden");
         Map<String,EditText> limitedNumbers=(Map<String,EditText>)ManagedChecks.get(a,"configInputs");
         ViewGroup loneRow=row(limitedNumbers.get("coolCl"));
         ManagedChecks.check(loneRow.getChildCount()==1 && limitedNumbers.size()==2,"Hidden fields leave no empty cells");

@@ -1688,15 +1688,15 @@ public final class MainActivity extends Activity {
         finishSettingsRow(timing);
         content.addView(timing, fullParams(0,12,0,0));
 
-        LinearLayout startup = settingsSection("Cài đặt khởi động");
+        LinearLayout advanced = settingsSection("Cài đặt nâng cao");
+        LinearLayout startup = new LinearLayout(this); startup.setOrientation(LinearLayout.VERTICAL);
         addNumberField(startup, "Thời gian chờ ST (100 ms)", "delaySt");
         finishSettingsRow(startup);
         addNumberField(startup, "ST LED (100 ms)", "stLed");
         addNumberField(startup, "ST LCD (100 ms)", "stLcd");
         finishSettingsRow(startup);
-        content.addView(startup, fullParams(0,12,0,0));
+        addSettingsSubgroup(advanced,"Cài đặt khởi động",startup);
 
-        LinearLayout advanced = settingsSection("Cài đặt nâng cao");
         LinearLayout modes=new LinearLayout(this); modes.setOrientation(LinearLayout.VERTICAL);
         addChoiceField(modes, "Bắt đầu làm lạnh", "coolStart", choices("CL",0,"OP",1));
         addChoiceField(modes, "Bắt đầu xả đá", "defrostStart", choices("CL",0,"OP",1));
@@ -1762,7 +1762,7 @@ public final class MainActivity extends Activity {
         pinEnable.setOnCheckedChangeListener((buttonView, isChecked) -> syncPinControls());
         addHelp(pin, "Chỉ các mục được người quản lý cấp quyền mới có thể chỉnh sửa.");
         content.addView(pin, fullParams(0, 12, 0, 0));
-        for (LinearLayout section : new LinearLayout[]{timing, startup, advanced, ranges, pin}) {
+        for (LinearLayout section : new LinearLayout[]{timing, advanced, ranges, pin}) {
             if (!hasSettingControls(section)) section.setVisibility(View.GONE);
         }
         applyRuntimeConfigToViews();

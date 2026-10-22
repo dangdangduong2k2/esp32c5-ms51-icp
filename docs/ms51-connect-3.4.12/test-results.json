@@ -1,0 +1,12 @@
+{
+  "version": "3.4.12",
+  "version_code": 46,
+  "apk_sha256": "35ecee85e946be5babf2de271f5472afb8beac74acd9d1284f343240373d1c7b",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed",
+    "android_test_build": "passed",
+    "instrumentation_run": false,
+    "hardware_reflashed": false
+  }
+}
