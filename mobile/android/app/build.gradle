@@ -10,8 +10,8 @@ android {
         applicationId 'vn.duong.ms51connect'
         minSdk 24
         targetSdk 35
-        versionCode 47
-        versionName '3.4.13'
+        versionCode 48
+        versionName '3.4.14'
         testInstrumentationRunner 'vn.duong.ms51control.CloudIntegrationTestRunner'
     }
 

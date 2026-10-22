@@ -1,0 +1,11 @@
+{
+  "version": "3.4.14",
+  "version_code": 48,
+  "apk_sha256": "6f524ce9090a6d0a853784969b8851adb392d9341077bb8d4cbfece5eff83acf",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed",
+    "phone_tested": false,
+    "hardware_reflashed": false
+  }
+}

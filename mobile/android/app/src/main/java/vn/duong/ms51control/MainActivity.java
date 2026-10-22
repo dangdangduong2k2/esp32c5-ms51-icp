@@ -1707,7 +1707,7 @@ public final class MainActivity extends Activity {
         addChoiceField(modes, "Chế độ HDF", "hdf", choices("Tắt",0,"Bật",1));
         addNumberField(modes, "Trễ bật xả đá", "delayDf");
         finishSettingsRow(modes);
-        addChoiceField(modes, "Tỷ lệ thời gian Nguồn / Khởi động", "onTime", choices("R1:1  R2:1",0,"R1:2  R2:1",1,"R1:1  R2:2",2,"R1:2  R2:2",3));
+        addChoiceField(modes, "Số lần bật nguồn và khởi động", "onTime", choices("Nguồn: 1 lần · Khởi động: 1 lần",0,"Nguồn: 2 lần · Khởi động: 1 lần",1,"Nguồn: 1 lần · Khởi động: 2 lần",2,"Nguồn: 2 lần · Khởi động: 2 lần",3));
         addSettingsSubgroup(advanced,"Chu trình",modes);
 
         LinearLayout hcf=new LinearLayout(this); hcf.setOrientation(LinearLayout.VERTICAL);
