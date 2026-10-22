@@ -5,7 +5,7 @@ function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.
 function icon(name) { const n = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); n.setAttribute('aria-hidden', 'true'); const u = document.createElementNS(n.namespaceURI, 'use'); u.setAttribute('href', '#i-' + name); n.append(u); return n; }
 function button(text, cls, action) { const n = el('button', cls, text); n.type = 'button'; n.addEventListener('click', action); return n; }
 function message(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(message.timer); message.timer = setTimeout(() => $('toast').hidden = true, 5000); }
-function showLogin() { state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
+function showLogin() { ++accessEpoch; accessTarget=null; accessLoading=false; optionsLoading=false; policyLoaded=false; optionsRevision=null; state.pending=false; state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
 async function api(path, body) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), path.endsWith("/options") ? 45000 : 15000);
   try {
@@ -126,8 +126,20 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 api('session').then(authenticated).catch(() => showLogin());
 
 let accessTarget = null, accessEpoch = 0, optionsRevision = null;
-function accessBusy(busy) { state.pending=busy; $('access-dialog').querySelectorAll('button,input').forEach(n=>n.disabled=busy); for(const id of ['option-show-st','option-op-seconds','save-options']) $(id).disabled=busy || optionsRevision===null; }
-function closeAccess() { if (state.pending) return; ++accessEpoch; accessTarget=null; $('access-dialog').close(); $('permission-fields').replaceChildren(); $('firmware-hex').value=''; }
+let accessLoading=false, optionsLoading=false, policyLoaded=false;
+function accessBusy(busy) {
+    state.pending=busy;
+    const loading=accessLoading||optionsLoading;
+    $('access-dialog').querySelectorAll('button,input').forEach(n=>n.disabled=busy||loading);
+    $('close-access').disabled=busy;
+    for(const id of ['show-all','hide-all','save-policy']) $(id).disabled=busy||loading||!policyLoaded;
+    for(const id of ['option-show-st','option-op-seconds','save-options']) $(id).disabled=busy||loading||optionsRevision===null;
+}
+function closeAccess() {
+    if(state.pending)return;
+    ++accessEpoch;accessTarget=null;accessLoading=false;optionsLoading=false;policyLoaded=false;optionsRevision=null;
+    $('access-dialog').close();$('permission-fields').replaceChildren();$('firmware-hex').value='';
+}
 $('close-access').onclick=closeAccess;
 $('access-dialog').addEventListener('cancel',e=>{ e.preventDefault(); closeAccess(); });
 function updateVisibleCount() { $('visible-count').textContent=$('permission-fields').querySelectorAll('input:checked').length+' / '+$('permission-fields').querySelectorAll('input').length+' mục được hiện'; }
@@ -143,15 +155,18 @@ function showAssigned(firmware,job) {
 async function openAccess(uid,device) {
     if (state.pending) return;
     const epoch=++accessEpoch;
-    accessTarget={uid,device:device.id,revision:0}; optionsRevision=null;
-    $('option-show-st').checked=false; $('option-op-seconds').checked=false; $('options-status').textContent='Chưa đọc giá trị từ mạch.';
+    accessTarget={uid,device:device.id,revision:0}; optionsRevision=null;policyLoaded=false;accessLoading=true;optionsLoading=true;
+    for(const id of ['option-show-st','option-op-seconds']) { $(id).checked=false;$(id).indeterminate=true; }
+    $('options-status').textContent='Đang đọc giá trị từ mạch…';$('permission-status').textContent='Đang tải quyền đã cấp…';
     $('access-device-name').textContent=device.name+' · '+device.id;
     $('access-error').textContent=''; $('permission-fields').replaceChildren(el('p','','Đang tải quyền…'));
     $('assigned-firmware').replaceChildren(); $('firmware-hex').value='';
-    $('access-dialog').showModal(); accessBusy(true);
+    $('access-dialog').showModal(); accessBusy(false);
+    const optionsRead=readDeviceOptions({...accessTarget},epoch);
     try {
         const data=await api(`users/${uid}/devices/${device.id}/access`);
         if (epoch!==accessEpoch || !state.csrf) return;
+        if(!Array.isArray(data.visible)||!data.catalog||!Number.isInteger(data.revision))throw new Error('Dữ liệu quyền chưa hợp lệ. Đóng rồi mở lại để tải.');
         accessTarget.revision=data.revision;
         const groups={timing:'Thời gian hoạt động',modes:'Chế độ và hiển thị',ranges:'Giới hạn Min / Max',pin:'Mật khẩu bảo vệ'};
         const visible=new Set(data.visible); $('permission-fields').replaceChildren();
@@ -164,14 +179,16 @@ async function openAccess(uid,device) {
             }
             $('permission-fields').append(box);
         }
-        updateVisibleCount();showAssigned(data.firmware,data.job);
-    } catch(e) { $('access-error').textContent=e.message; $('permission-fields').replaceChildren(); }
-    finally { accessBusy(false); $('save-policy').disabled=$('permission-fields').querySelectorAll('input').length===0; }
+        policyLoaded=true;updateVisibleCount();showAssigned(data.firmware,data.job);
+        $('permission-status').textContent='Đã tải quyền đang lưu trên máy chủ · '+new Date().toLocaleTimeString('vi-VN');
+    } catch(e) { if(epoch===accessEpoch&&state.csrf){$('access-error').textContent=e.message; $('permission-fields').replaceChildren();$('permission-status').textContent='Chưa tải được quyền. Đóng rồi mở lại để thử lại.';} }
+    finally { if(epoch===accessEpoch){accessLoading=false;accessBusy(state.pending);} }
+    await optionsRead;
 }
 $('show-all').onclick=()=>{ $('permission-fields').querySelectorAll('input').forEach(n=>n.checked=true);updateVisibleCount(); };
 $('hide-all').onclick=()=>{ $('permission-fields').querySelectorAll('input').forEach(n=>n.checked=false);updateVisibleCount(); };
 $('policy-form').onsubmit=async e=>{
-    e.preventDefault(); if(state.pending||!accessTarget) return;
+    e.preventDefault(); if(state.pending||accessLoading||optionsLoading||!policyLoaded||!accessTarget) return;
     const target={...accessTarget};accessBusy(true);$('access-error').textContent='';
     try {
         const visible=[...$('permission-fields').querySelectorAll('input:checked')].map(n=>n.value);
@@ -197,17 +214,26 @@ $('revoke-firmware').onclick=async()=>{
     catch(e){$('access-error').textContent=e.message;}finally{accessBusy(false);}
 };
 
-$('read-options').onclick=async()=>{
-    if(state.pending||!accessTarget)return;
-    const target={...accessTarget},epoch=accessEpoch; optionsRevision=null;accessBusy(true);
-    $('options-status').textContent='Đang đọc từ mạch…';
+async function readDeviceOptions(target,epoch) {
+    optionsRevision=null;optionsLoading=true;accessBusy(state.pending);
+    for(const id of ['option-show-st','option-op-seconds']) $(id).indeterminate=true;
+    $('options-status').textContent='Đang đọc giá trị từ mạch…';
     try{
         const data=await api(`users/${target.uid}/devices/${target.device}/options`);
         if(epoch!==accessEpoch||!state.csrf)return;
+        if(!data.values||![0,1].includes(data.values.showSt)||![0,1].includes(data.values.defrostOpSeconds)||!/^[a-f0-9]{64}$/.test(data.revision))
+            throw new Error('Giá trị trả về từ mạch chưa hợp lệ.');
         $('option-show-st').checked=data.values.showSt===1;
         $('option-op-seconds').checked=data.values.defrostOpSeconds===1;
-        optionsRevision=data.revision; $('options-status').textContent='Đã đọc giá trị đang dùng trên mạch.';
-    }catch(e){$('options-status').textContent=e.message;}finally{accessBusy(false);}
+        for(const id of ['option-show-st','option-op-seconds']) $(id).indeterminate=false;
+        optionsRevision=data.revision;
+        $('options-status').textContent='Đã đọc giá trị đang dùng trên mạch · '+new Date().toLocaleTimeString('vi-VN');
+    }catch(e){if(epoch===accessEpoch&&state.csrf)$('options-status').textContent='Chưa đọc được từ mạch. '+e.message+' Bấm Đọc lại từ mạch để thử lại.';}
+    finally{if(epoch===accessEpoch){optionsLoading=false;accessBusy(state.pending);}}
+}
+$('read-options').onclick=async()=>{
+    if(state.pending||accessLoading||optionsLoading||!accessTarget)return;
+    await readDeviceOptions({...accessTarget},accessEpoch);
 };
 $('options-form').onsubmit=async e=>{
     e.preventDefault();if(state.pending||!accessTarget||optionsRevision===null)return;
