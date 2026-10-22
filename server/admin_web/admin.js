@@ -7,7 +7,7 @@ function button(text, cls, action) { const n = el('button', cls, text); n.type =
 function message(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(message.timer); message.timer = setTimeout(() => $('toast').hidden = true, 5000); }
 function showLogin() { state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
 async function api(path, body) {
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 15000);
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), path.endsWith("/options") ? 45000 : 15000);
   try {
     const response = await fetch('api/' + path, {method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: body === undefined ? {} : {'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf}, body: body === undefined ? undefined : JSON.stringify(body)});
     let data; try { data = await response.json(); } catch { throw new Error('Máy chủ trả về dữ liệu chưa hợp lệ. Hãy thử lại.'); }
@@ -125,8 +125,8 @@ setInterval(() => { if (!document.hidden && !$('edit-dialog').open && !$('access
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 api('session').then(authenticated).catch(() => showLogin());
 
-let accessTarget = null, accessEpoch = 0;
-function accessBusy(busy) { state.pending=busy; $('access-dialog').querySelectorAll('button,input').forEach(n=>n.disabled=busy); }
+let accessTarget = null, accessEpoch = 0, optionsRevision = null;
+function accessBusy(busy) { state.pending=busy; $('access-dialog').querySelectorAll('button,input').forEach(n=>n.disabled=busy); for(const id of ['option-show-st','option-op-seconds','save-options']) $(id).disabled=busy || optionsRevision===null; }
 function closeAccess() { if (state.pending) return; ++accessEpoch; accessTarget=null; $('access-dialog').close(); $('permission-fields').replaceChildren(); $('firmware-hex').value=''; }
 $('close-access').onclick=closeAccess;
 $('access-dialog').addEventListener('cancel',e=>{ e.preventDefault(); closeAccess(); });
@@ -143,7 +143,8 @@ function showAssigned(firmware,job) {
 async function openAccess(uid,device) {
     if (state.pending) return;
     const epoch=++accessEpoch;
-    accessTarget={uid,device:device.id,revision:0};
+    accessTarget={uid,device:device.id,revision:0}; optionsRevision=null;
+    $('option-show-st').checked=false; $('option-op-seconds').checked=false; $('options-status').textContent='Chưa đọc giá trị từ mạch.';
     $('access-device-name').textContent=device.name+' · '+device.id;
     $('access-error').textContent=''; $('permission-fields').replaceChildren(el('p','','Đang tải quyền…'));
     $('assigned-firmware').replaceChildren(); $('firmware-hex').value='';
@@ -194,4 +195,28 @@ $('revoke-firmware').onclick=async()=>{
     const target={...accessTarget};accessBusy(true);$('access-error').textContent='';
     try{await api(`users/${target.uid}/devices/${target.device}/firmware/revoke`,{});showAssigned(null,null);message('Đã gỡ bản cập nhật.');}
     catch(e){$('access-error').textContent=e.message;}finally{accessBusy(false);}
+};
+
+$('read-options').onclick=async()=>{
+    if(state.pending||!accessTarget)return;
+    const target={...accessTarget},epoch=accessEpoch; optionsRevision=null;accessBusy(true);
+    $('options-status').textContent='Đang đọc từ mạch…';
+    try{
+        const data=await api(`users/${target.uid}/devices/${target.device}/options`);
+        if(epoch!==accessEpoch||!state.csrf)return;
+        $('option-show-st').checked=data.values.showSt===1;
+        $('option-op-seconds').checked=data.values.defrostOpSeconds===1;
+        optionsRevision=data.revision; $('options-status').textContent='Đã đọc giá trị đang dùng trên mạch.';
+    }catch(e){$('options-status').textContent=e.message;}finally{accessBusy(false);}
+};
+$('options-form').onsubmit=async e=>{
+    e.preventDefault();if(state.pending||!accessTarget||optionsRevision===null)return;
+    const target={...accessTarget}, revision=optionsRevision;
+    const values={showSt:$('option-show-st').checked?1:0,defrostOpSeconds:$('option-op-seconds').checked?1:0};
+    accessBusy(true);$('options-status').textContent='Đang lưu xuống mạch…';
+    try{
+        const data=await api(`users/${target.uid}/devices/${target.device}/options`,{values,revision});
+        $('options-status').textContent=data.changed?'Mạch đã xác nhận lưu và đang khởi động lại.':'Giá trị không thay đổi.';
+    }catch(e){$('options-status').textContent='Chưa xác nhận lưu. '+e.message+' Đọc lại từ mạch trước khi thử lại.';}
+    finally{optionsRevision=null;accessBusy(false);}
 };

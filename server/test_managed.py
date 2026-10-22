@@ -110,6 +110,47 @@ class ManagedTests(AdminTests):
             with core.lock:
                 core.db.execute("DELETE FROM update_jobs WHERE id='job-trigger'");core.db.commit()
 
+    def test_admin_options_write_and_mobile_isolation(self):
+        raw=bytearray(217); raw[0]=2
+        def fake(row,uid,rid,method,path,body,lease=None):
+            if method=='GET': return {'ok':True,'data':raw.hex()}
+            raw[:]=bytes.fromhex(body['data']);return {'ok':True}
+        with patch.object(core.bridge,'call',side_effect=fake) as calls:
+            data=self.client.get(ADMIN+'/options').json()
+            self.assertEqual(data['values'],{'showSt':0,'defrostOpSeconds':0})
+            result=self.client.post(ADMIN+'/options',json={'values':{'showSt':1,'defrostOpSeconds':1},'revision':data['revision']},headers=self.headers)
+            self.assertEqual(result.status_code,200,result.text)
+            expected=bytearray(217);expected[0]=2
+            for key in ('showSt','defrostOpSeconds'):expected[CATALOG[key]['offset']]=1
+            self.assertEqual(raw,expected)
+            self.assertNotIn(DEVICE,core.managed_locks)
+            self.assertEqual(self.client.post(ADMIN+'/options',json={'values':data['values'],'revision':data['revision']},headers=self.headers).status_code,409)
+            current=self.client.get(ADMIN+'/options').json()
+            calls.reset_mock()
+            result=self.client.post(ADMIN+'/options',json={'values':current['values'],'revision':current['revision']},headers=self.headers)
+            self.assertFalse(result.json()['changed']);self.assertEqual(calls.call_count,1)
+            rev=self.set_policy(['coolCl','showSt','defrostOpSeconds'])
+            for key in ('showSt','defrostOpSeconds'):
+                self.assertEqual(self.client.post(MOBILE+'/settings',json={'values':{key:0},'revision':rev},headers=self.mobile_headers).status_code,403)
+            current['values']['showSt']=True
+            self.assertEqual(self.client.post(ADMIN+'/options',json=current,headers=self.headers).status_code,400)
+
+    def test_admin_options_auth_csrf_busy_and_failures(self):
+        body={'values':{'showSt':1,'defrostOpSeconds':1},'revision':'0'*64}
+        with patch.object(core.bridge,'call') as call:
+            self.assertEqual(self.client.post(ADMIN+'/options',json=body).status_code,403)
+            self.assertEqual(self.client.get(ADMIN.replace('u1','u2')+'/options').status_code,404)
+            core.managed_locks[DEVICE]='active-job'
+            self.assertEqual(self.client.get(ADMIN+'/options').status_code,409)
+            core.managed_locks.clear();call.assert_not_called()
+            self.client.cookies.clear()
+            self.assertEqual(self.client.get(ADMIN+'/options',headers=self.mobile_headers).status_code,401)
+        self.auth()
+        for result in ({'ok':True,'data':'bad'},{'ok':False,'message':'offline'}):
+            with patch.object(core.bridge,'call',return_value=result):
+                self.assertEqual(self.client.get(ADMIN+'/options').status_code,502)
+                self.assertNotIn(DEVICE,core.managed_locks)
+
     def set_policy(self, visible):
         rev = self.client.get(ADMIN + '/access').json()['revision']
         r = self.client.post(ADMIN + '/access', json={'visible': visible, 'revision': rev}, headers=self.headers)
@@ -123,8 +164,8 @@ class ManagedTests(AdminTests):
 
     def test_policy_validation_and_stale_admin(self):
         data = self.client.get(ADMIN + '/access').json()
-        self.assertEqual(len(data['catalog']), 46)
-        self.assertEqual(len(data['visible']), 46)
+        self.assertEqual(len(data['catalog']), 44)
+        self.assertEqual(len(data['visible']), 44)
         rev = self.set_policy(['coolCl', 'rangeCoolClMin'])
         mobile = self.client.get(MOBILE+'/access', headers=self.mobile_headers).json()
         self.assertEqual(mobile['visible'], ['coolCl','rangeCoolClMin'])
@@ -152,13 +193,13 @@ class ManagedTests(AdminTests):
                                      headers=self.mobile_headers)
                 self.assertEqual(r.status_code, 403)
                 call.assert_not_called()
-        self.assertIn('showSt', initial['catalog'])
-        self.assertIn('defrostOpSeconds', initial['catalog'])
+        self.assertNotIn('showSt', initial['catalog'])
+        self.assertNotIn('defrostOpSeconds', initial['catalog'])
 
     def test_mode_permission_migration_preserves_parent_choices_and_is_idempotent(self):
         with core.lock:
             core.db.execute('INSERT INTO device_policies VALUES(?,?,7)',
-                            (DEVICE, '["df","showDf","showEnd","displayMode","pinEnable"]'))
+                            (DEVICE, '["df","showDf","showEnd","displayMode","pinEnable","showSt","defrostOpSeconds"]'))
             migrate_mode_permissions(core.db)
             core.db.commit()
         data = self.client.get(ADMIN+'/access').json()

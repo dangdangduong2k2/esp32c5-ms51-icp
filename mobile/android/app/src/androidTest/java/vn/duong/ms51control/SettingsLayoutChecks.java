@@ -30,8 +30,11 @@ final class SettingsLayoutChecks {
         View timing=page.getChildAt(1), advanced=page.getChildAt(2);
         HashSet<String> actual=new HashSet<>();
         for(Map.Entry<String,EditText> field:numbers.entrySet()) if(inside(field.getValue(),timing)) actual.add(field.getKey());
-        ManagedChecks.check(actual.equals(new HashSet<>(Arrays.asList("coolCl","coolOp","defrostCl","defrostOp","delaySt","stLed","stLcd"))),"Timing contains exactly seven requested parameters");
+        ManagedChecks.check(actual.equals(new HashSet<>(Arrays.asList("coolCl","coolOp","defrostCl","defrostOp"))),"Timing contains exactly four cycle parameters");
         ManagedChecks.check(inside(numbers.get("hcfTime"),advanced) && inside(numbers.get("tryTime"),advanced),"Other timing fields are in advanced settings");
+        for(String key:Arrays.asList("delaySt","stLed","stLcd")) ManagedChecks.check(inside(numbers.get(key),advanced),"ST timing belongs in advanced: "+key);
+        java.lang.reflect.Method visible=MainActivity.class.getDeclaredMethod("settingVisible",String.class);visible.setAccessible(true);
+        for(String key:Arrays.asList("showSt","defrostOpSeconds")) ManagedChecks.check(Boolean.FALSE.equals(visible.invoke(a,key)),"Admin-only option stays hidden even with old policy: "+key);
         if(a.getResources().getConfiguration().screenWidthDp>=340 && a.getResources().getConfiguration().fontScale<1.3f) {
             for(String[] pair:new String[][]{{"coolCl","coolOp"},{"defrostCl","defrostOp"},{"stLed","stLcd"},{"rangeCoolClMin","rangeCoolClMax"}})
                 ManagedChecks.check(row(numbers.get(pair[0]))==row(numbers.get(pair[1])),"Related settings share a row: "+pair[0]);

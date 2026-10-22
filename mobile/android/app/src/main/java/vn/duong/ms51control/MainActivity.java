@@ -1686,10 +1686,6 @@ public final class MainActivity extends Activity {
         addNumberField(timing, "Xả đá CL (phút)", "defrostCl");
         addNumberField(timing, "Xả đá OP (phút / giây)", "defrostOp");
         finishSettingsRow(timing);
-        addNumberField(timing, "Thời gian chờ ST (100 ms)", "delaySt");
-        finishSettingsRow(timing);
-        addNumberField(timing, "ST LED (100 ms)", "stLed");
-        addNumberField(timing, "ST LCD (100 ms)", "stLcd");
         content.addView(timing, fullParams(0,12,0,0));
 
         LinearLayout advanced = settingsSection("Cài đặt nâng cao");
@@ -1703,7 +1699,6 @@ public final class MainActivity extends Activity {
         addChoiceField(modes, "Chế độ HDF", "hdf", choices("Tắt",0,"Bật",1));
         addNumberField(modes, "Trễ bật xả đá", "delayDf");
         finishSettingsRow(modes);
-        addChoiceField(modes, "Xả đá OP tính giây", "defrostOpSeconds", choices("Tắt",0,"Bật",1));
         addChoiceField(modes, "Tỷ lệ thời gian Nguồn / Khởi động", "onTime", choices("R1:1  R2:1",0,"R1:2  R2:1",1,"R1:1  R2:2",2,"R1:2  R2:2",3));
         addSettingsSubgroup(advanced,"Chu trình",modes);
 
@@ -1714,7 +1709,11 @@ public final class MainActivity extends Activity {
 
         LinearLayout display=new LinearLayout(this); display.setOrientation(LinearLayout.VERTICAL);
         addChoiceField(display,"Kiểu màn hình","displayMode",choices("LCD",0,"LED",1));
-        addChoiceField(display,"Hiện ST LED","showSt",choices("Tắt",0,"Bật",1));
+        finishSettingsRow(display);
+        addNumberField(display, "Thời gian chờ ST (100 ms)", "delaySt");
+        finishSettingsRow(display);
+        addNumberField(display, "ST LED (100 ms)", "stLed");
+        addNumberField(display, "ST LCD (100 ms)", "stLcd");
         finishSettingsRow(display);
         addNumberField(display,"Độ sáng LED đỏ","redBrightness");
         addNumberField(display,"Độ sáng LED xanh","greenBrightness");
@@ -2012,6 +2011,7 @@ public final class MainActivity extends Activity {
     // -------------------------------------------------------------------------
 
     private boolean settingVisible(String key) {
+        if ("showSt".equals(key) || "defrostOpSeconds".equals(key)) return false;
         if (demoMode) return true;
         JSONArray visible = deviceAccess.optJSONArray("visible");
         if (visible != null) for (int i=0;i<visible.length();i++) if (key.equals(visible.optString(i))) return true;

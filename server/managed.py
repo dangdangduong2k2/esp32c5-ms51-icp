@@ -19,7 +19,9 @@ MODE_DISPLAY_FIELDS = {
     'showDf': 'df', 'showEnd': 'end', 'showSl': 'displayMode',
     'showHcf': 'hcfMode', 'showHdf': 'hdf',
 }
-ACCESS_CATALOG = {key: spec for key, spec in CATALOG.items() if key not in MODE_DISPLAY_FIELDS}
+ADMIN_ONLY_FIELDS = {'showSt', 'defrostOpSeconds'}
+ACCESS_CATALOG = {key: spec for key, spec in CATALOG.items()
+                  if key not in MODE_DISPLAY_FIELDS and key not in ADMIN_ONLY_FIELDS}
 
 
 def visible_settings(keys):
@@ -119,6 +121,11 @@ class SettingsEdit(BaseModel):
     revision: int = Field(ge=0)
 
 
+class AdminOptionsEdit(BaseModel):
+    values: dict = Field(min_length=2, max_length=2)
+    revision: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
 class UpdateStart(BaseModel):
     id: str = Field(pattern=r'^[a-f0-9]{32}$')
     release: str = Field(pattern=r'^[a-f0-9]{32}$')
@@ -172,6 +179,60 @@ def install(app, core, admin_identity, audit):
         who = admin_identity(request, mutation)
         core.device_for(uid, device)
         return who
+
+    def read_options(row, uid, lease):
+        result = call(row, uid, lease, 'GET', '/api/runtime-config')
+        encoded = result.get('data')
+        if not isinstance(encoded, str) or not re.fullmatch(r'[0-9a-fA-F]{434}', encoded):
+            core.fail(502, 'Cấu hình bộ điều khiển chưa hợp lệ.')
+        raw = bytearray.fromhex(encoded)
+        if raw[0] != 2:
+            core.fail(502, 'Phiên bản cấu hình chưa được hỗ trợ.')
+        values = {k: int.from_bytes(raw[CATALOG[k]['offset']:CATALOG[k]['offset']+CATALOG[k]['size']], 'big')
+                  for k in sorted(ADMIN_ONLY_FIELDS)}
+        if any(v not in (0, 1) for v in values.values()):
+            core.fail(502, 'Giá trị tùy chọn trên mạch chưa hợp lệ.')
+        revision = hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
+        return raw, values, revision
+
+    @app.get('/admin/api/users/{uid}/devices/{device}/options')
+    def admin_options(uid: str, device: str, request: Request):
+        admin_device(uid, device, request)
+        row = core.device_for(uid, device)
+        lease = secrets.token_hex(16)
+        acquire(row, uid, lease)
+        try:
+            _, values, revision = read_options(row, uid, lease)
+            return {'ok': True, 'values': values, 'revision': revision}
+        finally:
+            release_lock(device, lease)
+
+    @app.post('/admin/api/users/{uid}/devices/{device}/options')
+    def save_admin_options(uid: str, device: str, data: AdminOptionsEdit, request: Request):
+        who = admin_device(uid, device, request, True)
+        core.limited(request, 'admin-options', 15)
+        if set(data.values) != ADMIN_ONLY_FIELDS or any(type(v) is not int or v not in (0, 1) for v in data.values.values()):
+            core.fail(400, 'Chỉ được chọn Bật hoặc Tắt cho hai tùy chọn.')
+        row = core.device_for(uid, device)
+        lease = secrets.token_hex(16)
+        acquire(row, uid, lease)
+        try:
+            raw, values, revision = read_options(row, uid, lease)
+            if revision != data.revision:
+                core.fail(409, 'Tùy chọn trên mạch đã thay đổi. Đọc lại trước khi lưu.')
+            if values == data.values:
+                return {'ok': True, 'changed': False}
+            for key, value in data.values.items():
+                spec = CATALOG[key]
+                raw[spec['offset']:spec['offset']+spec['size']] = value.to_bytes(spec['size'], 'big')
+            prepare_pin_for_write(raw)
+            call(row, uid, lease, 'POST', '/api/runtime-config', {'data': raw.hex().upper()})
+            with lock:
+                audit(who['username'], 'device.options', device)
+                db.commit()
+            return {'ok': True, 'changed': True}
+        finally:
+            release_lock(device, lease)
 
     @app.get('/admin/api/users/{uid}/devices/{device}/access')
     def admin_access(uid: str, device: str, request: Request):

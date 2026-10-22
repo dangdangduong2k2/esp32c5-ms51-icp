@@ -1,0 +1,22 @@
+{
+  "version": "3.4.10",
+  "version_code": 44,
+  "apk_sha256": "3e6c6ad8f8d8648d237cb9f6551f210d7c4c8e002fad2a6e9295a269c9a152fa",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed",
+    "android_test_build": "passed; instrumentation not run (no emulator attached)",
+    "server_tests": "35 passed",
+    "javascript_syntax": "passed",
+    "signing_certificate_matches_previous": true,
+    "deployed_health": {
+      "ok": true,
+      "mqtt": true,
+      "protocol": 1
+    },
+    "deployed_options_ui_verified": true,
+    "anonymous_options_access_denied": true,
+    "live_device_options_write_tested": false,
+    "hardware_reflashed": false
+  }
+}
