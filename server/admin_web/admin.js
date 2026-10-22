@@ -5,7 +5,7 @@ function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.
 function icon(name) { const n = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); n.setAttribute('aria-hidden', 'true'); const u = document.createElementNS(n.namespaceURI, 'use'); u.setAttribute('href', '#i-' + name); n.append(u); return n; }
 function button(text, cls, action) { const n = el('button', cls, text); n.type = 'button'; n.addEventListener('click', action); return n; }
 function message(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(message.timer); message.timer = setTimeout(() => $('toast').hidden = true, 5000); }
-function showLogin() { ++accessEpoch; accessTarget=null; accessLoading=false; optionsLoading=false; policyLoaded=false; optionsRevision=null; state.pending=false; state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
+function showLogin() { ++accessEpoch; accessTarget=null; accessLoading=false; optionsLoading=false; policyLoaded=false; optionsRevision=null; state.pending=false; state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); parkOptions(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
 async function api(path, body) {
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), path.endsWith("/options") ? 45000 : 15000);
   try {
@@ -138,11 +138,11 @@ function accessBusy(busy) {
 function closeAccess() {
     if(state.pending)return;
     ++accessEpoch;accessTarget=null;accessLoading=false;optionsLoading=false;policyLoaded=false;optionsRevision=null;
-    $('access-dialog').close();$('permission-fields').replaceChildren();$('firmware-hex').value='';
+    $('access-dialog').close();parkOptions(); $('permission-fields').replaceChildren();$('firmware-hex').value='';
 }
 $('close-access').onclick=closeAccess;
 $('access-dialog').addEventListener('cancel',e=>{ e.preventDefault(); closeAccess(); });
-function updateVisibleCount() { $('visible-count').textContent=$('permission-fields').querySelectorAll('input:checked').length+' / '+$('permission-fields').querySelectorAll('input').length+' mục được hiện'; }
+function updateVisibleCount() { $('visible-count').textContent=$('permission-fields').querySelectorAll('input[data-permission]:checked').length+' / '+$('permission-fields').querySelectorAll('input[data-permission]').length+' mục được hiện'; }
 function showAssigned(firmware,job) {
     $('assigned-firmware').replaceChildren();
     if (firmware) {
@@ -152,6 +152,51 @@ function showAssigned(firmware,job) {
     if (job && firmware && job.release===firmware.id) $('assigned-firmware').append(el('p','',job.message));
     $('revoke-firmware').hidden=!firmware;
 }
+function parkOptions() {
+    for(const id of ['option-show-st','option-op-seconds']) {
+        const input=$(id);if(input)$('options-staging').append(input.closest('label'));
+    }
+}
+function renderPermissionGroups(data) {
+    parkOptions();$('permission-fields').replaceChildren();
+    const visible=new Set(data.visible), rendered=new Set();
+    function fields(parent,keys) {
+        for(const key of keys) {
+            if(key==='showSt'||key==='defrostOpSeconds') {
+                parent.append($(key==='showSt'?'option-show-st':'option-op-seconds').closest('label'));
+                continue;
+            }
+            const field=data.catalog[key];if(!field)continue;
+            rendered.add(key);
+            const label=el('label','permission-toggle'), input=el('input');
+            input.type='checkbox';input.value=key;input.dataset.permission='true';
+            input.checked=visible.has(key);input.onchange=updateVisibleCount;
+            label.append(input,el('span','',key==='onTime'?'Số lần bật nguồn và khởi động':field.label));
+            if(['delaySt','onTime','displayMode','pinEnable'].includes(key))label.classList.add('permission-wide');
+            parent.append(label);
+        }
+    }
+    function group(title,keys) {
+        const box=el('fieldset','permission-group');box.append(el('legend','',title));
+        fields(box,keys);$('permission-fields').append(box);return box;
+    }
+    group('Thời gian hoạt động',['coolCl','coolOp','defrostCl','defrostOp']);
+    const advanced=group('Cài đặt nâng cao',[]);advanced.classList.add('advanced-permissions');
+    for(const [title,keys] of [
+        ['Cài đặt khởi động',['delaySt','stLed','stLcd','showSt']],
+        ['Chu trình',['coolStart','defrostStart','df','end','hdf','delayDf','onTime','defrostOpSeconds']],
+        ['HCF',['hcfMode','hcfTime']],
+        ['Hiển thị và thao tác',['displayMode','redBrightness','greenBrightness','lockTime','touch']],
+        ['Thử lại',['tryTime','tryUnit']]
+    ]) {
+        const section=el('div','permission-subgroup');section.append(el('h4','',title));
+        fields(section,keys);advanced.append(section);
+    }
+    group('Giới hạn thời gian (Min / Max)',Object.keys(data.catalog).filter(k=>k.startsWith('range')));
+    group('Mật khẩu bảo vệ',['pinEnable','pinPassword','pinBackupPassword','pinPeriod','pinPeriodUnit','pinBackupPeriod','pinBackupPeriodUnit','pinWrongLimit','pinPeriodShow']);
+    const remaining=Object.keys(data.catalog).filter(k=>!rendered.has(k));
+    if(remaining.length)group('Cài đặt khác',remaining);
+}
 async function openAccess(uid,device) {
     if (state.pending) return;
     const epoch=++accessEpoch;
@@ -159,7 +204,7 @@ async function openAccess(uid,device) {
     for(const id of ['option-show-st','option-op-seconds']) { $(id).checked=false;$(id).indeterminate=true; }
     $('options-status').textContent='Đang đọc giá trị từ mạch…';$('permission-status').textContent='Đang tải quyền đã cấp…';
     $('access-device-name').textContent=device.name+' · '+device.id;
-    $('access-error').textContent=''; $('permission-fields').replaceChildren(el('p','','Đang tải quyền…'));
+    $('access-error').textContent=''; parkOptions(); $('permission-fields').replaceChildren(el('p','','Đang tải quyền…'));
     $('assigned-firmware').replaceChildren(); $('firmware-hex').value='';
     $('access-dialog').showModal(); accessBusy(false);
     const optionsRead=readDeviceOptions({...accessTarget},epoch);
@@ -168,30 +213,20 @@ async function openAccess(uid,device) {
         if (epoch!==accessEpoch || !state.csrf) return;
         if(!Array.isArray(data.visible)||!data.catalog||!Number.isInteger(data.revision))throw new Error('Dữ liệu quyền chưa hợp lệ. Đóng rồi mở lại để tải.');
         accessTarget.revision=data.revision;
-        const groups={timing:'Thời gian hoạt động',modes:'Chế độ và hiển thị',ranges:'Giới hạn Min / Max',pin:'Mật khẩu bảo vệ'};
-        const visible=new Set(data.visible); $('permission-fields').replaceChildren();
-        for (const [group,title] of Object.entries(groups)) {
-            const box=el('fieldset','permission-group'); box.append(el('legend','',title));
-            for (const [key,field] of Object.entries(data.catalog)) if(field.group===group) {
-                const label=el('label','permission-toggle'), input=el('input');
-                input.type='checkbox'; input.value=key; input.checked=visible.has(key); input.onchange=updateVisibleCount;
-                label.append(input,el('span','',field.label)); box.append(label);
-            }
-            $('permission-fields').append(box);
-        }
+        renderPermissionGroups(data);
         policyLoaded=true;updateVisibleCount();showAssigned(data.firmware,data.job);
         $('permission-status').textContent='Đã tải quyền đang lưu trên máy chủ · '+new Date().toLocaleTimeString('vi-VN');
-    } catch(e) { if(epoch===accessEpoch&&state.csrf){$('access-error').textContent=e.message; $('permission-fields').replaceChildren();$('permission-status').textContent='Chưa tải được quyền. Đóng rồi mở lại để thử lại.';} }
+    } catch(e) { if(epoch===accessEpoch&&state.csrf){$('access-error').textContent=e.message; parkOptions(); $('permission-fields').replaceChildren();$('permission-status').textContent='Chưa tải được quyền. Đóng rồi mở lại để thử lại.';} }
     finally { if(epoch===accessEpoch){accessLoading=false;accessBusy(state.pending);} }
     await optionsRead;
 }
-$('show-all').onclick=()=>{ $('permission-fields').querySelectorAll('input').forEach(n=>n.checked=true);updateVisibleCount(); };
-$('hide-all').onclick=()=>{ $('permission-fields').querySelectorAll('input').forEach(n=>n.checked=false);updateVisibleCount(); };
+$('show-all').onclick=()=>{ $('permission-fields').querySelectorAll('input[data-permission]').forEach(n=>n.checked=true);updateVisibleCount(); };
+$('hide-all').onclick=()=>{ $('permission-fields').querySelectorAll('input[data-permission]').forEach(n=>n.checked=false);updateVisibleCount(); };
 $('policy-form').onsubmit=async e=>{
     e.preventDefault(); if(state.pending||accessLoading||optionsLoading||!policyLoaded||!accessTarget) return;
     const target={...accessTarget};accessBusy(true);$('access-error').textContent='';
     try {
-        const visible=[...$('permission-fields').querySelectorAll('input:checked')].map(n=>n.value);
+        const visible=[...$('permission-fields').querySelectorAll('input[data-permission]:checked')].map(n=>n.value);
         const data=await api(`users/${target.uid}/devices/${target.device}/access`,{visible,revision:target.revision});
         accessTarget.revision=data.revision;message('Đã lưu quyền. App đang mở Cài đặt sẽ cập nhật trong khoảng 15 giây.');
     } catch(e) { $('access-error').textContent=e.message; } finally { accessBusy(false); }

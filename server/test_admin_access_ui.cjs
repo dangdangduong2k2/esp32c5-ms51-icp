@@ -6,10 +6,13 @@ const {chromium}=require('playwright');
  const page=await browser.newPage();
  const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'settings_catalog.json'),'utf8'));
  for(const key of ['showDf','showEnd','showSl','showHcf','showHdf','showSt','defrostOpSeconds'])delete catalog[key];
- let mode='ok',posts=0,reads=0,releaseOld;
+ let mode='ok',posts=0,reads=0,releaseOld,writes=[];
  await page.route('http://admin.test/**',async route=>{
   const req=route.request(),url=new URL(req.url());
-  if(req.method()!=='GET')posts++;
+  if(req.method()!=='GET'){
+   posts++;writes.push({path:url.pathname,body:req.postDataJSON()});
+   return route.fulfill({json:{ok:true,revision:7,changed:false}});
+  }
   if(url.pathname.includes('/api/')){
    if(url.pathname.endsWith('/session'))return route.fulfill({status:401,json:{message:'Sign in'}});
    if(url.pathname.endsWith('/access'))return route.fulfill(mode==='access-fail'?{status:500,json:{message:'Fixture policy unavailable'}}:{json:{ok:true,revision:6,visible:['coolCl','pinEnable'],catalog,firmware:null,job:null}});
@@ -30,12 +33,40 @@ const {chromium}=require('playwright');
  try{
   await page.goto('http://admin.test/');await page.waitForFunction(()=>document.getElementById('login').hidden===false);
   await open('device-a');
-  assert.equal(await page.locator('#permission-fields input:checked').count(),2);
+  assert.equal(await page.locator('#permission-fields input[data-permission]:checked').count(),2);
+  assert.deepEqual(await page.locator('#permission-fields > fieldset > legend').allTextContents(),['Thời gian hoạt động','Cài đặt nâng cao','Giới hạn thời gian (Min / Max)','Mật khẩu bảo vệ']);
+  assert.deepEqual((await page.locator('input[data-permission]').evaluateAll(ns=>ns.map(n=>n.value))).sort(),Object.keys(catalog).sort());
+  assert.equal(await page.locator('#option-show-st').evaluate(n=>n.closest('.permission-subgroup').querySelector('h4').textContent),'Cài đặt khởi động');
+  assert.equal(await page.locator('#option-op-seconds').evaluate(n=>n.closest('.permission-subgroup').querySelector('h4').textContent),'Chu trình');
+  assert.equal(await page.locator('#option-show-st').evaluate(n=>n.form.id),'options-form');
   assert.equal(await page.locator('#permission-fields input[value="coolCl"]').isChecked(),true);
   assert.equal(await page.locator('#permission-fields input[value="coolOp"]').isChecked(),false);
   assert.equal(await page.locator('#option-show-st').isChecked(),true);
   assert.equal(await page.locator('#option-op-seconds').isChecked(),false);
   assert.equal(await page.locator('#save-options').isEnabled(),true);assert.equal(reads,1);assert.equal(posts,0);
+  if(process.env.MS51_UI_PREVIEW){
+   fs.mkdirSync(process.env.MS51_UI_PREVIEW,{recursive:true});
+   await page.screenshot({path:path.join(process.env.MS51_UI_PREVIEW,'admin-desktop.png')});
+   await page.setViewportSize({width:390,height:844});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+   await page.screenshot({path:path.join(process.env.MS51_UI_PREVIEW,'admin-mobile.png')});
+   await page.setViewportSize({width:1280,height:720});
+  }
+  await page.locator('#show-all').click();
+  assert.equal(await page.locator('input[data-permission]:checked').count(),44);
+  assert.equal(await page.locator('#option-op-seconds').isChecked(),false);
+  await page.locator('#hide-all').click();
+  assert.equal(await page.locator('input[data-permission]:checked').count(),0);
+  assert.equal(await page.locator('#option-show-st').isChecked(),true);
+  await page.locator('input[value="coolCl"]').check();
+  await page.locator('#save-policy').click();await page.waitForFunction(()=>!state.pending);
+  assert.equal(writes.length,1);assert.match(writes[0].path,/\/access$/);
+  assert.deepEqual(writes[0].body.visible,['coolCl']);
+  await page.locator('#option-op-seconds').check();
+  await page.locator('#save-options').click();await page.waitForFunction(()=>!state.pending);
+  assert.equal(writes.length,2);assert.match(writes[1].path,/\/options$/);
+  assert.deepEqual(writes[1].body.values,{showSt:1,defrostOpSeconds:1});
+  posts=0;
   await close();mode='options-fail';await open('device-a');
   assert.equal(await page.locator('#save-policy').isEnabled(),true);
   assert.equal(await page.locator('#save-options').isDisabled(),true);
@@ -54,7 +85,9 @@ const {chromium}=require('playwright');
   assert.equal(await page.locator('#option-show-st').isChecked(),false);
   assert.equal(await page.locator('#option-op-seconds').isChecked(),true);
   assert.equal(await page.evaluate(()=>accessTarget.device),'device-b');
+  assert.equal(await page.locator('#option-show-st').count(),1);
+  assert.equal(await page.locator('#option-op-seconds').count(),1);
   assert.equal(posts,0);
-  console.log('PASS: saved permissions selected, automatic MCU GET, offline unknown state, failed policy stays unsaveable, manual retry, close while loading, late result isolation, zero writes.');
+  console.log('PASS: app grouping, all 44 permissions exactly once, integrated MCU options, independent bulk actions and save forms, automatic GET, offline/error handling, late result isolation, no implicit writes.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});
