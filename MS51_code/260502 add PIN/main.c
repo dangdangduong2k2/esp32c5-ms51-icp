@@ -1226,34 +1226,8 @@ void password_period_tick_reset(void)
 	password_day_tick = 0;
 }
 
-void program_PASSWORD_CHECK(void)
+static void password_submit_primary(void)
 {
-	if (!eData.pin_enable)
-	{
-		password_gate = 0;
-		password_change_enable = 0;
-		switch_program(IDLE);
-		return;
-	}
-	if (!program_init)
-	{
-		program_init = true;
-		password_para = 0;
-		password_wrong_count = 0;
-		setting_increase = 0;
-		adj_const = 1;
-		password_input_display_init("PiN");
-		display_set_enable(CL, 1);
-		display_set_enable(OP, 1);
-		lock = LOCK_OFF;
-		lock_timeout_refresh();
-	}
-	lock = LOCK_OFF;
-	lock_timeout_refresh();
-	password_adjust_update();
-	password_blink_update();
-	if (button_released(SET))
-	{
 		lock_timeout_refresh();
 		if (password_para == eData.pin_password)
 		{
@@ -1314,7 +1288,35 @@ void program_PASSWORD_CHECK(void)
 			password_input_display_init("PiN");
 			button_reset(btnTotal);
 		}
+}
+
+void program_PASSWORD_CHECK(void)
+{
+	if (!eData.pin_enable)
+	{
+		password_gate = 0;
+		password_change_enable = 0;
+		switch_program(IDLE);
+		return;
 	}
+	if (!program_init)
+	{
+		program_init = true;
+		password_para = 0;
+		password_wrong_count = 0;
+		setting_increase = 0;
+		adj_const = 1;
+		password_input_display_init("PiN");
+		display_set_enable(CL, 1);
+		display_set_enable(OP, 1);
+		lock = LOCK_OFF;
+		lock_timeout_refresh();
+	}
+	lock = LOCK_OFF;
+	lock_timeout_refresh();
+	password_adjust_update();
+	password_blink_update();
+	if (button_released(SET)) password_submit_primary();
 }
 
 void program_PASSWORD_CHANGE(void)
@@ -1393,6 +1395,32 @@ void program_PASSWORD_TIME_SETTING(void)
 	}
 }
 
+static void password_submit_backup(void)
+{
+		lock_timeout_refresh();
+		if (password_para == eData.pin_backup_password)
+		{
+			password_wrong_count = 0;
+			password_gate = 0;
+			password_change_enable = 0;
+			eData.pin_locked = 0;
+			eData.pin_backup_used = 1;
+			eData.pin_day_count = 0;
+			password_request_clear();
+			password_period_tick_reset();
+			AP_EEPROM_Commit();
+			password_display_yes();
+			switch_program(IDLE);
+		}
+		else
+		{
+			password_display_no();
+			password_para = 0;
+			password_input_display_init("bAc");
+			button_reset(btnTotal);
+		}
+}
+
 void program_PASSWORD_BACKUP(void)
 {
 	if (!eData.pin_enable)
@@ -1418,31 +1446,32 @@ void program_PASSWORD_BACKUP(void)
 	lock_timeout_refresh();
 	password_adjust_update();
 	password_blink_update();
-	if (button_released(SET))
-	{
-		lock_timeout_refresh();
-		if (password_para == eData.pin_backup_password)
-		{
-			password_wrong_count = 0;
-			password_gate = 0;
-			password_change_enable = 0;
-			eData.pin_locked = 0;
-			eData.pin_backup_used = 1;
-			eData.pin_day_count = 0;
-			password_request_clear();
-			password_period_tick_reset();
-			AP_EEPROM_Commit();
-			password_display_yes();
-			switch_program(IDLE);
-		}
-		else
-		{
-			password_display_no();
-			password_para = 0;
-			password_input_display_init("bAc");
-			button_reset(btnTotal);
-		}
-	}
+	if (button_released(SET)) password_submit_backup();
+}
+
+/* 0 none, 1 primary gate, 2 backup gate, 3 permanent lock. */
+uint8_t password_remote_state(void)
+{
+    if (!eData.pin_enable) return 0;
+    if (eData.pin_locked && eData.pin_backup_used) return 3;
+    if (program == PASSWORD_BACKUP && eData.pin_locked) return 2;
+    if (program == PASSWORD_CHECK && password_gate && !password_change_enable) return 1;
+    return 0;
+}
+
+/* Expected kind prevents a delayed primary attempt being used as a backup PIN. */
+uint8_t password_remote_unlock(uint8_t kind, uint16_t value)
+{
+    uint8_t current = password_remote_state();
+    uint8_t correct;
+    if (value > 999 || kind < 1 || kind > 2) return 2;
+    if (current == 3) return 6;
+    if (!current || current != kind || !program_init) return 5;
+    correct = value == (kind == 1 ? eData.pin_password : eData.pin_backup_password);
+    password_para = value;
+    button_reset(btnTotal);
+    if (kind == 1) password_submit_primary(); else password_submit_backup();
+    return correct ? 0 : 3;
 }
 
 void password_permanent_lock(void)

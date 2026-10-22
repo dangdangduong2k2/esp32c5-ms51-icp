@@ -29,6 +29,7 @@ static const char *TAG = "ms51_debug_uart";
 #define MS51_RUNTIME_COMMAND_SET 0x53u
 #define MS51_RUNTIME_COMMAND_THERMAL 0x55u
 #define MS51_RUNTIME_COMMAND_SAFETY 0x56u
+#define MS51_RUNTIME_COMMAND_UNLOCK 0x57u
 #define MS51_RUNTIME_COMMAND_TRIGGER 0x54u
 #define MS51_RUNTIME_COMMAND_MODE 0x4Du
 #define MS51_RUNTIME_REQUEST_MAX_SIZE (1u + 1u + 1u + 1u + MS51_RUNTIME_CONFIG_SIZE + 2u)
@@ -293,7 +294,7 @@ static bool process_runtime_response_byte_locked(uint8_t byte)
         return true;
 
     case MS51_RUNTIME_RX_COMMAND:
-        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET && byte != MS51_RUNTIME_COMMAND_MODE && byte != MS51_RUNTIME_COMMAND_TRIGGER && byte != MS51_RUNTIME_COMMAND_THERMAL && byte != MS51_RUNTIME_COMMAND_SAFETY) {
+        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET && byte != MS51_RUNTIME_COMMAND_MODE && byte != MS51_RUNTIME_COMMAND_TRIGGER && byte != MS51_RUNTIME_COMMAND_THERMAL && byte != MS51_RUNTIME_COMMAND_SAFETY && byte != MS51_RUNTIME_COMMAND_UNLOCK) {
             ++s_state.dropped_lines;
             reset_runtime_parser_locked();
             return true;
@@ -482,11 +483,12 @@ static esp_err_t runtime_config_request(uint8_t command, const uint8_t *payload,
         return ESP_ERR_INVALID_STATE;
     }
     if (((command == MS51_RUNTIME_COMMAND_THERMAL || command == MS51_RUNTIME_COMMAND_SAFETY) && (payload_length != 4u || payload[0] < 1u || payload[0] > 2u || payload[1] > 1u || payload[2] > 1u || payload[3] > 1u)) ||
+        (command == MS51_RUNTIME_COMMAND_UNLOCK && (payload_length != 3u || payload[0] < 1 || payload[0] > 2 || (((unsigned)payload[1] << 8) | payload[2]) > 999)) ||
         (command == MS51_RUNTIME_COMMAND_TRIGGER && (payload_length != 2u || payload[0] > 3u || payload[1] > 1u)) ||
         (command == MS51_RUNTIME_COMMAND_MODE && (payload_length != 1u || payload[0] > 1u)) ||
         (command == MS51_RUNTIME_COMMAND_GET && payload_length != 0u) ||
         (command == MS51_RUNTIME_COMMAND_SET && payload_length != MS51_RUNTIME_CONFIG_SIZE) ||
-        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET && command != MS51_RUNTIME_COMMAND_MODE && command != MS51_RUNTIME_COMMAND_TRIGGER && command != MS51_RUNTIME_COMMAND_THERMAL && command != MS51_RUNTIME_COMMAND_SAFETY)) {
+        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET && command != MS51_RUNTIME_COMMAND_MODE && command != MS51_RUNTIME_COMMAND_TRIGGER && command != MS51_RUNTIME_COMMAND_THERMAL && command != MS51_RUNTIME_COMMAND_SAFETY && command != MS51_RUNTIME_COMMAND_UNLOCK)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -747,4 +749,10 @@ esp_err_t ms51_debug_uart_set_safety(unsigned source, bool active, bool valid, b
 {
     uint8_t payload[]={source,active,valid,on};
     return runtime_config_request(MS51_RUNTIME_COMMAND_SAFETY,payload,sizeof(payload),NULL,status);
+}
+
+esp_err_t ms51_debug_uart_unlock(uint8_t kind, uint16_t pin, uint8_t *status)
+{
+    uint8_t payload[]={kind,(uint8_t)(pin>>8),(uint8_t)pin};
+    return runtime_config_request(MS51_RUNTIME_COMMAND_UNLOCK,payload,sizeof(payload),NULL,status);
 }

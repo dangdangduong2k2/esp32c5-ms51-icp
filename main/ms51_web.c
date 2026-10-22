@@ -1181,6 +1181,32 @@ static esp_err_t trigger_handler(httpd_req_t *request)
     return send_json(request,"{\"ok\":true}",NULL);
 }
 
+static esp_err_t unlock_handler(httpd_req_t *request)
+{
+    if(wrong_device(request)) return ESP_OK;
+    char body[HTTP_JSON_BODY_SIZE];
+    if(receive_json(request,body,sizeof(body))!=ESP_OK)
+        return send_error_json(request,"400 Bad Request","Invalid request.",ESP_ERR_INVALID_ARG);
+    cJSON *json=cJSON_Parse(body);
+    const cJSON *pin=cJSON_GetObjectItemCaseSensitive(json,"pin");
+    const cJSON *kind=cJSON_GetObjectItemCaseSensitive(json,"kind");
+    bool valid=cJSON_IsNumber(pin)&&cJSON_IsNumber(kind)&&cJSON_GetArraySize(json)==2 &&
+        pin->valuedouble==pin->valueint && pin->valueint>=0 && pin->valueint<=999 &&
+        kind->valuedouble==kind->valueint && (kind->valueint==1 || kind->valueint==2);
+    uint16_t value=valid?pin->valueint:0; uint8_t selected=valid?kind->valueint:0;
+    cJSON_Delete(json);memset(body,0,sizeof(body));
+    if(!valid)return send_error_json(request,"400 Bad Request","Invalid password request.",ESP_ERR_INVALID_ARG);
+    esp_err_t error=ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
+    if(error!=ESP_OK)return send_error_json(request,"409 Conflict","Thiết bị đang bận.",error);
+    uint8_t status=0xff;
+    error=ms51_debug_uart_unlock(selected,value,&status);
+    ms51_operation_unlock();
+    if(error!=ESP_OK)return send_error_json(request,"504 Gateway Timeout","Chưa nhận xác nhận mở khóa. Kiểm tra trạng thái thiết bị trước khi thử lại.",error);
+    if(status==3)return send_error_json(request,"422 Unprocessable Entity","Mật khẩu chưa đúng. Kiểm tra lại loại mật khẩu đang được yêu cầu.",ESP_ERR_INVALID_ARG);
+    if(status!=0)return send_error_json(request,"409 Conflict","Yêu cầu mật khẩu đã thay đổi hoặc thiết bị không cho mở khóa. Đọc lại trạng thái.",ESP_ERR_INVALID_STATE);
+    return send_json(request,"{\"ok\":true}",NULL);
+}
+
 static esp_err_t mode_handler(httpd_req_t *request)
 {
     if (wrong_device(request)) return ESP_OK;
@@ -2201,18 +2227,6 @@ static esp_err_t cloud_pair_handler(httpd_req_t *request)
 
 static esp_err_t start_http_server(void)
 {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = 8192;
-    config.max_uri_handlers = 18;
-    config.max_open_sockets = 4;
-    config.lru_purge_enable = true;
-    config.recv_wait_timeout = 20;
-    config.send_wait_timeout = 10;
-    config.uri_match_fn = httpd_uri_match_wildcard;
-
-    ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG,
-                        "HTTP server start failed");
-
     const httpd_uri_t handlers[] = {
         {.uri = "/api/cloud/pair", .method = HTTP_POST, .handler = cloud_pair_handler},
         {.uri = "/api/status", .method = HTTP_GET, .handler = status_handler},
@@ -2226,6 +2240,7 @@ static esp_err_t start_http_server(void)
         {.uri = "/api/upload", .method = HTTP_POST, .handler = upload_handler},
         {.uri = "/api/thermal", .method = HTTP_POST, .handler = thermal_handler},
         {.uri = "/api/trigger", .method = HTTP_POST, .handler = trigger_handler},
+        {.uri = "/api/unlock", .method = HTTP_POST, .handler = unlock_handler},
         {.uri = "/api/mode", .method = HTTP_POST, .handler = mode_handler},
         {.uri = "/api/info", .method = HTTP_POST, .handler = info_handler},
         {.uri = "/api/reset", .method = HTTP_POST, .handler = reset_handler},
@@ -2239,6 +2254,19 @@ static esp_err_t start_http_server(void)
          .user_ctx = (void *)(intptr_t)JOB_MASS_ERASE},
         {.uri = "/*", .method = HTTP_GET, .handler = root_handler},
     };
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = 8192;
+    config.max_uri_handlers = sizeof(handlers) / sizeof(handlers[0]);
+    config.max_open_sockets = 4;
+    config.lru_purge_enable = true;
+    config.recv_wait_timeout = 20;
+    config.send_wait_timeout = 10;
+    config.uri_match_fn = httpd_uri_match_wildcard;
+
+    ESP_RETURN_ON_ERROR(httpd_start(&s_server, &config), TAG,
+                        "HTTP server start failed");
+
+
 
     for (size_t index = 0; index < sizeof(handlers) / sizeof(handlers[0]); ++index) {
         const esp_err_t error = httpd_register_uri_handler(s_server, &handlers[index]);

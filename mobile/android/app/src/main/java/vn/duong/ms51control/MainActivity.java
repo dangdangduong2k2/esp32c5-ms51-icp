@@ -141,6 +141,18 @@ public final class MainActivity extends Activity {
     private JSONObject deviceAccess = new JSONObject();
     private int accessViewEpoch;
     private boolean managedUpdateStarting;
+    private android.app.AlertDialog unlockDialog;
+    private Button unlockButton;
+    private boolean unlockSending;
+    private int unlockState=-1, unlockPrompted=-1;
+    private int unlockDeviceEpoch=-1;
+    private final Runnable expireUnlock=() -> {
+        unlockState=-1;
+        if(unlockButton!=null) unlockButton.setEnabled(false);
+        if(unlockDialog!=null) unlockDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+    };
+    private final Runnable unlockPoll=this::pollUnlock;
+
     private boolean modeChanging;
     private Button coolModeButton, iceModeButton;
     private String pendingMode;
@@ -1027,6 +1039,7 @@ public final class MainActivity extends Activity {
             deviceName.setTextColor(Design.TEAL); content.addView(deviceName, fullParams(0,0,0,12));
         }
         addNavigation(content);
+        if(tab!=Tab.OVERVIEW) mainHandler.post(unlockPoll);
         switch (tab) {
             case OVERVIEW:
                 buildOverview(content);
@@ -1122,7 +1135,7 @@ public final class MainActivity extends Activity {
     }
 
     private void selectMode(String mode) {
-        if (triggerSaving || modeChanging || pendingMode != null || managedUpdateStarting || !foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
+        if (unlockSending || triggerSaving || modeChanging || pendingMode != null || managedUpdateStarting || !foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
         Button chosen = "COOL".equals(mode) ? coolModeButton : iceModeButton;
         if (chosen == null || !chosen.isEnabled()) return;
         beginModeChange(mode);
@@ -1220,6 +1233,9 @@ public final class MainActivity extends Activity {
         coolModeButton.setEnabled(false); iceModeButton.setEnabled(false);
         content.addView(actions, fullParams(0, 0, 0, 20));
 
+        unlockButton=primaryButton("Mở khóa");unlockButton.setVisibility(View.GONE);
+        unlockButton.setOnClickListener(v -> showUnlockDialog());
+        content.addView(unlockButton,fullParams(0,0,0,16));
         addSectionTitle(content, "Thời gian hiển thị");
         LinearLayout timers = new LinearLayout(this); timers.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout green = timerCard("green", 0xFF008978);
@@ -1498,12 +1514,100 @@ public final class MainActivity extends Activity {
                     rememberStatus(finalStatus);
                     lastDebug = finalDebug;
                     renderDashboard(finalStatus, finalDebug);
+                    updateUnlock(finalDebug);
                 } else if (dashboardConnection != null) {
+                    updateUnlock(null);
                     renderDashboard(null, null);
                     dashboardMode.setText("Mất kết nối");
                     dashboardConnection.setText("Chưa đọc được thiết bị: " + errorMessage(finalFailure));
                 }
                 mainHandler.postDelayed(dashboardRefresh, 1000);
+            });
+        });
+    }
+
+    private void pollUnlock() {
+        if(!foreground || screen!=Screen.CONTROL || tab==Tab.OVERVIEW)return;
+        final int token=controlEpoch, view=dashboardEpoch;
+        final EspApi session=api.snapshot(15000);
+        io.execute(() -> {
+            JSONObject result=null;
+            try { if(currentControl(token))result=session.get("/api/debug"); } catch(Exception ignored) { }
+            final JSONObject snapshot=result;
+            onControl(token,() -> {
+                if(!foreground||view!=dashboardEpoch||screen!=Screen.CONTROL||tab==Tab.OVERVIEW)return;
+                updateUnlock(snapshot);mainHandler.postDelayed(unlockPoll,2500);
+            });
+        });
+    }
+
+    private void updateUnlock(JSONObject debug) {
+        if(unlockDeviceEpoch!=controlEpoch){unlockDeviceEpoch=controlEpoch;unlockPrompted=-1;}
+        int next=UnlockState.read(debug);
+        unlockState=next;
+        mainHandler.removeCallbacks(expireUnlock);
+        if(next>=0)mainHandler.postDelayed(expireUnlock,3500);
+        if(unlockButton!=null){
+            unlockButton.setVisibility(next>0?View.VISIBLE:View.GONE);
+            unlockButton.setText(next==3?"Thiết bị đang khóa":"Mở khóa");
+            unlockButton.setEnabled((next==1||next==2)&&!unlockSending);
+        }
+        if(unlockSending)return;
+        if(next==0){unlockPrompted=-1;if(unlockDialog!=null)unlockDialog.dismiss();unlockDialog=null;return;}
+        if(next<0 || next==3){
+            if(unlockDialog!=null)unlockDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+            return;
+        }
+        if(!foreground || screen!=Screen.CONTROL || managedUpdateStarting || modeChanging || triggerSaving)return;
+        if(unlockDialog!=null && unlockPrompted!=next){unlockDialog.dismiss();unlockDialog=null;}
+        if(unlockDialog!=null)unlockDialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setEnabled(true);
+        if(unlockDialog==null && unlockPrompted!=next)showUnlockDialog();
+    }
+
+    private void showUnlockDialog() {
+        if(unlockSending || unlockDialog!=null || (unlockState!=1 && unlockState!=2) || !foreground)return;
+        final int kind=unlockState,token=controlEpoch;
+        unlockPrompted=kind;
+        LinearLayout body=new LinearLayout(this);body.setOrientation(LinearLayout.VERTICAL);body.setPadding(dp(24),dp(12),dp(24),0);
+        TextView note=bodyText(kind==2?"Nhập mật khẩu dự phòng của bộ điều khiển.":"Bộ điều khiển đang yêu cầu mật khẩu. Nhập mật khẩu để tiếp tục.");
+        body.addView(note);
+        EditText input=new EditText(this);input.setSingleLine(true);input.setHint(kind==2?"Mật khẩu dự phòng":"Mật khẩu");
+        input.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(3)});
+        input.setSaveEnabled(false);input.setTextSize(18);input.setTextColor(Design.INK);
+        input.setBackground(rounded(0xFFEEF3F6,dp(14)));input.setPadding(dp(16),dp(14),dp(16),dp(14));
+        body.addView(input,fullParams(0,16,0,0));
+        TextView error=bodyText("");error.setTextColor(0xFFBF4057);body.addView(error);
+        android.app.AlertDialog dialog=new android.app.AlertDialog.Builder(this).setTitle("Mở khóa thiết bị")
+            .setView(body).setNegativeButton("Để sau",(d,w)->{}).setPositiveButton("Mở khóa",null).create();
+        unlockDialog=dialog;
+        dialog.setOnDismissListener(d->{input.setText("");if(unlockDialog==dialog)unlockDialog=null;});
+        dialog.show();
+        if(dialog.getWindow()!=null)dialog.getWindow().setBackgroundDrawable(rounded(Color.WHITE,dp(24)));
+        dialog.getButton(-1).setTextColor(Design.TEAL);dialog.getButton(-2).setTextColor(Design.MUTED);
+        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            if(unlockSending || token!=controlEpoch || unlockState!=kind || !foreground)return;
+            String text=input.getText().toString();
+            if(!text.matches("[0-9]{1,3}")){error.setText("Nhập mật khẩu từ 0 đến 999.");return;}
+            final int pin=Integer.parseInt(text);
+            final EspApi session=api.snapshot(45000);
+            unlockSending=true;input.setText("");input.setEnabled(false);error.setText("Đang mở khóa…");
+            dialog.setCancelable(false);dialog.getButton(-1).setEnabled(false);dialog.getButton(-2).setEnabled(false);
+            io.execute(() -> {
+                String failure=null;
+                try { if(!currentControl(token))return;session.post("/api/unlock",new JSONObject().put("kind",kind).put("pin",pin)); }
+                catch(Exception e){failure=errorMessage(e);}
+                finally { final String result=failure;mainHandler.post(() -> {
+                    unlockSending=false;
+                    if(!currentControl(token))return;
+                    if(result==null){if(unlockDialog==dialog)dialog.dismiss();showMessage("Đã mở khóa thiết bị.");}
+                    else if(unlockDialog==dialog){
+                        input.setEnabled(true);dialog.setCancelable(true);dialog.getButton(-2).setEnabled(true);
+                        error.setText(result+" Đang đọc lại trạng thái thiết bị…");
+                    }
+                    expireUnlock.run();
+                    if(foreground){if(tab==Tab.OVERVIEW)refreshDashboard();else {mainHandler.removeCallbacks(unlockPoll);mainHandler.post(unlockPoll);}}
+                }); }
             });
         });
     }
@@ -2697,6 +2801,10 @@ public final class MainActivity extends Activity {
     }
 
     private void stopDashboard() {
+        mainHandler.removeCallbacks(unlockPoll);mainHandler.removeCallbacks(expireUnlock);
+        expireUnlock.run();
+        if(unlockDialog!=null){unlockDialog.dismiss();unlockDialog=null;}
+        unlockPrompted=-1;
         mainHandler.removeCallbacks(expireTriggerControls); expireTriggerControls.run();
         mainHandler.removeCallbacks(expireModeControls);
         expireModeControls.run();
@@ -2732,6 +2840,7 @@ public final class MainActivity extends Activity {
             mainHandler.removeCallbacks(dashboardRefresh);
             mainHandler.post(dashboardRefresh);
         }
+        if(screen==Screen.CONTROL && tab!=Tab.OVERVIEW) { mainHandler.removeCallbacks(unlockPoll);mainHandler.post(unlockPoll); }
         if (waitingForWifiSettingsReturn) {
             waitingForWifiSettingsReturn = false;
             mainHandler.postDelayed(this::verifyManualWifiAfterSettings, 400);

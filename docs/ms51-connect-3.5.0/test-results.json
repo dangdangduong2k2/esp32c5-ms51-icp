@@ -1,0 +1,39 @@
+{
+  "version": "3.5.0",
+  "apk_sha256": "58d65b0028daf4f9a2bdfb2dbe5db3dc485e793107fad77112eb1e9639bf9202",
+  "assets_sha256": {
+    "MS51-Connect-3.5.0.apk": "58d65b0028daf4f9a2bdfb2dbe5db3dc485e793107fad77112eb1e9639bf9202",
+    "MS51-Unlock-3.5.0.hex": "8cd951506f998ef17d939ee8f0c9484af1c5007a72fefd3490cd7ebdb0cb25e8",
+    "ESP32-C5-Unlock-3.5.0.zip": "b2901e3b2c5c266a302615906276eadfb5e82eb532c6f62a21386f59f35dc037"
+  },
+  "android_build_lint": "PASS",
+  "android_unlock_checks": "PASS",
+  "android_managed_regression": "PASS",
+  "server_tests": 36,
+  "ms51_shared_pin_logic_host_tests": "PASS",
+  "ms51_build": {
+    "errors": 0,
+    "warnings": 0,
+    "code_bytes": 28329,
+    "max_hex_address": 28329
+  },
+  "c5_flash": {
+    "result": "PASS",
+    "flash_verified": true,
+    "nvs_preserved": true,
+    "app_sha256": "3b540fc81824516d57dc760779522dbd36979cd389ea4454ada92eaa3eb136fd"
+  },
+  "live_verification": {
+    "configuration_preserved": true,
+    "idle_unlock_rejected": 409,
+    "unlock_protocol": 1,
+    "cloud": {
+      "protocol": 1,
+      "configured": true,
+      "online": true,
+      "clock_ready": true
+    },
+    "physical_pin_success_tested": false
+  },
+  "limitation": "Actual correct-PIN entry on a physically locked board was not exercised; board currently does not request a PIN."
+}

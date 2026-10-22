@@ -197,3 +197,6 @@ uint8_t signal_read(void);
 uint8_t trigger_fresh(void);
 
 #endif
+
+uint8_t password_remote_state(void);
+uint8_t password_remote_unlock(uint8_t kind, uint16_t value);

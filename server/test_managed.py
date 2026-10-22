@@ -14,6 +14,29 @@ HEX = b':0400000001020304F2\n:00000001FF\n'
 
 
 class ManagedTests(AdminTests):
+    def test_unlock_validation_ownership_and_busy(self):
+        body={'id':'e'*32,'method':'POST','path':'/api/unlock','body':{'kind':1,'pin':123}}
+        with patch.object(core.bridge,'call',return_value={'ok':True}) as call:
+            for kind in (1,2):
+                body['body']={'kind':kind,'pin':123}
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+            call.reset_mock()
+            for value in ({'kind':1,'pin':1000},{'kind':0,'pin':123},{'kind':1,'pin':True},{'kind':1,'pin':'123'},{}):
+                core.limits.clear();body['body']=value
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,400)
+            body['body']={'kind':1,'pin':123}
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body).status_code,401)
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile('bob')).status_code,404)
+            with core.lock:
+                core.db.execute("INSERT INTO update_jobs VALUES(?,?,?,?,?,?,?)",('unlock-busy',DEVICE,'u1','test','running','',time.time()));core.db.commit()
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,409)
+            with core.lock:
+                core.db.execute("DELETE FROM update_jobs WHERE id='unlock-busy'");core.db.commit()
+            call.assert_not_called()
+            core.limits.clear()
+            for i in range(8):self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+            self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,429)
+
     def test_thermal_threshold_validation_and_ownership(self):
         body={'id':'c'*32,'method':'POST','path':'/api/thermal',
               'body':{'source':'10K','threshold_centi':3000,'defrost_centi':500}}
