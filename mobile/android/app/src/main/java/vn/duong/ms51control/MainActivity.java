@@ -1750,15 +1750,23 @@ public final class MainActivity extends Activity {
         addSectionTitle(pin, "Mật khẩu bảo vệ");
         CheckBox pinEnable = addCheckField(pin, "Bật mật khẩu", "pinEnable", true);
         addPinNumberField(pin, "Mật khẩu", "pinPassword");
-        addPinNumberField(pin, "Số lần nhập sai tối đa", "pinWrongLimit");
+        addPinNumberField(pin, "Mật khẩu dự phòng", "pinBackupPassword");
+        finishSettingsRow(pin);
         addPinNumberField(pin, "Chu kỳ yêu cầu mật khẩu", "pinPeriod");
         addPinChoiceField(pin, "Đơn vị chu kỳ", "pinPeriodUnit", choices("Giờ", 0, "Ngày", 1));
-        addPinNumberField(pin, "Mật khẩu dự phòng", "pinBackupPassword");
         finishSettingsRow(pin);
         addPinNumberField(pin, "Thời gian dự phòng", "pinBackupPeriod");
         addPinChoiceField(pin, "Đơn vị dự phòng", "pinBackupPeriodUnit", choices("Giờ", 0, "Ngày", 1));
-        CheckBox periodShow = addCheckField(pin, "Hiện phần chỉnh chu kỳ mật khẩu", "pinPeriodShow", true);
-        pinDependentViews.add(periodShow);
+        finishSettingsRow(pin);
+        addPinNumberField(pin, "Số lần nhập sai tối đa", "pinWrongLimit");
+        if (settingVisible("pinPeriodShow")) {
+            LinearLayout periodCell=settingCell(pin,"",false);
+            periodCell.removeViewAt(0);
+            CheckBox periodShow=addCheckField(periodCell,"Hiện phần chỉnh chu kỳ mật khẩu","pinPeriodShow",true);
+            periodShow.setTextSize(13);
+            if (compactSettings()) periodShow.setMinHeight(dp(100));
+        }
+        finishSettingsRow(pin);
         pinEnable.setOnCheckedChangeListener((buttonView, isChecked) -> syncPinControls());
         addHelp(pin, "Chỉ các mục được người quản lý cấp quyền mới có thể chỉnh sửa.");
         content.addView(pin, fullParams(0, 12, 0, 0));

@@ -1,0 +1,11 @@
+{
+  "version": "3.4.13",
+  "version_code": 47,
+  "apk_sha256": "4ff33ee50dfd06c45ec5a897a22c24c8720d9e032b36d70994c7d66020889bf5",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed",
+    "phone_tested": false,
+    "hardware_reflashed": false
+  }
+}
