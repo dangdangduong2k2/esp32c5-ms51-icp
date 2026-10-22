@@ -1,0 +1,14 @@
+{
+  "version": "3.4.15",
+  "version_code": 49,
+  "apk_sha256": "b14592da89e9b2cb70a5488b61b9d0cce158a068d789a04374dff04e2d622839",
+  "validation": {
+    "android_build": "passed",
+    "lint": "passed",
+    "choice_field_instrumentation": "passed",
+    "managed_settings_regression": "passed",
+    "preview_reviewed": true,
+    "phone_tested": false,
+    "hardware_reflashed": false
+  }
+}

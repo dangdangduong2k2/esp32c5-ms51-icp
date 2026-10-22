@@ -30,7 +30,6 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
@@ -2500,13 +2499,7 @@ public final class MainActivity extends Activity {
     }
 
     private Spinner choiceSpinner(Choice[] values) {
-        Spinner spinner = new Spinner(this);
-        ArrayAdapter<Choice> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, values);
-        spinner.setAdapter(adapter);
-        spinner.setBackground(rounded(0xFFF0F4F7, dp(12)));
-        spinner.setPadding(dp(12), 0, dp(12), 0);
-        spinner.setMinimumHeight(dp(52));
-        return spinner;
+        return new ChoiceField(this, values);
     }
 
     private void selectChoice(Spinner spinner, int desiredValue) {

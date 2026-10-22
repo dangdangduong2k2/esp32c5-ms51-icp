@@ -1,0 +1,1 @@
+PASS: touch opens anchored menu, matching width, selection identity, dismiss preserves value, disabled and detached controls close menu, long options selectable.
