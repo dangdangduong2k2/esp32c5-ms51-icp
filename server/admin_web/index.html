@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="vi">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102f40"><title>MS51 · Quản trị</title><link rel="stylesheet" href="assets/admin.css?v=20261023-groups"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102f40"><title>MS51 · Quản trị</title><link rel="stylesheet" href="assets/admin.css?v=20261023-single-save"></head>
 <body>
 <svg class="icons" aria-hidden="true"><defs>
 <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
@@ -29,13 +29,13 @@
 <dialog id="edit-dialog"><form id="edit-form"><div class="dialog-heading"><span class="icon-box"><svg><use href="#i-lock"/></svg></span><button type="button" id="close-dialog" class="close" aria-label="Đóng">×</button></div><h2 id="edit-title">Chỉnh sửa tài khoản</h2><p id="edit-description"></p><div id="edit-fields"></div><p id="edit-error" class="error" role="alert"></p><footer class="dialog-footer"><button type="button" id="cancel-edit" class="secondary">Hủy</button><button id="save-edit" type="submit" class="primary">Lưu thay đổi</button></footer></form></dialog>
 <dialog id="access-dialog" class="access-dialog"><div class="dialog-heading"><div><span class="eyebrow teal">QUẢN LÝ THIẾT BỊ</span><h2 id="access-title">Cấp quyền</h2></div><button type="button" id="close-access" class="close" aria-label="Đóng cấp quyền">×</button></div><p id="access-device-name"></p><p id="access-error" class="error" role="alert"></p><section class="access-section"><h3>Các mục cài đặt được hiển thị trong app</h3><p>Bật mục nào thì người dùng thấy và chỉnh sửa được mục đó. Hai mục có nhãn “Trên mạch” được chỉnh trực tiếp trên thiết bị, không xuất hiện trong app.</p><p id="permission-status" role="status"></p><div class="access-toolbar"><button type="button" id="show-all" class="secondary">Hiện tất cả</button><button type="button" id="hide-all" class="secondary">Ẩn tất cả</button><span id="visible-count"></span></div><form id="policy-form"><div id="permission-fields"></div></form>
 <div id="options-staging" hidden>
-<label class="permission-toggle"><input id="option-show-st" form="options-form" type="checkbox" disabled><span>Hiện ST LED <small class="mcu-badge">Trên mạch</small></span></label>
-<label class="permission-toggle"><input id="option-op-seconds" form="options-form" type="checkbox" disabled><span>Xả đá OP tính giây <small class="mcu-badge">Trên mạch</small></span></label>
+<label class="permission-toggle"><input id="option-show-st" form="policy-form" type="checkbox" disabled><span>Hiện ST LED <small class="mcu-badge">Trên mạch</small></span></label>
+<label class="permission-toggle"><input id="option-op-seconds" form="policy-form" type="checkbox" disabled><span>Xả đá OP tính giây <small class="mcu-badge">Trên mạch</small></span></label>
 </div>
-<form id="options-form"></form>
+
 <p id="options-status" role="status">Chưa đọc giá trị từ mạch.</p>
-<div class="access-toolbar"><button id="save-policy" form="policy-form" type="submit" class="primary">Lưu quyền hiển thị</button><button id="read-options" type="button" class="secondary">Đọc lại từ mạch</button><button id="save-options" form="options-form" type="submit" class="primary" disabled>Lưu xuống mạch</button></div>
-<p class="field-help">Hai mục có nhãn “Trên mạch” là giá trị đang dùng trên thiết bị. Bấm “Lưu xuống mạch” để áp dụng hai mục này; mạch sẽ khởi động lại và các bộ đếm chạy lại.</p>
+<div class="access-toolbar"><button id="save-access" form="policy-form" type="submit" class="primary">Lưu thay đổi</button><button id="read-options" type="button" class="secondary">Đọc lại từ mạch</button></div>
+<p class="field-help">Hai mục có nhãn “Trên mạch” là giá trị đang dùng trên thiết bị. Nút “Lưu thay đổi” lưu tất cả các mục đã chỉnh. Nếu thay đổi hai mục này, mạch sẽ khởi động lại và các bộ đếm chạy lại.</p>
 </section><section class="access-section"><h3>Firmware cấp cho thiết bị</h3><p>App chỉ hiện nút Cập nhật khi có bản được cấp. Tệp được gửi và nạp khi người dùng bấm nút trong app.</p><div id="assigned-firmware" class="firmware-assigned"></div><form id="firmware-form"><label for="firmware-hex">Tệp chương trình MS51 (.hex)</label><input id="firmware-hex" type="file" accept=".hex" required><p class="field-help">Tối đa 96 KiB dạng Intel HEX, vùng chương trình MS51 tối đa 32 KiB. Máy chủ kiểm tra checksum trước khi cấp.</p><div class="access-toolbar"><button id="assign-firmware" class="primary" type="submit">Cấp bản cập nhật</button><button id="revoke-firmware" class="secondary" type="button">Gỡ bản cập nhật</button></div></form><p class="field-help">Quyền và giao diện firmware mới cần MS51 Connect 3.1.0 trở lên.</p></section></dialog>
-<div id="toast" class="toast" role="status" hidden></div><script src="assets/admin.js?v=20261023-groups" defer></script>
+<div id="toast" class="toast" role="status" hidden></div><script src="assets/admin.js?v=20261023-single-save" defer></script>
 </body></html>

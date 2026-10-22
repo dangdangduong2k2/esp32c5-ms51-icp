@@ -125,15 +125,15 @@ setInterval(() => { if (!document.hidden && !$('edit-dialog').open && !$('access
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 api('session').then(authenticated).catch(() => showLogin());
 
-let accessTarget = null, accessEpoch = 0, optionsRevision = null;
+let accessTarget = null, accessEpoch = 0, optionsRevision = null, optionsValues = null;
 let accessLoading=false, optionsLoading=false, policyLoaded=false;
 function accessBusy(busy) {
     state.pending=busy;
     const loading=accessLoading||optionsLoading;
     $('access-dialog').querySelectorAll('button,input').forEach(n=>n.disabled=busy||loading);
     $('close-access').disabled=busy;
-    for(const id of ['show-all','hide-all','save-policy']) $(id).disabled=busy||loading||!policyLoaded;
-    for(const id of ['option-show-st','option-op-seconds','save-options']) $(id).disabled=busy||loading||optionsRevision===null;
+    for(const id of ['show-all','hide-all','save-access']) $(id).disabled=busy||loading||!policyLoaded;
+    for(const id of ['option-show-st','option-op-seconds']) $(id).disabled=busy||loading||optionsRevision===null;
 }
 function closeAccess() {
     if(state.pending)return;
@@ -200,7 +200,7 @@ function renderPermissionGroups(data) {
 async function openAccess(uid,device) {
     if (state.pending) return;
     const epoch=++accessEpoch;
-    accessTarget={uid,device:device.id,revision:0}; optionsRevision=null;policyLoaded=false;accessLoading=true;optionsLoading=true;
+    accessTarget={uid,device:device.id,revision:0}; optionsRevision=null;optionsValues=null;policyLoaded=false;accessLoading=true;optionsLoading=true;
     for(const id of ['option-show-st','option-op-seconds']) { $(id).checked=false;$(id).indeterminate=true; }
     $('options-status').textContent='Đang đọc giá trị từ mạch…';$('permission-status').textContent='Đang tải quyền đã cấp…';
     $('access-device-name').textContent=device.name+' · '+device.id;
@@ -223,13 +223,36 @@ async function openAccess(uid,device) {
 $('show-all').onclick=()=>{ $('permission-fields').querySelectorAll('input[data-permission]').forEach(n=>n.checked=true);updateVisibleCount(); };
 $('hide-all').onclick=()=>{ $('permission-fields').querySelectorAll('input[data-permission]').forEach(n=>n.checked=false);updateVisibleCount(); };
 $('policy-form').onsubmit=async e=>{
-    e.preventDefault(); if(state.pending||accessLoading||optionsLoading||!policyLoaded||!accessTarget) return;
-    const target={...accessTarget};accessBusy(true);$('access-error').textContent='';
+    e.preventDefault();if(state.pending||accessLoading||optionsLoading||!policyLoaded||!accessTarget)return;
+    const target={...accessTarget},epoch=accessEpoch;
+    const values={showSt:$('option-show-st').checked?1:0,defrostOpSeconds:$('option-op-seconds').checked?1:0};
+    const changed=optionsValues && Object.keys(values).some(k=>values[k]!==optionsValues[k]);
+    if(changed&&optionsRevision===null){$('access-error').textContent='Đọc lại từ mạch để xác nhận giá trị trước khi lưu tiếp.';return;}
+    const revision=optionsRevision;
+    const visible=[...$('permission-fields').querySelectorAll('input[data-permission]:checked')].map(n=>n.value);
+    let policySaved=false;
+    accessBusy(true);$('access-error').textContent='';$('save-access').textContent='Đang lưu…';
     try {
-        const visible=[...$('permission-fields').querySelectorAll('input[data-permission]:checked')].map(n=>n.value);
         const data=await api(`users/${target.uid}/devices/${target.device}/access`,{visible,revision:target.revision});
-        accessTarget.revision=data.revision;message('Đã lưu quyền. App đang mở Cài đặt sẽ cập nhật trong khoảng 15 giây.');
-    } catch(e) { $('access-error').textContent=e.message; } finally { accessBusy(false); }
+        if(epoch!==accessEpoch||!state.csrf)return;
+        accessTarget.revision=data.revision;policySaved=true;
+        $('permission-status').textContent='Đã lưu quyền hiển thị.';
+        if(changed){
+            $('options-status').textContent='Đang lưu xuống mạch…';
+            const result=await api(`users/${target.uid}/devices/${target.device}/options`,{values,revision});
+            if(epoch!==accessEpoch||!state.csrf)return;
+            optionsValues={...values};optionsRevision=null;
+            $('options-status').textContent=result.changed?'Mạch đã xác nhận lưu và đang khởi động lại.':'Giá trị trên mạch không thay đổi.';
+        }
+        message(optionsValues?'Đã lưu thay đổi.':'Đã lưu quyền hiển thị. Chưa đọc được tùy chọn trên mạch nên phần này được giữ nguyên.');
+    } catch(e) {
+        if(epoch!==accessEpoch||!state.csrf)return;
+        if(policySaved){
+            optionsRevision=null;
+            $('access-error').textContent='Đã lưu quyền hiển thị; chưa xác nhận lưu tùy chọn trên mạch. '+e.message+' Đọc lại từ mạch để kiểm tra trước khi thử lại.';
+            $('options-status').textContent='Chưa xác nhận lưu xuống mạch.';
+        }else $('access-error').textContent='Chưa xác nhận lưu quyền hiển thị; chưa gửi thay đổi xuống mạch. '+e.message;
+    } finally { $('save-access').textContent='Lưu thay đổi';if(epoch===accessEpoch)accessBusy(false); }
 };
 $('firmware-form').onsubmit=async e=>{
     e.preventDefault();if(state.pending||!accessTarget) return;
@@ -250,7 +273,7 @@ $('revoke-firmware').onclick=async()=>{
 };
 
 async function readDeviceOptions(target,epoch) {
-    optionsRevision=null;optionsLoading=true;accessBusy(state.pending);
+    optionsRevision=null;optionsValues=null;optionsLoading=true;accessBusy(state.pending);
     for(const id of ['option-show-st','option-op-seconds']) $(id).indeterminate=true;
     $('options-status').textContent='Đang đọc giá trị từ mạch…';
     try{
@@ -261,7 +284,7 @@ async function readDeviceOptions(target,epoch) {
         $('option-show-st').checked=data.values.showSt===1;
         $('option-op-seconds').checked=data.values.defrostOpSeconds===1;
         for(const id of ['option-show-st','option-op-seconds']) $(id).indeterminate=false;
-        optionsRevision=data.revision;
+        optionsRevision=data.revision;optionsValues={...data.values};
         $('options-status').textContent='Đã đọc giá trị đang dùng trên mạch · '+new Date().toLocaleTimeString('vi-VN');
     }catch(e){if(epoch===accessEpoch&&state.csrf)$('options-status').textContent='Chưa đọc được từ mạch. '+e.message+' Bấm Đọc lại từ mạch để thử lại.';}
     finally{if(epoch===accessEpoch){optionsLoading=false;accessBusy(state.pending);}}
@@ -269,15 +292,4 @@ async function readDeviceOptions(target,epoch) {
 $('read-options').onclick=async()=>{
     if(state.pending||accessLoading||optionsLoading||!accessTarget)return;
     await readDeviceOptions({...accessTarget},accessEpoch);
-};
-$('options-form').onsubmit=async e=>{
-    e.preventDefault();if(state.pending||!accessTarget||optionsRevision===null)return;
-    const target={...accessTarget}, revision=optionsRevision;
-    const values={showSt:$('option-show-st').checked?1:0,defrostOpSeconds:$('option-op-seconds').checked?1:0};
-    accessBusy(true);$('options-status').textContent='Đang lưu xuống mạch…';
-    try{
-        const data=await api(`users/${target.uid}/devices/${target.device}/options`,{values,revision});
-        $('options-status').textContent=data.changed?'Mạch đã xác nhận lưu và đang khởi động lại.':'Giá trị không thay đổi.';
-    }catch(e){$('options-status').textContent='Chưa xác nhận lưu. '+e.message+' Đọc lại từ mạch trước khi thử lại.';}
-    finally{optionsRevision=null;accessBusy(false);}
 };
