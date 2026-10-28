@@ -19,7 +19,7 @@ import java.util.UUID;
 
 /** Immutable authenticated session. Android verifies the public TLS certificate. */
 final class CloudApi {
-    static final String BASE = "https://142-91-99-63.sslip.io/ms51/connect/v1";
+    static final String BASE = BuildConfig.CLOUD_BASE_URL;
     private final String token;
     interface Connections { HttpURLConnection open(URL url) throws IOException; }
     private final Connections connections;

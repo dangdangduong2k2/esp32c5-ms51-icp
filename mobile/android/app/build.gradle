@@ -2,6 +2,12 @@ plugins {
     id 'com.android.application'
 }
 
+def localEndpoint = providers.gradleProperty('ms51LocalEndpoint').orNull
+def localResources = providers.gradleProperty('ms51LocalResources').orNull
+if (localEndpoint && (!localEndpoint.startsWith('https://') || !localResources)) {
+    throw new GradleException('Local test builds require HTTPS and an explicit local CA resource directory')
+}
+
 android {
     namespace 'vn.duong.ms51control'
     compileSdk 35
@@ -13,6 +19,12 @@ android {
         targetSdk 35
         versionCode 51
         versionName '3.6.0'
+        buildConfigField 'String', 'CLOUD_BASE_URL', groovy.json.JsonOutput.toJson(localEndpoint ?: 'https://142-91-99-63.sslip.io/ms51/connect/v1')
+        manifestPlaceholders = [appLabel: localEndpoint ? 'Hẹn Giờ Lạnh Test' : 'Hẹn Giờ Lạnh']
+        if (localEndpoint) {
+            applicationIdSuffix '.localtest'
+            versionNameSuffix '-local'
+        }
         testInstrumentationRunner 'vn.duong.ms51control.CloudIntegrationTestRunner'
     }
 
@@ -32,6 +44,9 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+    if (localEndpoint) {
+        sourceSets.debug.res.srcDir(localResources)
     }
 
     compileOptions {

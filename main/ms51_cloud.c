@@ -21,8 +21,19 @@
 #include "mqtt_client.h"
 #include "nvs.h"
 
+#ifdef MS51_CLOUD_CONFIG_HEADER
+#include MS51_CLOUD_CONFIG_HEADER
+#endif
+#ifndef CLOUD_HOST
 #define CLOUD_HOST "142-91-99-63.sslip.io"
+#endif
 #define CLOUD_PORT 8884
+#ifndef CLOUD_HTTPS_ORIGIN
+#define CLOUD_HTTPS_ORIGIN "https://" CLOUD_HOST
+#endif
+#ifndef CLOUD_NVS_NAMESPACE
+#define CLOUD_NVS_NAMESPACE "ms51_cloud"
+#endif
 #define COMMAND_MAX 6144
 #define RESPONSE_MAX 24576
 #define PREFIX "ms51connect/v1/"
@@ -86,7 +97,7 @@ esp_err_t ms51_cloud_pair(const char *json) {
         result = memcmp(&s_config, &next, sizeof(next)) == 0 ? ESP_OK : ESP_ERR_INVALID_STATE;
     } else {
         nvs_handle_t nvs;
-        result = nvs_open("ms51_cloud", NVS_READWRITE, &nvs);
+        result = nvs_open(CLOUD_NVS_NAMESPACE, NVS_READWRITE, &nvs);
         if (result == ESP_OK) {
             result = nvs_set_blob(nvs,"config",&next,sizeof(next));
             if (result == ESP_OK) result = nvs_commit(nvs);
@@ -177,9 +188,15 @@ static cJSON *remote_upload(const cJSON *body) {
         n->valueint<1 || n->valueint>98304 || strlen(name)<5 || strlen(name)>104 || strchr(name,'\r') || strchr(name,'\n'))
         return error_result("Tep khong hop le.");
     char url[200], auth[80];
-    snprintf(url,sizeof(url),"https://" CLOUD_HOST "/ms51/connect/v1/transfer/%s",id);
+    snprintf(url,sizeof(url),CLOUD_HTTPS_ORIGIN "/ms51/connect/v1/transfer/%s",id);
     snprintf(auth,sizeof(auth),"Bearer %s",token);
-    esp_http_client_config_t config={.url=url,.timeout_ms=15000,.buffer_size=1024,.crt_bundle_attach=esp_crt_bundle_attach,.disable_auto_redirect=true};
+    esp_http_client_config_t config={.url=url,.timeout_ms=15000,.buffer_size=1024,.disable_auto_redirect=true,
+#ifdef CLOUD_CA_PEM
+        .cert_pem=CLOUD_CA_PEM,
+#else
+        .crt_bundle_attach=esp_crt_bundle_attach,
+#endif
+    };
     esp_http_client_handle_t download=esp_http_client_init(&config);
     if(!download) return error_result("Khong du bo nho tai tep.");
     esp_http_client_set_header(download,"Authorization",auth);
@@ -216,7 +233,7 @@ static bool allowed(const char *method,const char *path) {
 }
 static bool remember_mutation(const char *id) {
     nvs_handle_t nvs;
-    if(nvs_open("ms51_cloud",NVS_READWRITE,&nvs)!=ESP_OK) return false;
+    if(nvs_open(CLOUD_NVS_NAMESPACE,NVS_READWRITE,&nvs)!=ESP_OK) return false;
     strlcpy(s_mutations[s_mutation_index++%8],id,33);
     esp_err_t e=nvs_set_blob(nvs,"requests",s_mutations,sizeof(s_mutations));
     if(e==ESP_OK) e=nvs_commit(nvs);
@@ -289,7 +306,7 @@ static void process(char *text) {
         }
         else if(!strcmp(path,"/internal/unpair")) {
             nvs_handle_t nvs;
-            esp_err_t e=nvs_open("ms51_cloud",NVS_READWRITE,&nvs);
+            esp_err_t e=nvs_open(CLOUD_NVS_NAMESPACE,NVS_READWRITE,&nvs);
             if(e==ESP_OK) { e=nvs_erase_key(nvs,"config"); if(e==ESP_OK) e=nvs_commit(nvs); nvs_close(nvs); }
             if(e==ESP_OK) { unpair=true; result=cJSON_CreateObject(); cJSON_AddBoolToObject(result,"ok",true); }
             else result=error_result("Chua xoa duoc ghep noi. Vui long thu lai.");
@@ -334,7 +351,7 @@ static void worker(void *arg) {
             esp_mqtt_client_stop(s_client); esp_mqtt_client_destroy(s_client); s_client=NULL; s_connected=false;
             xSemaphoreTake(s_mutex,portMAX_DELAY);
             nvs_handle_t nvs;
-            if(nvs_open("ms51_cloud",NVS_READWRITE,&nvs)==ESP_OK) {
+            if(nvs_open(CLOUD_NVS_NAMESPACE,NVS_READWRITE,&nvs)==ESP_OK) {
                 nvs_erase_key(nvs,"config"); nvs_commit(nvs); nvs_close(nvs);
             }
             memset(&s_config,0,sizeof(s_config)); xSemaphoreGive(s_mutex); s_revoked=false;
@@ -350,7 +367,11 @@ static void worker(void *arg) {
             snprintf(will,sizeof(will),"{\"device\":\"%s\",\"online\":false}",ms51_presence_id());
             esp_mqtt_client_config_t config={
                 .broker.address.uri="mqtts://" CLOUD_HOST ":8884",
+#ifdef CLOUD_CA_PEM
+                .broker.verification.certificate=CLOUD_CA_PEM,
+#else
                 .broker.verification.crt_bundle_attach=esp_crt_bundle_attach,
+#endif
                 .credentials.username=s_config.username,.credentials.client_id=s_config.username,
                 .credentials.authentication.password=s_config.password,
                 .session.keepalive=30,.session.disable_clean_session=false,
@@ -376,7 +397,7 @@ esp_err_t ms51_cloud_start(void) {
     s_mutex=xSemaphoreCreateMutex(); s_queue=xQueueCreate(1,sizeof(char*));
     if(!s_mutex || !s_queue) return ESP_ERR_NO_MEM;
     nvs_handle_t nvs;
-    if(nvs_open("ms51_cloud",NVS_READONLY,&nvs)==ESP_OK) {
+    if(nvs_open(CLOUD_NVS_NAMESPACE,NVS_READONLY,&nvs)==ESP_OK) {
         size_t length=sizeof(s_config);
         if(nvs_get_blob(nvs,"config",&s_config,&length)!=ESP_OK || length!=sizeof(s_config)) memset(&s_config,0,sizeof(s_config));
         length=sizeof(s_mutations);

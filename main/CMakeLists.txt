@@ -62,3 +62,9 @@ idf_component_register(
         mdns
         nvs_flash
 )
+
+# Optional private local-test configuration; production builds keep their defaults.
+if(MS51_CLOUD_CONFIG_HEADER)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE
+        MS51_CLOUD_CONFIG_HEADER="${MS51_CLOUD_CONFIG_HEADER}")
+endif()

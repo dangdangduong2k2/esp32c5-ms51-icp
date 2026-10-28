@@ -108,7 +108,7 @@ class Bridge:
         self.connected = threading.Event()
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="ms51-connect-service", clean_session=True)
         self.client.username_pw_set(os.environ.get("MS51_MQTT_ADMIN", "connect-admin"), os.environ.get("MS51_MQTT_PASSWORD", ""))
-        self.client.tls_set(cert_reqs=ssl.CERT_REQUIRED)
+        self.client.tls_set(ca_certs=os.getenv("MS51_MQTT_CA") or None, cert_reqs=ssl.CERT_REQUIRED)
         self.client.reconnect_delay_set(1, 30)
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = lambda *args: self.connected.clear()
