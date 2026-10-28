@@ -1,0 +1,24 @@
+{
+  "version": "3.6.0",
+  "version_code": 51,
+  "application_id": "vn.duong.ms51connect",
+  "app_label": "Hẹn Giờ Lạnh",
+  "apk_sha256": "d13d5f1ab659fb84d245dc717bfd5892bceba9c384d740eac3c1a430868373d5",
+  "signer_sha256": "68503cc2c5148f33d51ab9afcac66f702fcce7e8c863cbebe338352c0d92b7c0",
+  "same_signer_as": "3.5.0",
+  "build": "assembleDebug and assembleDebugAndroidTest passed",
+  "lint": "0 errors, 54 warnings",
+  "emulator": "Android API 35, 1080x2400; 420 and 480 dpi; font scale 1.0 and 1.3 previewed",
+  "checks": {
+    "managed": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "choice": "PASS: touch opens anchored menu, matching width, selection identity, dismiss preserves value, disabled and detached controls close menu, long options selectable.",
+    "stepper": "PASS: single-unit taps, accelerating hold, release/cancel/disable/detach stop, bounded values, manual editing and accessibility click; decimal temperature +/-1, comma, negative values, zero crossing and -55/125 bounds.",
+    "scroll": "PASS: attached dashboard preserves top/mid-page scroll during initial polling, late Save acknowledgement, history changes and disconnect/reconnect; explicit input focus, visible editing and draft/caret preserved.",
+    "render": "PASS: hero remains identical across 30 redraws at each of two sizes; center stays opaque.",
+    "unlock": "PASS: PIN/backup detection, freshness, old firmware, popup deduplication, masking, empty input, defer, physical unlock, permanent lock and background guard."
+  },
+  "limitations": [
+    "Offline UI fixtures; no physical device or live account commands in this release validation.",
+    "APK uses existing debug signing certificate for compatibility with prior test releases."
+  ]
+}

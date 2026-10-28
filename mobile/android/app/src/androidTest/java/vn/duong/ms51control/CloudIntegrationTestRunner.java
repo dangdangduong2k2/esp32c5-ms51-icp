@@ -26,6 +26,7 @@ public final class CloudIntegrationTestRunner extends Instrumentation {
     private Bundle arguments;
     @Override public void onCreate(Bundle args) { super.onCreate(args); arguments=args; live="true".equals(args.getString("live")); start(); }
     @Override public void onStart() {
+        if("ui-preview".equals(arguments.getString("mode"))) { IcePreviewChecks.run(this); return; }
         if("unlock".equals(arguments.getString("mode"))) { UnlockChecks.run(this); return; }
         if("choice".equals(arguments.getString("mode"))) { ChoiceFieldChecks.run(this); return; }
         if("stepper".equals(arguments.getString("mode"))) { StepperChecks.run(this); return; }

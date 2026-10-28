@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="app_background">#F4F7FA</color><color name="app_surface">#FFFFFF</color>
-    <color name="app_text">#172B40</color><color name="app_muted">#657687</color>
-    <color name="app_accent">#00776C</color>
+    <color name="app_background">#EFF7FB</color><color name="app_surface">#FFFFFF</color>
+    <color name="app_text">#102F43</color><color name="app_muted">#526777</color>
+    <color name="app_accent">#087BB8</color><color name="app_brand">#102532</color>
 </resources>

@@ -35,7 +35,18 @@ final class SettingsLayoutChecks {
         for(String key:Arrays.asList("delaySt","stLed","stLcd")) ManagedChecks.check(inside(numbers.get(key),advanced),"ST timing belongs in advanced settings: "+key);
         java.lang.reflect.Method visible=MainActivity.class.getDeclaredMethod("settingVisible",String.class);visible.setAccessible(true);
         for(String key:Arrays.asList("showSt","defrostOpSeconds")) ManagedChecks.check(Boolean.FALSE.equals(visible.invoke(a,key)),"Admin-only option stays hidden even with old policy: "+key);
-        if(a.getResources().getConfiguration().screenWidthDp>=340 && a.getResources().getConfiguration().fontScale<1.3f) {
+        View startup=page.findViewWithTag("settings-group:Khởi động");
+        ManagedChecks.check(startup!=null,"Startup has a collapsible heading");
+        View startupFields=(View)((ViewGroup)startup.getParent()).getChildAt(((ViewGroup)startup.getParent()).indexOfChild(startup)+1);
+        ManagedChecks.check(startupFields.getVisibility()==View.GONE,"Startup begins collapsed");
+        startup.performClick();
+        ManagedChecks.check(startupFields.getVisibility()==View.VISIBLE,"Startup opens on tap");
+        String old=numbers.get("delaySt").getText().toString();
+        numbers.get("delaySt").setText("73");startup.performClick();startup.performClick();
+        ManagedChecks.check(numbers.get("delaySt").getText().toString().equals("73"),"Collapse preserves unsaved startup value");
+        numbers.get("delaySt").setText(old);
+        expandGroups(advanced);
+        if(a.getResources().getConfiguration().screenWidthDp>=360 && a.getResources().getConfiguration().fontScale<1.3f) {
             for(String[] pair:new String[][]{{"coolCl","coolOp"},{"defrostCl","defrostOp"},{"stLed","stLcd"},{"rangeCoolClMin","rangeCoolClMax"}})
                 ManagedChecks.check(row(numbers.get(pair[0]))==row(numbers.get(pair[1])),"Related settings share a row: "+pair[0]);
         }
@@ -63,6 +74,17 @@ final class SettingsLayoutChecks {
     private static boolean inside(View child,View ancestor) {
         for(View current=child;current!=null;current=current.getParent() instanceof View ? (View)current.getParent() : null) if(current==ancestor)return true;
         return false;
+    }
+    static void expandGroups(View view) {
+        if(view instanceof ViewGroup) {
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++) {
+                View child=group.getChildAt(i);
+                if(child.getTag() instanceof String && ((String)child.getTag()).startsWith("settings-group:")
+                        && i+1<group.getChildCount() && group.getChildAt(i+1).getVisibility()==View.GONE) child.performClick();
+                expandGroups(child);
+            }
+        }
     }
     private static ViewGroup row(EditText field) { return (ViewGroup)field.getParent().getParent().getParent(); }
     private static void capture(MainActivity a,View view,String name,int maxHeight) throws Exception {

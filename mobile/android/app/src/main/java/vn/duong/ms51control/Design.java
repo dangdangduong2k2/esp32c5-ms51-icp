@@ -5,36 +5,26 @@ import android.graphics.drawable.Drawable;
 
 /** Small vector artwork keeps every icon crisp without external UI dependencies. */
 final class Design {
-    static final int NAVY = Color.rgb(17, 38, 61);
-    static final int INK = Color.rgb(23, 43, 64);
-    static final int MUTED = Color.rgb(101, 118, 135);
-    static final int TEAL = Color.rgb(0, 119, 108);
-    static final int MINT = Color.rgb(120, 235, 206);
-    static final int BG = Color.rgb(244, 247, 250);
-    static final int LINE = Color.rgb(226, 233, 240);
+    static final int NAVY = 0xFF102532;
+    static final int INK = 0xFF102F43;
+    static final int MUTED = 0xFF526777;
+    static final int TEAL = 0xFF087BB8;
+    static final int MINT = 0xFFB5E7FF;
+    static final int BG = 0xFFEFF7FB;
+    static final int LINE = 0xFFD9E7EF;
+    static final int ACCENT = 0xFF087BB8;
+    static final int SURFACE = Color.WHITE;
+    static final int FIELD = 0xFFF1F7FB;
+    static final int SOFT = 0xFFE0F2FC;
+    static final int RIPPLE = 0x26087BB8;
 
     static final class Hero extends Drawable {
         private final Paint paint = new Paint(3);
         @Override public void draw(Canvas canvas) {
             Rect b = getBounds();
-            // Decorative circles leave a low alpha on this reused Paint.
-            // Restore opacity before every background redraw.
-            paint.setAlpha(255);
-            paint.setShader(new LinearGradient(0, 0, b.width(), b.height(),
-                    new int[]{NAVY, Color.rgb(20, 62, 76)}, null, Shader.TileMode.CLAMP));
-            canvas.drawRoundRect(new RectF(b), 26, 26, paint);
-            paint.setShader(null);
-            canvas.save();
-            canvas.clipRect(b);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(1.2f);
-            for (int i = 0; i < 7; i++) {
-                paint.setColor(Color.argb(14 + i * 2, 120, 235, 206));
-                canvas.drawCircle(b.right * 1.07f, b.height() * .25f,
-                        b.width() * (.26f + i * .095f), paint);
-            }
-            paint.setStyle(Paint.Style.FILL);
-            canvas.restore();
+            paint.setAlpha(255); paint.setStyle(Paint.Style.FILL);
+            paint.setShader(null); paint.setColor(NAVY);
+            canvas.drawRoundRect(new RectF(b),16,16,paint);
         }
         @Override public void setAlpha(int alpha) { }
         @Override public void setColorFilter(ColorFilter filter) { }
@@ -95,6 +85,26 @@ final class Design {
                 case "wifi":
                     c.drawArc(1,3,23,23,225,90,false,p); c.drawArc(5,8,19,22,225,90,false,p);
                     c.drawArc(9,13,15,19,225,90,false,p); p.setStyle(Paint.Style.FILL); c.drawCircle(12,20,1,p); break;
+                case "brand":
+                    p.setStrokeWidth(2.5f);
+                    c.drawArc(3,3,21,21,55,285,false,p);
+                    path(c,12,6,12,12,8,15);
+                    c.save(); c.translate(17.5f,17.5f); p.setStrokeWidth(1.45f);
+                    for(int i=0;i<6;i++) { c.save();c.rotate(i*60);path(c,0,0,0,-4.3f);path(c,-1.5f,-3,0,-1.8f,1.5f,-3);c.restore(); }
+                    c.restore(); break;
+                case "chevron-down": path(c,5,9,12,16,19,9); break;
+                case "chevron-up": path(c,5,15,12,8,19,15); break;
+                case "device":
+                    c.drawRoundRect(3,3,21,21,3,3,p);path(c,7,8,17,8);path(c,7,12,17,12);
+                    p.setStyle(Paint.Style.FILL); c.drawCircle(7,17,1,p);c.drawCircle(12,17,1,p);c.drawCircle(17,17,1,p);break;
+                case "plug":
+                    path(c,8,2,8,7);path(c,16,2,16,7);path(c,5,7,19,7,19,11,15,15,9,15,5,11,5,7);path(c,12,15,12,22);break;
+                case "defrost":
+                    path(c,9,2,16,6,16,13,9,17,2,13,2,6,9,2);
+                    path(c,2,6,9,10,16,6);path(c,9,10,9,17);
+                    Path drop=new Path();drop.moveTo(19,12);drop.cubicTo(18,14,15.8f,17,15.8f,18.5f);drop.cubicTo(15.8f,23,22.2f,23,22.2f,18.5f);drop.cubicTo(22.2f,17,20,14,19,12);c.drawPath(drop,p);break;
+                case "back": path(c,15,5,8,12,15,19); break;
+                case "lock": c.drawRoundRect(5,10,19,22,2,2,p);c.drawArc(8,2,16,16,180,180,false,p);path(c,8,9,8,6);path(c,16,6,16,9);break;
                 case "arrow": path(c,5,12,19,12); path(c,14,7,19,12,14,17); break;
                 case "swap":
                     path(c,4,7,20,7,16,3); path(c,20,17,4,17,8,21); break;

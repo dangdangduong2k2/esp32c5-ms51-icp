@@ -56,7 +56,11 @@ final class ScrollChecks {
                 main(t,() -> ManagedChecks.check(scroll[0].getScrollY()==0,"Idle polling moved scroll to "+scroll[0].getScrollY()+"; focus="+a.getCurrentFocus()));
             }
             main(t,() -> {field[0].requestFocus();field[0].setText("8.25");field[0].setSelection(2);});
-            main(t,() -> ManagedChecks.check(field[0].hasFocus() && scroll[0].getScrollY()>0,"Explicit input focus still reveals field"));
+            main(t,() -> {
+                android.graphics.Rect visible=new android.graphics.Rect();
+                ManagedChecks.check(field[0].hasFocus() && field[0].getGlobalVisibleRect(visible)
+                    && visible.height()==field[0].getHeight(),"Explicit input focus reveals the whole field, including on layouts where scrolling is unnecessary");
+            });
             main(t,() -> ManagedChecks.invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,debug));
             main(t,() -> ManagedChecks.check(field[0].hasFocus() && field[0].getSelectionStart()==2,"Visible editing keeps focus and caret during polling"));
             main(t,() -> scroll[0].scrollTo(0,0));

@@ -47,8 +47,8 @@ final class ChoiceField extends Spinner {
         if(stroke!=0)d.setStroke(dp(1),stroke);return d;
     }
     private void background(boolean open){
-        setBackground(new RippleDrawable(ColorStateList.valueOf(0x1800776C),
-                shape(open?0xFFE8F5F2:0xFFF0F4F7,open?Design.TEAL:0),null));invalidate();
+        setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),
+                shape(open?Design.SOFT:Design.FIELD,open?Design.TEAL:0),null));invalidate();
     }
     @Override public boolean performClick(){
         if(!isEnabled()||!isAttachedToWindow())return false;
@@ -58,7 +58,7 @@ final class ChoiceField extends Spinner {
         menu.setAnchorView(this);menu.setModal(true);
         menu.setWidth(getWidth());menu.setVerticalOffset(dp(6));
         menu.setInputMethodMode(ListPopupWindow.INPUT_METHOD_NOT_NEEDED);
-        GradientDrawable panel=shape(0xFFFFFFFF,0xFFB9DCD5);menu.setBackgroundDrawable(panel);
+        GradientDrawable panel=shape(0xFFFFFFFF,Design.LINE);menu.setBackgroundDrawable(panel);
         menu.setAdapter(new BaseAdapter(){
             public int getCount(){return ChoiceField.this.getCount();}
             public Object getItem(int position){return ChoiceField.this.getItemAtPosition(position);}
@@ -67,8 +67,8 @@ final class ChoiceField extends Spinner {
                 boolean selected=position==getSelectedItemPosition();
                 LinearLayout row=new LinearLayout(getContext());row.setGravity(Gravity.CENTER_VERTICAL);
                 row.setPadding(dp(12),dp(3),dp(10),dp(3));
-                row.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2200776C),
-                        shape(selected?0xFFE5F4EF:0xFFFFFFFF,0),null));
+                row.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),
+                        shape(selected?Design.SOFT:0xFFFFFFFF,0),null));
                 TextView text=label(String.valueOf(getItem(position)));
                 text.setTextColor(selected?Design.TEAL:Design.INK);
                 text.setTypeface(Typeface.create(selected?"sans-serif-medium":"sans-serif",Typeface.NORMAL));

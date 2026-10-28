@@ -27,14 +27,16 @@ final class NumberStepper extends LinearLayout {
     NumberStepper(Context context, EditText input, String label, Bounds bounds, boolean decimal) {
         super(context); this.input=input; this.bounds=bounds; this.decimal=decimal;
         setOrientation(HORIZONTAL); setGravity(Gravity.CENTER_VERTICAL); setBaselineAligned(false);
-        GradientDrawable background=new GradientDrawable(); background.setColor(0xFFF0F4F7); background.setCornerRadius(dp(12)); setBackground(background);
+        GradientDrawable background=new GradientDrawable(); background.setColor(Design.FIELD); background.setCornerRadius(dp(10)); background.setStroke(dp(1),Design.LINE); setBackground(background);
         input.setBackgroundColor(Color.TRANSPARENT); input.setPadding(0,dp(12),0,dp(12)); input.setGravity(Gravity.CENTER);
         input.setHorizontallyScrolling(false); input.setMaxLines(1); input.setHint(null);
         decrease=new Arrow(context,-1,"Giảm "+label); increase=new Arrow(context,1,"Tăng "+label);
-        if(decimal) input.setTextSize(14);
-        addView(decrease,new LayoutParams(dp(decimal ? 40 : 48),dp(52)));
+        input.setTextSize(15);
+        // Decimal values need more room on narrow phones while preserving 48dp arrows.
+        if(android.os.Build.VERSION.SDK_INT>=26) input.setAutoSizeTextTypeUniformWithConfiguration(12,15,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        addView(decrease,new LayoutParams(dp(48),dp(52)));
         addView(input,new LayoutParams(0,-2,1));
-        addView(increase,new LayoutParams(dp(decimal ? 40 : 48),dp(52)));
+        addView(increase,new LayoutParams(dp(48),dp(52)));
     }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
     private void step(int delta) {
@@ -105,7 +107,7 @@ final class NumberStepper extends LinearLayout {
         }
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);float x=getWidth()/2f,y=getHeight()/2f;
-            if(isPressed()) { paint.setColor(0x22008878);paint.setStyle(Paint.Style.FILL);canvas.drawCircle(x,y,dp(19),paint); }
+            if(isPressed()) { paint.setColor(Design.RIPPLE);paint.setStyle(Paint.Style.FILL);canvas.drawCircle(x,y,dp(19),paint); }
             paint.setColor(isEnabled()?Design.TEAL:Design.MUTED);paint.setStrokeWidth(dp(2));paint.setStrokeCap(Paint.Cap.ROUND);
             canvas.drawLine(x-direction*dp(3),y-dp(6),x+direction*dp(3),y,paint);
             canvas.drawLine(x+direction*dp(3),y,x-direction*dp(3),y+dp(6),paint);
