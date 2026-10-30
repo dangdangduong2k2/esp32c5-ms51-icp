@@ -40,6 +40,8 @@ final class CloudAccounts {
             Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(prefs.getString("iv",""),Base64.NO_WRAP)));
             JSONObject session=new JSONObject(new String(cipher.doFinal(Base64.decode(saved,Base64.NO_WRAP)),StandardCharsets.UTF_8));
+            if (!CloudApi.BASE.equals(session.optString("server")))
+                throw new IllegalStateException("Phiên đăng nhập thuộc máy chủ khác.");
             token=session.getString("token"); return session.getJSONObject("user");
         } catch(Exception error) { token=""; prefs.edit().clear().commit(); return null; }
     }
@@ -52,6 +54,7 @@ final class CloudAccounts {
         JSONObject response=new CloudApi(context,"").post("/auth/"+action,new JSONObject().put("username",name).put("password",new String(password)));
         synchronized(this) {
             Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding"); cipher.init(Cipher.ENCRYPT_MODE,key());
+            response.put("server", CloudApi.BASE);
             byte[] encrypted=cipher.doFinal(response.toString().getBytes(StandardCharsets.UTF_8));
             if(!prefs.edit().putString("iv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP))
                     .putString("data",Base64.encodeToString(encrypted,Base64.NO_WRAP)).commit())

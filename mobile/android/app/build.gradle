@@ -17,9 +17,9 @@ android {
         applicationId 'vn.duong.ms51connect'
         minSdk 24
         targetSdk 35
-        versionCode 51
-        versionName '3.6.0'
-        buildConfigField 'String', 'CLOUD_BASE_URL', groovy.json.JsonOutput.toJson(localEndpoint ?: 'https://142-91-99-63.sslip.io/ms51/connect/v1')
+        versionCode 52
+        versionName '3.6.1'
+        buildConfigField 'String', 'CLOUD_BASE_URL', groovy.json.JsonOutput.toJson(localEndpoint ?: 'https://103-9-78-139.sslip.io/ms51/connect/v1')
         manifestPlaceholders = [appLabel: localEndpoint ? 'Hẹn Giờ Lạnh Test' : 'Hẹn Giờ Lạnh']
         if (localEndpoint) {
             applicationIdSuffix '.localtest'

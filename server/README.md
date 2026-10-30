@@ -1,5 +1,13 @@
 # MS51 Connect server (protocol 1)
 
+## Active VPS — VinaHost (3.6.1)
+
+New registry: **https://103-9-78-139.sslip.io/ms51/connect/v1/admin/**.
+Use [the current deployment guide](../docs/vinahost-3.6.1/README.md) and
+`bootstrap_fresh.py --host HOST` for a fresh server. The old IP and
+`bootstrap.py` instructions below are historical and must not be used for this deployment.
+
+
 ## Per-device permissions and managed firmware (3.1.0)
 
 Select an account, then a device's **Cấp quyền** button (or its name). Account arrows have a larger teal background. The permission editor exposes 44 Android settings, including individual Min/Max fields, grouped by the existing settings sections. Each of DF, END, display mode, HCF and HDF has one checkbox: checked shows its setting in the app; unchecked hides it. The five separate “Hiện chế độ…” permissions are retired. Their MCU menu flags remain in the internal 51-field codec and are preserved during ordinary settings writes. This changes app visibility only; it does not write MCU menu flags. `showSt` and `defrostOpSeconds` are admin-only starting in 3.4.10; the app cannot edit them. All available fields remain visible by default; admin can hide any subset or all fields. Policy revisions prevent stale admin writes and stale mobile saves. Android 3.1 and later refresh policy on opening Settings and every 15 seconds while that tab is open, so this permission change needs no new APK.

@@ -76,8 +76,11 @@ An offline PC means this test cloud is offline; standalone MCU behavior is uncha
 Use the private credential text file in `outputs`, or register a new mobile test account.
 Production accounts are not automatically available because no VPS database was imported.
 
-To return to VPS: restore the saved pre-test C5 application, keep NVS intact, and use the
-normal Android app. Original VPS pairing remains in its separate namespace. Remove the
+To move to the new VinaHost VPS, use the production 3.6.1 APK and C5 app from
+[the migration guide](../../docs/vinahost-3.6.1/README.md), keep NVS intact, and pair to
+the new registry. Restoring the saved pre-test C5 application points back to the old
+VPS and is only useful if that old service is restored. Old pairing remains in its
+separate namespace. Remove the
 `MS51-LAN-Test-HTTPS-MQTT` firewall rule and the exact generated test CA certificate if no
 longer needed. Back up the whole private test directory only while both local services are
 stopped; it is not a backup of the old VPS.

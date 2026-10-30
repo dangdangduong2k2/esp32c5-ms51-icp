@@ -21,7 +21,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-HOST = os.getenv("MS51_HOST", "142-91-99-63.sslip.io")
+HOST = os.getenv("MS51_HOST", "103-9-78-139.sslip.io")
 PORT = int(os.getenv("MS51_MQTT_PORT", "8884"))
 ROOT = Path(os.getenv("MS51_DATA", "/var/lib/ms51-connect"))
 PREFIX = "ms51connect/v1/"

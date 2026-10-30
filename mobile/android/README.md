@@ -1,3 +1,9 @@
+# Hẹn Giờ Lạnh 3.6.1
+
+Production endpoint moved to the new VinaHost VPS; login and pair again with the new registry.
+See [deployment and flashing notes](../../docs/vinahost-3.6.1/README.md). UI and MCU behavior are unchanged.
+Legacy or other-server encrypted phone sessions are discarded before an authenticated request.
+
 # MS51 Connect 3.3.7
 
 Android native Java, màu navy/xanh ngọc, `vn.duong.ms51connect`, versionCode 35, Android 7.0 trở lên. Tài khoản và danh sách thiết bị nằm trên VPS; app giữ phiên đăng nhập được mã hóa bằng Android Keystore. Mật khẩu tài khoản dùng Argon2id ở server. Không có khôi phục qua email trong bản này.

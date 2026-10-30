@@ -1,0 +1,41 @@
+{
+  "version": "3.6.1",
+  "server": "103-9-78-139.sslip.io",
+  "os": "Ubuntu 24.04 LTS",
+  "server_checks": {
+    "https_health_mqtt": true,
+    "admin_secure_login": true,
+    "csrf_rejected": true,
+    "simulated_device_tls_pair_presence_permissions": true,
+    "fixture_device_removed": true,
+    "physical_c5_tested": true,
+    "public_download_hashes_match": true
+  },
+  "c5_flash": {
+    "flash_verified": true,
+    "nvs_preserved": true,
+    "ms51_not_written": true,
+    "sha256": "5f1317dda88e6b28daac28d8db4405a3d6f3fe84022eadfde3ae2bcb2b4ac7b0"
+  },
+  "checks": {
+    "android_build_and_lint": true,
+    "android_endpoint_session_emulator": true,
+    "administrator_tests_passed": 14,
+    "managed_device_tests_passed": 36,
+    "admin_ui_regression": true
+  },
+  "assets": {
+    "Hen-Gio-Lanh-3.6.1.apk": {
+      "sha256": "dc1e79ea9479dbddc972d73a0b5c446583f6670d0fbc8a050612a97c3f766023",
+      "bytes": 2527435
+    },
+    "ESP32-C5-VinaHost-3.6.1.zip": {
+      "sha256": "3d42646e4f70cdb5e8b210a73b2f47bab6fd54b6df0a99b9ec1dcfb5c2bb339a",
+      "bytes": 920392
+    },
+    "ESP32-C5-VinaHost-app-0x10000.bin": {
+      "sha256": "5f1317dda88e6b28daac28d8db4405a3d6f3fe84022eadfde3ae2bcb2b4ac7b0",
+      "bytes": 1469408
+    }
+  }
+}

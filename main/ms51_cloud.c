@@ -25,14 +25,15 @@
 #include MS51_CLOUD_CONFIG_HEADER
 #endif
 #ifndef CLOUD_HOST
-#define CLOUD_HOST "142-91-99-63.sslip.io"
+#define CLOUD_HOST "103-9-78-139.sslip.io"
 #endif
 #define CLOUD_PORT 8884
 #ifndef CLOUD_HTTPS_ORIGIN
 #define CLOUD_HTTPS_ORIGIN "https://" CLOUD_HOST
 #endif
 #ifndef CLOUD_NVS_NAMESPACE
-#define CLOUD_NVS_NAMESPACE "ms51_cloud"
+// New VPS has its own registry; retain old VPS and LAN pairing in their namespaces.
+#define CLOUD_NVS_NAMESPACE "ms51_vina"
 #endif
 #define COMMAND_MAX 6144
 #define RESPONSE_MAX 24576
