@@ -1,3 +1,7 @@
+# Hẹn Giờ Lạnh 3.6.4
+
+Căn hai thẻ nhiệt độ và làm rõ nút chế độ chưa chọn. [Thay đổi và kiểm thử](../../docs/hen-gio-lanh-3.6.4/README.md). Chỉ cài đè APK.
+
 # Hẹn Giờ Lạnh 3.6.3
 
 Min/Max và Mật khẩu bảo vệ nằm trong Cài đặt nâng cao, mỗi nhóm có thể thu gọn. [Thay đổi và kiểm thử](../../docs/hen-gio-lanh-3.6.3/README.md). Chỉ cài đè APK.

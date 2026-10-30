@@ -1131,7 +1131,10 @@ public final class MainActivity extends Activity {
         int ink = selected ? Color.WHITE : (button.isEnabled() ? Design.INK : Design.MUTED);
         button.setSelected(selected);
         button.setTextColor(ink);
-        button.setBackgroundTintList(ColorStateList.valueOf(selected ? accent : Design.FIELD));
+        button.setBackgroundTintList(null);
+        GradientDrawable face=rounded(selected?accent:Color.WHITE,dp(12));
+        face.setStroke(dp(1),selected || button.isEnabled()?accent:Design.MUTED);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),face,null));
         Design.Icon symbol = new Design.Icon(cool ? "snowflake" : "defrost", ink);
         symbol.setBounds(0,0,dp(22),dp(22));
         button.setCompoundDrawables(symbol,null,null,null);
@@ -1421,6 +1424,9 @@ public final class MainActivity extends Activity {
         LinearLayout box = card(); box.setPadding(dp(10),dp(12),dp(10),dp(12));
         TextView title = mutedText(label); title.setTextSize(14); title.setTextColor(Design.INK);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+        // The motor title has less width beside the swap button; reserve the same
+        // two-line title area in both cards so readings and dividers stay aligned.
+        title.setMinLines(2);
         LinearLayout heading = new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout sensorName=new LinearLayout(this);sensorName.setOrientation(LinearLayout.VERTICAL);
         sensorName.addView(title);

@@ -1,0 +1,15 @@
+{
+  "version": "3.6.4",
+  "versionCode": 55,
+  "sha256": "1b44c11ce17fc989c83e3426f4466d1aa3dfb70a63c4a8e69bf6f8423cd6e76c",
+  "lint": {
+    "Error": 0,
+    "Warning": 54
+  },
+  "checks": {
+    "test-360-managed": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "test-360-ui-preview": "PASS: offline native preview captured, no device commands sent.",
+    "test-font115-preview": "PASS: offline native preview captured, no device commands sent."
+  },
+  "visualReview": "360dp with motor title wrapping; normal and 115% text; cooling/defrost selected states. Offline native emulator, no physical controller commands."
+}

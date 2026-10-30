@@ -45,12 +45,21 @@ final class IcePreviewChecks {
                 status.getJSONObject("wifi").getJSONObject("uplink").put("ssid","Cabin Wi-Fi").put("rssi",-54).put("state","connected");
                 debug.put("last_rx_age_ms",100);
                 debug.getJSONArray("variables").put(new JSONObject().put("name","selected_mode").put("value","0").put("age_ms",100)).put(new JSONObject().put("name","mode_source").put("value","PHYSICAL").put("age_ms",100));
+                status.put("busy",false);
+                for(int i=0;i<debug.getJSONArray("variables").length();i++)debug.getJSONArray("variables").getJSONObject(i).put("age_ms",100);
                 set(a,"lastStatus",status);set(a,"lastDebug",debug);
                 set(a,"lastHistory",new long[]{7620,5460,8400});
                 state(a,"screen","CONTROL");state(a,"tab","OVERVIEW");
                 LinearLayout overview=page(a,"Tổng quan");call(a,"buildOverview",new Class[]{LinearLayout.class},overview);
                 call(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,debug);call(a,"stopCounting",new Class[]{});
                 capture(a,"03-overview",true);
+                for(int i=0;i<debug.getJSONArray("variables").length();i++) {
+                    JSONObject variable=debug.getJSONArray("variables").getJSONObject(i);
+                    if("selected_mode".equals(variable.optString("name")))variable.put("value","1");
+                    if("mode".equals(variable.optString("name")))variable.put("value","ICE_FLUSH");
+                }
+                call(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,debug);call(a,"stopCounting",new Class[]{});
+                capture(a,"03-overview-defrost",true);
                 state(a,"tab","SETTINGS");LinearLayout settings=page(a,"Cài đặt");
                 RuntimeConfigCodec.Config config=RuntimeConfigCodec.defaults();config.values.put("coolCl",6);config.values.put("coolOp",5);config.values.put("defrostCl",5);config.values.put("defrostOp",32);config.values.put("delaySt",70);config.values.put("stLed",50);config.values.put("stLcd",50);
                 set(a,"runtimeConfig",config);set(a,"configLoaded",true);call(a,"buildSettings",new Class[]{LinearLayout.class},settings);capture(a,"04-settings",true);
