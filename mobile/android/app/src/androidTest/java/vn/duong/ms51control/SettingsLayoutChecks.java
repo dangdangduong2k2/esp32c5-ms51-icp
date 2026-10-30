@@ -35,16 +35,18 @@ final class SettingsLayoutChecks {
         for(String key:Arrays.asList("delaySt","stLed","stLcd")) ManagedChecks.check(inside(numbers.get(key),advanced),"ST timing belongs in advanced settings: "+key);
         java.lang.reflect.Method visible=MainActivity.class.getDeclaredMethod("settingVisible",String.class);visible.setAccessible(true);
         for(String key:Arrays.asList("showSt","defrostOpSeconds")) ManagedChecks.check(Boolean.FALSE.equals(visible.invoke(a,key)),"Admin-only option stays hidden even with old policy: "+key);
-        View startup=page.findViewWithTag("settings-group:Khởi động");
-        ManagedChecks.check(startup!=null,"Startup has a collapsible heading");
-        View startupFields=(View)((ViewGroup)startup.getParent()).getChildAt(((ViewGroup)startup.getParent()).indexOfChild(startup)+1);
-        ManagedChecks.check(startupFields.getVisibility()==View.GONE,"Startup begins collapsed");
-        startup.performClick();
-        ManagedChecks.check(startupFields.getVisibility()==View.VISIBLE,"Startup opens on tap");
-        String old=numbers.get("delaySt").getText().toString();
-        numbers.get("delaySt").setText("73");startup.performClick();startup.performClick();
-        ManagedChecks.check(numbers.get("delaySt").getText().toString().equals("73"),"Collapse preserves unsaved startup value");
-        numbers.get("delaySt").setText(old);
+        for(String[] entry:new String[][]{{"Khởi động","delaySt","73"},{"Giới hạn thời gian (Min / Max)","rangeCoolClMin","2"},{"Mật khẩu bảo vệ","pinPassword","456"}}) {
+            View toggle=page.findViewWithTag("settings-group:"+entry[0]);
+            ManagedChecks.check(toggle!=null && inside(toggle,advanced),"Collapsible group belongs to advanced: "+entry[0]);
+            View fields=((ViewGroup)toggle.getParent()).getChildAt(1);
+            ManagedChecks.check(fields.getVisibility()==View.GONE,"Group begins collapsed: "+entry[0]);
+            toggle.performClick();
+            ManagedChecks.check(fields.getVisibility()==View.VISIBLE,"Group opens on tap: "+entry[0]);
+            String old=numbers.get(entry[1]).getText().toString();numbers.get(entry[1]).setText(entry[2]);
+            toggle.performClick();toggle.performClick();
+            ManagedChecks.check(numbers.get(entry[1]).getText().toString().equals(entry[2]),"Collapse preserves unsaved value: "+entry[1]);
+            numbers.get(entry[1]).setText(old);
+        }
         expandGroups(advanced);
         if(a.getResources().getConfiguration().screenWidthDp>=360 && a.getResources().getConfiguration().fontScale<1.3f) {
             for(String[] pair:new String[][]{{"coolCl","coolOp"},{"defrostCl","defrostOp"},{"delaySt","hcfTime"},{"stLed","stLcd"},{"rangeCoolClMin","rangeCoolClMax"}})
@@ -64,10 +66,12 @@ final class SettingsLayoutChecks {
         ManagedChecks.set(a,"deviceAccess",new JSONObject().put("visible",new JSONArray().put("coolCl").put("rangeCoolClMin")));
         LinearLayout limited=new LinearLayout(a);limited.setOrientation(LinearLayout.VERTICAL);
         ManagedChecks.invoke(a,"buildSettings",new Class[]{LinearLayout.class},limited);
-        ManagedChecks.check(limited.getChildAt(1).getVisibility()==View.VISIBLE && limited.getChildAt(2).getVisibility()==View.GONE,"Nested allowed fields remain visible, empty advanced section hidden");
+        ManagedChecks.check(limited.getChildAt(1).getVisibility()==View.VISIBLE && limited.getChildAt(2).getVisibility()==View.VISIBLE,"Advanced remains available for permitted range field");
         Map<String,EditText> limitedNumbers=(Map<String,EditText>)ManagedChecks.get(a,"configInputs");
         ViewGroup loneRow=row(limitedNumbers.get("coolCl"));
         ManagedChecks.check(loneRow.getChildCount()==1 && limitedNumbers.size()==2,"Hidden fields leave no empty cells");
+        ManagedChecks.check(inside(limitedNumbers.get("rangeCoolClMin"),limited.getChildAt(2))
+                && limited.findViewWithTag("settings-group:Mật khẩu bảo vệ")==null,"Nested permissions hide unauthorized password group");
         ManagedChecks.set(a,"deviceAccess",previousAccess);
         ManagedChecks.set(a,"runtimeConfig",previousConfig);
     }

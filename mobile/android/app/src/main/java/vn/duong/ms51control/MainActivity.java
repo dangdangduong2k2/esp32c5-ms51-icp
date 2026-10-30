@@ -1839,20 +1839,16 @@ public final class MainActivity extends Activity {
         addNumberField(retry,"Thời gian thử lại","tryTime");
         addChoiceField(retry,"Đơn vị thử lại","tryUnit",choices("Giờ",0,"Ngày",1));
         addSettingsSubgroup(advanced,"Thử lại",retry);
-        content.addView(advanced, fullParams(0,12,0,0));
-
-        LinearLayout ranges = card();
-        addSectionTitle(ranges, "Giới hạn thời gian (Min / Max)");
+        LinearLayout ranges=new LinearLayout(this);ranges.setOrientation(LinearLayout.VERTICAL);
         addRangeFields(ranges, "Làm lạnh CL", "rangeCoolCl");
         addRangeFields(ranges, "Làm lạnh OP", "rangeCoolOp");
         addRangeFields(ranges, "Xả đá CL", "rangeDefrostCl");
         addRangeFields(ranges, "Xả đá OP", "rangeDefrostOp");
         addRangeFields(ranges, "ST LCD", "rangeStLcd");
         addRangeFields(ranges, "ST LED", "rangeStLed");
-        content.addView(ranges, fullParams(0, 12, 0, 0));
+        addSettingsSubgroup(advanced,"Giới hạn thời gian (Min / Max)",ranges);
 
-        LinearLayout pin = card();
-        addSectionTitle(pin, "Mật khẩu bảo vệ");
+        LinearLayout pin=new LinearLayout(this);pin.setOrientation(LinearLayout.VERTICAL);
         CheckBox pinEnable = addCheckField(pin, "Bật mật khẩu", "pinEnable", true);
         addPinNumberField(pin, "Mật khẩu", "pinPassword");
         addPinNumberField(pin, "Mật khẩu dự phòng", "pinBackupPassword");
@@ -1874,8 +1870,9 @@ public final class MainActivity extends Activity {
         finishSettingsRow(pin);
         pinEnable.setOnCheckedChangeListener((buttonView, isChecked) -> syncPinControls());
         addHelp(pin, "Chỉ các mục được người quản lý cấp quyền mới có thể chỉnh sửa.");
-        content.addView(pin, fullParams(0, 12, 0, 0));
-        for (LinearLayout section : new LinearLayout[]{timing, advanced, ranges, pin}) {
+        addSettingsSubgroup(advanced,"Mật khẩu bảo vệ",pin);
+        content.addView(advanced,fullParams(0,12,0,0));
+        for (LinearLayout section : new LinearLayout[]{timing, advanced}) {
             if (!hasSettingControls(section)) section.setVisibility(View.GONE);
         }
         applyRuntimeConfigToViews();

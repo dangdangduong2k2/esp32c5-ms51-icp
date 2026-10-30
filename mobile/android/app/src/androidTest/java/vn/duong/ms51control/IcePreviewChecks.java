@@ -54,6 +54,7 @@ final class IcePreviewChecks {
                 state(a,"tab","SETTINGS");LinearLayout settings=page(a,"Cài đặt");
                 RuntimeConfigCodec.Config config=RuntimeConfigCodec.defaults();config.values.put("coolCl",6);config.values.put("coolOp",5);config.values.put("defrostCl",5);config.values.put("defrostOp",32);config.values.put("delaySt",70);config.values.put("stLed",50);config.values.put("stLcd",50);
                 set(a,"runtimeConfig",config);set(a,"configLoaded",true);call(a,"buildSettings",new Class[]{LinearLayout.class},settings);capture(a,"04-settings",true);
+                captureSection(a,settings,"Cài đặt nâng cao","04-advanced-collapsed");
                 SettingsLayoutChecks.expandGroups(settings);capture(a,"04-settings-expanded",true);
                 captureSection(a,settings,"Cài đặt nâng cao","04-startup-cycle");
                 captureSection(a,settings,"Giới hạn thời gian","04-limits");
@@ -73,16 +74,20 @@ final class IcePreviewChecks {
     }
     static void captureSection(MainActivity a,LinearLayout content,String title,String name)throws Exception {
         android.widget.ScrollView scroll=(android.widget.ScrollView)content.getParent();
-        for(int i=0;i<content.getChildCount();i++) {
-            View child=content.getChildAt(i);
-            if(!(child instanceof ViewGroup) || ((ViewGroup)child).getChildCount()==0)continue;
-            View first=((ViewGroup)child).getChildAt(0);
-            if(first instanceof android.widget.TextView && ((android.widget.TextView)first).getText().toString().startsWith(title)) {
-                scroll.scrollTo(0,Math.max(0,child.getTop()-Math.round(12*a.getResources().getDisplayMetrics().density)));
-                capture(a,name,false);return;
-            }
-        }
-        throw new AssertionError("Missing preview section: "+title);
+        View section=findSection(content,title);
+        if(section==null)throw new AssertionError("Missing preview section: "+title);
+        android.graphics.Rect rect=new android.graphics.Rect(0,0,section.getWidth(),section.getHeight());
+        content.offsetDescendantRectToMyCoords(section,rect);
+        scroll.scrollTo(0,Math.max(0,rect.top-Math.round(12*a.getResources().getDisplayMetrics().density)));
+        capture(a,name,false);
+    }
+    static View findSection(View view,String title) {
+        if(!(view instanceof ViewGroup))return null;
+        ViewGroup group=(ViewGroup)view;
+        if(group.getChildCount()>0 && group.getChildAt(0) instanceof android.widget.TextView
+                && ((android.widget.TextView)group.getChildAt(0)).getText().toString().startsWith(title))return group;
+        for(int i=0;i<group.getChildCount();i++){View found=findSection(group.getChildAt(i),title);if(found!=null)return found;}
+        return null;
     }
     static void capture(MainActivity a,String name,boolean full)throws Exception {
         ViewGroup root=(ViewGroup)get(a,"pageRoot");

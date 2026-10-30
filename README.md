@@ -1,6 +1,10 @@
 # MS51 Connect · ESP32-C5 / MS51
 
-## Android mới nhất: Hẹn Giờ Lạnh 3.6.2
+## Android mới nhất: Hẹn Giờ Lạnh 3.6.3
+
+[Tải APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.6.3.apk) · [Hai nhóm Min/Max và mật khẩu thu gọn trong Cài đặt nâng cao](docs/hen-gio-lanh-3.6.3/README.md). Chỉ cập nhật app.
+
+## Android 3.6.2
 
 [Tải APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.6.2.apk) · [Giao diện, nhóm cài đặt và kiểm thử](docs/hen-gio-lanh-3.6.2/README.md). Chỉ cập nhật app, dùng VPS VinaHost hiện tại. Các mục bên dưới là lịch sử phiên bản.
 

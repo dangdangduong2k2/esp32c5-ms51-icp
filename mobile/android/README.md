@@ -1,3 +1,7 @@
+# Hẹn Giờ Lạnh 3.6.3
+
+Min/Max và Mật khẩu bảo vệ nằm trong Cài đặt nâng cao, mỗi nhóm có thể thu gọn. [Thay đổi và kiểm thử](../../docs/hen-gio-lanh-3.6.3/README.md). Chỉ cài đè APK.
+
 # Hẹn Giờ Lạnh 3.6.2
 
 Bố trí lại cài đặt theo video và cập nhật giao diện bám concept xanh lạnh. [Thay đổi, ảnh chụp và kiểm thử](../../docs/hen-gio-lanh-3.6.2/README.md). Chỉ cài đè APK; giữ VPS/C5/MS51 hiện có.
