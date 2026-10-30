@@ -28,15 +28,15 @@ final class NumberStepper extends LinearLayout {
         super(context); this.input=input; this.bounds=bounds; this.decimal=decimal;
         setOrientation(HORIZONTAL); setGravity(Gravity.CENTER_VERTICAL); setBaselineAligned(false);
         GradientDrawable background=new GradientDrawable(); background.setColor(Design.FIELD); background.setCornerRadius(dp(10)); background.setStroke(dp(1),Design.LINE); setBackground(background);
-        input.setBackgroundColor(Color.TRANSPARENT); input.setPadding(0,dp(12),0,dp(12)); input.setGravity(Gravity.CENTER);
+        input.setBackgroundColor(Color.TRANSPARENT); input.setPadding(0,dp(10),0,dp(10)); input.setGravity(Gravity.CENTER);
         input.setHorizontallyScrolling(false); input.setMaxLines(1); input.setHint(null);
         decrease=new Arrow(context,-1,"Giảm "+label); increase=new Arrow(context,1,"Tăng "+label);
-        input.setTextSize(15);
+        input.setTextSize(16);input.setTypeface(android.graphics.Typeface.create("sans-serif-medium",android.graphics.Typeface.NORMAL));
         // Decimal values need more room on narrow phones while preserving 48dp arrows.
-        if(android.os.Build.VERSION.SDK_INT>=26) input.setAutoSizeTextTypeUniformWithConfiguration(12,15,1,android.util.TypedValue.COMPLEX_UNIT_SP);
-        addView(decrease,new LayoutParams(dp(48),dp(52)));
+        if(android.os.Build.VERSION.SDK_INT>=26) input.setAutoSizeTextTypeUniformWithConfiguration(12,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        addView(decrease,new LayoutParams(dp(48),dp(48)));
         addView(input,new LayoutParams(0,-2,1));
-        addView(increase,new LayoutParams(dp(48),dp(52)));
+        addView(increase,new LayoutParams(dp(48),dp(48)));
     }
     private int dp(int value) { return Math.round(value*getResources().getDisplayMetrics().density); }
     private void step(int delta) {

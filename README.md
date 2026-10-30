@@ -1,5 +1,9 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Android mới nhất: Hẹn Giờ Lạnh 3.6.2
+
+[Tải APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.6.2.apk) · [Giao diện, nhóm cài đặt và kiểm thử](docs/hen-gio-lanh-3.6.2/README.md). Chỉ cập nhật app, dùng VPS VinaHost hiện tại. Các mục bên dưới là lịch sử phiên bản.
+
 ## MS51 3.4.1 · Trở lại SIG vật lý
 
 MS51 luôn đọc chân SIG P0.1 như cũ; ngưỡng nhiệt độ động cơ không thay tín hiệu này. Giữ nguyên app/C5 3.4.0 và phần 50k điều khiển relay 3. [File HEX, phạm vi thay đổi và kiểm thử](docs/ms51-physical-sig-3.4.1/README.md). Bản này chỉ xuất file, chưa nạp lên bo.

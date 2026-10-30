@@ -29,18 +29,18 @@ final class ChoiceField extends Spinner {
         setAdapter(new ArrayAdapter<Object>(context,android.R.layout.simple_spinner_item,values) {
             @Override public View getView(int position,View recycled,ViewGroup parent) {
                 TextView text=label(String.valueOf(getItem(position)));
-                text.setPadding(0,dp(12),0,dp(12));
+                text.setPadding(0,dp(10),0,dp(10));
                 return text;
             }
         });
-        setPadding(dp(14),0,dp(38),0);setMinimumHeight(dp(52));
+        setPadding(dp(14),0,dp(38),0);setMinimumHeight(dp(48));
         background(false);
     }
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}
     private TextView label(String value){
         TextView text=new TextView(getContext());text.setText(value);text.setTextSize(14);
-        text.setTextColor(Design.INK);text.setGravity(Gravity.CENTER_VERTICAL);
-        text.setMinHeight(dp(52));return text;
+        text.setTextColor(Design.INK);text.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));text.setGravity(Gravity.CENTER_VERTICAL);
+        text.setMinHeight(dp(48));return text;
     }
     private GradientDrawable shape(int color,int stroke){
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(12));
@@ -48,7 +48,7 @@ final class ChoiceField extends Spinner {
     }
     private void background(boolean open){
         setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),
-                shape(open?Design.SOFT:Design.FIELD,open?Design.TEAL:0),null));invalidate();
+                shape(open?Design.SOFT:Design.FIELD,open?Design.TEAL:Design.LINE),null));invalidate();
     }
     @Override public boolean performClick(){
         if(!isEnabled()||!isAttachedToWindow())return false;

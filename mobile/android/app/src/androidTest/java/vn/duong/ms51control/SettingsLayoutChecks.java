@@ -47,7 +47,7 @@ final class SettingsLayoutChecks {
         numbers.get("delaySt").setText(old);
         expandGroups(advanced);
         if(a.getResources().getConfiguration().screenWidthDp>=360 && a.getResources().getConfiguration().fontScale<1.3f) {
-            for(String[] pair:new String[][]{{"coolCl","coolOp"},{"defrostCl","defrostOp"},{"stLed","stLcd"},{"rangeCoolClMin","rangeCoolClMax"}})
+            for(String[] pair:new String[][]{{"coolCl","coolOp"},{"defrostCl","defrostOp"},{"delaySt","hcfTime"},{"stLed","stLcd"},{"rangeCoolClMin","rangeCoolClMax"}})
                 ManagedChecks.check(row(numbers.get(pair[0]))==row(numbers.get(pair[1])),"Related settings share a row: "+pair[0]);
         }
         java.lang.reflect.Method collect=MainActivity.class.getDeclaredMethod("collectRuntimeConfigValues");collect.setAccessible(true);

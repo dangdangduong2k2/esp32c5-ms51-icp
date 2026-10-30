@@ -5,26 +5,54 @@ import android.graphics.drawable.Drawable;
 
 /** Small vector artwork keeps every icon crisp without external UI dependencies. */
 final class Design {
-    static final int NAVY = 0xFF102532;
-    static final int INK = 0xFF102F43;
+    static final int NAVY = 0xFF0A2638;
+    static final int INK = 0xFF0B2A48;
     static final int MUTED = 0xFF526777;
-    static final int TEAL = 0xFF087BB8;
+    static final int TEAL = 0xFF0079C4;
     static final int MINT = 0xFFB5E7FF;
-    static final int BG = 0xFFEFF7FB;
-    static final int LINE = 0xFFD9E7EF;
-    static final int ACCENT = 0xFF087BB8;
+    static final int BG = 0xFFF2F9FD;
+    static final int LINE = 0xFFD8EAF6;
+    static final int ACCENT = 0xFF0079C4;
     static final int SURFACE = Color.WHITE;
-    static final int FIELD = 0xFFF1F7FB;
-    static final int SOFT = 0xFFE0F2FC;
+    static final int FIELD = 0xFFF1F8FD;
+    static final int SOFT = 0xFFE6F4FD;
     static final int RIPPLE = 0x26087BB8;
+
+    /** State-aware switch artwork; the host CompoundButton retains keyboard/accessibility behavior. */
+    static final class Toggle extends Drawable {
+        private final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final float density;
+        private boolean checked, enabled=true;
+        private int alpha=255;
+        Toggle(float density){this.density=density;}
+        @Override public int getIntrinsicWidth(){return Math.round(48*density);}
+        @Override public int getIntrinsicHeight(){return Math.round(24*density);}
+        @Override public boolean isStateful(){return true;}
+        @Override protected boolean onStateChange(int[] states){
+            checked=false;enabled=false;
+            for(int state:states){if(state==android.R.attr.state_checked)checked=true;if(state==android.R.attr.state_enabled)enabled=true;}
+            invalidateSelf();return true;
+        }
+        @Override public void draw(Canvas c){
+            Rect b=getBounds();c.save();c.translate(b.left,b.top);c.scale(b.width()/48f,b.height()/24f);
+            p.setColor(checked?ACCENT:MUTED);p.setAlpha(enabled?alpha:alpha/3);c.drawRoundRect(0,1,48,23,11,11,p);
+            p.setColor(Color.WHITE);p.setAlpha(enabled?alpha:alpha/3);c.drawCircle(checked?37:11,12,8,p);
+            p.setTextSize(9);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextAlign(Paint.Align.CENTER);
+            c.drawText(checked?"ON":"OFF",checked?16:32,15,p);c.restore();
+        }
+        @Override public void setAlpha(int a){alpha=a;invalidateSelf();}
+        @Override public void setColorFilter(ColorFilter f){p.setColorFilter(f);invalidateSelf();}
+        @Override public int getOpacity(){return PixelFormat.TRANSLUCENT;}
+    }
 
     static final class Hero extends Drawable {
         private final Paint paint = new Paint(3);
         @Override public void draw(Canvas canvas) {
             Rect b = getBounds();
             paint.setAlpha(255); paint.setStyle(Paint.Style.FILL);
-            paint.setShader(null); paint.setColor(NAVY);
-            canvas.drawRoundRect(new RectF(b),16,16,paint);
+            paint.setShader(new LinearGradient(b.left,b.top,b.right,b.bottom,NAVY,0xFF103B4B,Shader.TileMode.CLAMP));
+            float radius=14*android.content.res.Resources.getSystem().getDisplayMetrics().density;
+            canvas.drawRoundRect(new RectF(b),radius,radius,paint);
         }
         @Override public void setAlpha(int alpha) { }
         @Override public void setColorFilter(ColorFilter filter) { }
@@ -77,6 +105,13 @@ final class Design {
             switch (name) {
                 case "home":
                     path(c, 3,11,12,3,21,11); path(c,5,10,5,21,10,21,10,15,14,15,14,21,19,21,19,10); break;
+                case "gear":
+                    c.drawCircle(12,12,6.5f,p);c.drawCircle(12,12,2.4f,p);
+                    for(int i=0;i<8;i++){c.save();c.rotate(i*45,12,12);path(c,10.5f,5.7f,10.5f,3,13.5f,3,13.5f,5.7f);c.restore();}break;
+                case "cloud-upload":
+                    Path cloud=new Path();cloud.moveTo(6,18);cloud.cubicTo(0,18,0,9,6,9);
+                    cloud.cubicTo(6,1,18,1,18,9);cloud.cubicTo(24,9,24,18,18,18);c.drawPath(cloud,p);
+                    path(c,9,14,12,11,15,14);path(c,12,11,12,22);break;
                 case "settings":
                     for(int i=0;i<3;i++){ float x=5+i*7; c.drawLine(x,3,x,21,p); }
                     p.setStyle(Paint.Style.FILL); c.drawCircle(5,9,3,p); c.drawCircle(12,16,3,p); c.drawCircle(19,7,3,p); break;
@@ -86,10 +121,10 @@ final class Design {
                     c.drawArc(1,3,23,23,225,90,false,p); c.drawArc(5,8,19,22,225,90,false,p);
                     c.drawArc(9,13,15,19,225,90,false,p); p.setStyle(Paint.Style.FILL); c.drawCircle(12,20,1,p); break;
                 case "brand":
-                    p.setStrokeWidth(2.5f);
+                    p.setStrokeWidth(1.8f);
                     c.drawArc(3,3,21,21,55,285,false,p);
                     path(c,12,6,12,12,8,15);
-                    c.save(); c.translate(17.5f,17.5f); p.setStrokeWidth(1.45f);
+                    c.save(); c.translate(17.5f,17.5f); p.setStrokeWidth(1.15f);
                     for(int i=0;i<6;i++) { c.save();c.rotate(i*60);path(c,0,0,0,-4.3f);path(c,-1.5f,-3,0,-1.8f,1.5f,-3);c.restore(); }
                     c.restore(); break;
                 case "chevron-down": path(c,5,9,12,16,19,9); break;

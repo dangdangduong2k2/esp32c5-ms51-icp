@@ -1038,7 +1038,7 @@ public final class MainActivity extends Activity {
         ++accessViewEpoch;
         screen = Screen.CONTROL;
         tab = selectedTab;
-        String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt vận hành"
+        String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt"
                 : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị";
         LinearLayout content = createPage("", title,
                 tab == Tab.OVERVIEW ? ""
@@ -1075,8 +1075,8 @@ public final class MainActivity extends Activity {
         row.setBackgroundColor(Color.WHITE);
         row.setElevation(dp(3));
         addNavButton(row, Tab.OVERVIEW, "Tổng quan", "home");
-        addNavButton(row, Tab.SETTINGS, "Cài đặt", "settings");
-        addNavButton(row, Tab.FIRMWARE, "Cập nhật", "upload");
+        addNavButton(row, Tab.SETTINGS, "Cài đặt", "gear");
+        addNavButton(row, Tab.FIRMWARE, "Cập nhật", "cloud-upload");
         addNavButton(row, Tab.DEVICE, "Thiết bị", "device");
         pageRoot.addView(row, fullParams(0, 0, 0, 0));
     }
@@ -1115,7 +1115,7 @@ public final class MainActivity extends Activity {
 
     private Button modeAction(LinearLayout row, String title, Runnable action) {
         Button button = neutralButton(title);
-        button.setTextSize(14); button.setMinHeight(dp(60)); button.setMinWidth(0); button.setMinimumWidth(0);
+        button.setTextSize(14); button.setMinHeight(dp(52)); button.setMinWidth(0); button.setMinimumWidth(0);
         button.setPadding(dp(14),0,dp(14),0); button.setMaxLines(2); button.setHorizontallyScrolling(false);
         button.setCompoundDrawablePadding(dp(8));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,-2,1);
@@ -1214,21 +1214,22 @@ public final class MainActivity extends Activity {
         hero.setPadding(dp(16), dp(14), dp(16), dp(14));
         String deviceLabel = activeDevice == null ? "" : activeDevice.name.trim();
         TextView caption = mutedText("Bộ điều khiển" + (deviceLabel.isEmpty() ? "" : " " + deviceLabel));
-        caption.setTextSize(17); caption.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        caption.setTextColor(0xFFD8E7EF); hero.addView(caption);
-        dashboardMode = valueText("Đang chờ dữ liệu"); dashboardMode.setTextSize(27);
-        dashboardMode.setTypeface(Typeface.create("sans-serif", Typeface.BOLD));
-        dashboardMode.setTextColor(Color.WHITE);
-        LinearLayout statusRow = new LinearLayout(this);
-        statusRow.setOrientation(LinearLayout.HORIZONTAL);
-        statusRow.setGravity(Gravity.CENTER_VERTICAL); statusRow.setBaselineAligned(false);
-        statusRow.addView(dashboardMode, new LinearLayout.LayoutParams(0, -2, 1f));
-        hero.addView(statusRow, fullParams(0, 5, 0, 5));
-        View line = new View(this); line.setBackgroundColor(0x30FFFFFF);
-        hero.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
-        dashboardConnection = bodyText("Đang đọc trạng thái…");
-        dashboardConnection.setTextSize(12); dashboardConnection.setTextColor(Design.MINT);
-        hero.addView(dashboardConnection, fullParams(0, 8, 0, 0));
+        caption.setTextSize(14);caption.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+        caption.setTextColor(0xFFD8E7EF);
+        dashboardMode=valueText("Đang chờ dữ liệu");dashboardMode.setTextSize(24);
+        dashboardMode.setTypeface(Typeface.DEFAULT_BOLD);dashboardMode.setTextColor(Color.WHITE);
+        LinearLayout summary=new LinearLayout(this);summary.setOrientation(LinearLayout.VERTICAL);
+        summary.addView(caption);summary.addView(dashboardMode,fullParams(0,6,0,0));
+        dashboardConnection=bodyText("Đang đọc trạng thái…");
+        dashboardConnection.setTextSize(12);dashboardConnection.setTextColor(Design.MINT);
+        if(compactSettings()) {
+            LinearLayout statusRow=new LinearLayout(this);statusRow.setGravity(Gravity.CENTER_VERTICAL);
+            statusRow.setBaselineAligned(false);statusRow.addView(summary,new LinearLayout.LayoutParams(0,-2,1));
+            dashboardConnection.setGravity(Gravity.CENTER);dashboardConnection.setPadding(dp(8),0,0,0);
+            statusRow.addView(dashboardConnection,new LinearLayout.LayoutParams(dp(88),-2));hero.addView(statusRow);
+        } else {
+            hero.addView(summary);hero.addView(dashboardConnection,fullParams(0,8,0,0));
+        }
         content.addView(hero, fullParams(0, 0, 0, 10));
 
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); actions.setBaselineAligned(false);
@@ -1420,16 +1421,17 @@ public final class MainActivity extends Activity {
         LinearLayout box = card(); box.setPadding(dp(10),dp(12),dp(10),dp(12));
         TextView title = mutedText(label); title.setTextSize(14); title.setTextColor(Design.INK);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        box.addView(title);
-        LinearLayout heading = new LinearLayout(this); heading.setGravity(Gravity.CENTER_VERTICAL);
-        TextView name = mutedText(sensorIndex==0 ? (motorSensorIndex==0 ? "10k" : "20k") : "50k"); name.setTextSize(12);
-        heading.addView(name, new LinearLayout.LayoutParams(0,-2,1));
+        LinearLayout heading = new LinearLayout(this);heading.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout sensorName=new LinearLayout(this);sensorName.setOrientation(LinearLayout.VERTICAL);
+        sensorName.addView(title);
+        TextView name=mutedText(sensorIndex==0?(motorSensorIndex==0?"10k":"20k"):"50k");name.setTextSize(12);
+        sensorName.addView(name,fullParams(0,2,0,0));heading.addView(sensorName,new LinearLayout.LayoutParams(0,-2,1));
         if (sensorIndex==0) {
             motorSensorLabel = name;
             motorSensorSwitch = new android.widget.ImageButton(this);
             motorSensorSwitch.setImageDrawable(new Design.Icon("swap",Design.TEAL));
             motorSensorSwitch.setPadding(dp(13),dp(13),dp(13),dp(13));
-            motorSensorSwitch.setBackground(rounded(Design.SOFT,dp(24)));
+            motorSensorSwitch.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),rounded(Color.TRANSPARENT,dp(10)),null));
             motorSensorSwitch.setContentDescription(motorSensorIndex==0 ? "Đổi sang cảm biến 20k" : "Đổi sang cảm biến 10k");
             motorSensorSwitch.setOnClickListener(v -> {
                 if(triggerSaving || modeChanging || pendingMode!=null || managedUpdateStarting) return;
@@ -1441,14 +1443,10 @@ public final class MainActivity extends Activity {
                 renderTemperatureCards();
             });
             heading.addView(motorSensorSwitch,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        } else {
-            ImageView symbol = icon("thermometer",Design.TEAL,20);
-            symbol.setPadding(dp(13),dp(13),dp(13),dp(13));
-            heading.addView(symbol,new LinearLayout.LayoutParams(dp(48),dp(48)));
         }
-        box.addView(heading);
-        TextView value = valueText("— °C"); value.setTextSize(26); value.setSingleLine(true);
-        if(Build.VERSION.SDK_INT>=26) value.setAutoSizeTextTypeUniformWithConfiguration(14,26,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        heading.setMinimumHeight(dp(48));box.addView(heading);
+        TextView value = valueText("— °C"); value.setTextSize(32); value.setTypeface(Typeface.DEFAULT_BOLD);value.setSingleLine(true);
+        if(Build.VERSION.SDK_INT>=26) value.setAutoSizeTextTypeUniformWithConfiguration(14,32,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         box.addView(value, fullParams(0,2,0,2));
         TextView note = mutedText("Đang chờ dữ liệu"); note.setTextSize(12);
         box.addView(note);
@@ -1467,7 +1465,7 @@ public final class MainActivity extends Activity {
         face.setStroke(dp(1),Design.LINE);card.setBackground(face);
         TextView label = mutedText("green".equals(channel) ? "Thời gian hoạt động" : "Thời gian chờ");
         label.setTextSize(13); label.setTextColor(Design.INK); label.setTypeface(Typeface.DEFAULT_BOLD);
-        label.setMinLines(2);
+        if(getResources().getConfiguration().fontScale>=1.3f)label.setMinLines(2);
         card.setPadding(dp(12),dp(12),dp(12),dp(12));
         card.addView(label, fullParams(0,0,0,0));
         SevenSegmentView display=new SevenSegmentView(this); display.setSegmentColor(color);
@@ -1634,7 +1632,7 @@ public final class MainActivity extends Activity {
         int level = Design.WifiSignal.level("connected".equals(uplink.optString("state")), rssi);
         Design.WifiSignal wifiIcon = new Design.WifiSignal(level, Design.MINT);
         wifiIcon.setBounds(0, 0, dp(22), dp(22));
-        dashboardConnection.setCompoundDrawables(wifiIcon, null, null, null);
+        dashboardConnection.setCompoundDrawables(compactSettings()?null:wifiIcon, compactSettings()?wifiIcon:null, null, null);
         dashboardConnection.setCompoundDrawablePadding(dp(8));
         dashboardConnection.setContentDescription(network + (level > 0
                 ? ", tín hiệu " + level + " trên 4 vạch, " + rssi + " dBm"
@@ -1777,7 +1775,7 @@ public final class MainActivity extends Activity {
         pinDependentViews.clear();
         LinearLayout intro = card();
         addSectionTitle(intro, "Cài đặt vận hành");
-        addHelp(intro, "Đọc cài đặt đang dùng trước khi sửa. Khi lưu, thiết bị sẽ tự khởi động lại.");
+        addHelp(intro, "Thiết bị sẽ khởi động lại khi lưu.");
         LinearLayout topRow = new LinearLayout(this); topRow.setOrientation(LinearLayout.HORIZONTAL);
         Button read = neutralButton("Đọc cài đặt");
         read.setOnClickListener(v -> loadRuntimeConfig());
@@ -1801,6 +1799,7 @@ public final class MainActivity extends Activity {
         LinearLayout advanced = settingsSection("Cài đặt nâng cao");
         LinearLayout startup = new LinearLayout(this); startup.setOrientation(LinearLayout.VERTICAL);
         addNumberField(startup, "Thời gian chờ ST (100 ms)", "delaySt");
+        addNumberField(startup, "Thời gian HCF OP", "hcfTime");
         finishSettingsRow(startup);
         addNumberField(startup, "ST LED (100 ms)", "stLed");
         addNumberField(startup, "ST LCD (100 ms)", "stLcd");
@@ -1811,6 +1810,9 @@ public final class MainActivity extends Activity {
         addChoiceField(modes, "Bắt đầu làm lạnh", "coolStart", choices("CL",0,"OP",1));
         addChoiceField(modes, "Bắt đầu xả đá", "defrostStart", choices("CL",0,"OP",1));
         finishSettingsRow(modes);
+        addChoiceField(modes,"Kiểu màn hình","displayMode",choices("LCD",0,"LED",1));
+        addChoiceField(modes,"Chế độ HCF","hcfMode",choices("H",0,"CF",1));
+        finishSettingsRow(modes);
         addChoiceField(modes, "Chế độ DF", "df", choices("Tắt",0,"Bật",1));
         addChoiceField(modes, "Chế độ END", "end", choices("Tắt",0,"Bật",1));
         finishSettingsRow(modes);
@@ -1820,14 +1822,7 @@ public final class MainActivity extends Activity {
         addChoiceField(modes, "Số lần bật nguồn và khởi động", "onTime", choices("Nguồn: 1 lần · Khởi động: 1 lần",0,"Nguồn: 2 lần · Khởi động: 1 lần",1,"Nguồn: 1 lần · Khởi động: 2 lần",2,"Nguồn: 2 lần · Khởi động: 2 lần",3));
         addSettingsSubgroup(advanced,"Chu trình",modes);
 
-        LinearLayout hcf=new LinearLayout(this); hcf.setOrientation(LinearLayout.VERTICAL);
-        addChoiceField(hcf,"Chế độ HCF","hcfMode",choices("H",0,"CF",1));
-        addNumberField(hcf,"Thời gian HCF OP","hcfTime");
-        addSettingsSubgroup(advanced,"HCF",hcf);
-
         LinearLayout display=new LinearLayout(this); display.setOrientation(LinearLayout.VERTICAL);
-        addChoiceField(display,"Kiểu màn hình","displayMode",choices("LCD",0,"LED",1));
-        finishSettingsRow(display);
         addNumberField(display,"Độ sáng LED đỏ","redBrightness");
         addNumberField(display,"Độ sáng LED xanh","greenBrightness");
         finishSettingsRow(display);
@@ -1909,7 +1904,12 @@ public final class MainActivity extends Activity {
             } else expandedSettings.add(title);
             paint.run();
         });
-        parent.addView(toggle,fullParams(0,10,0,0));parent.addView(fields);paint.run();
+        LinearLayout group=new LinearLayout(this);group.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable background=rounded(Design.SOFT,dp(10));background.setStroke(dp(1),Design.LINE);
+        group.setBackground(background);
+        fields.setPadding(dp(8),0,dp(8),dp(10));
+        group.addView(toggle,fullParams(0,0,0,0));group.addView(fields);
+        parent.addView(group,fullParams(0,8,0,0));paint.run();
     }
 
     private void stopNumericRepeat(View view) {
@@ -1948,20 +1948,55 @@ public final class MainActivity extends Activity {
             parent.addView(row,fullParams(0,8,0,0));
         }
         LinearLayout cell=new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setBackground(rounded(Color.WHITE,dp(8)));cell.setPadding(dp(6),dp(6),dp(6),dp(6));
         LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);
         if(row.getChildCount()>0) params.leftMargin=dp(10);
         row.addView(cell,params);
-        TextView fieldLabel=mutedText(label); fieldLabel.setTextSize(12);
-        if(compact) fieldLabel.setMinLines(2);
+        TextView fieldLabel=mutedText(label); fieldLabel.setTextSize(13);fieldLabel.setTextColor(Design.INK);
         cell.addView(fieldLabel,fullParams(0,0,0,4));
+        // Align each pair without reserving a blank second line on every label.
+        if(compact && row.getChildCount()==2) {
+            TextView first=(TextView)((LinearLayout)row.getChildAt(0)).getChildAt(0);
+            float width=dp((getResources().getConfiguration().screenWidthDp-98)/2);
+            int lines=Math.max(first.getPaint().measureText(first.getText().toString()),
+                    fieldLabel.getPaint().measureText(label))>width?2:1;
+            first.setMinLines(lines);fieldLabel.setMinLines(lines);
+        }
         return cell;
     }
 
     private void addRangeFields(LinearLayout parent, String label, String key) {
-        LinearLayout pair=new LinearLayout(this); pair.setOrientation(LinearLayout.VERTICAL);
-        addNumberField(pair, label + " · Min", key + "Min");
-        addNumberField(pair, label + " · Max", key + "Max");
-        if(hasSettingControls(pair)) parent.addView(pair);
+        // A table is only used where two 48dp arrows and a value fit in each cell.
+        boolean table=getResources().getConfiguration().screenWidthDp>=400
+                && getResources().getConfiguration().fontScale<1.15f
+                && settingVisible(key+"Min") && settingVisible(key+"Max");
+        if(table) {
+            if(parent.findViewWithTag("range-columns")==null) {
+                LinearLayout header=new LinearLayout(this);header.setTag("range-columns");
+                header.setBackground(rounded(Design.SOFT,dp(8)));
+                for(String column:new String[]{"Tham số","Min","Max"}) {
+                    TextView text=valueText(column);text.setTextSize(12);text.setPadding(0,dp(8),0,dp(8));
+                    text.setGravity(column.equals("Tham số")?Gravity.START:Gravity.CENTER);
+                    header.addView(text,column.equals("Tham số")?new LinearLayout.LayoutParams(dp(86),-2):new LinearLayout.LayoutParams(0,-2,1));
+                }
+                parent.addView(header,fullParams(0,4,0,0));
+            }
+            LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);row.setBaselineAligned(false);
+            TextView name=valueText(label);name.setTextSize(12);
+            row.addView(name,new LinearLayout.LayoutParams(dp(86),-2));
+            for(String suffix:new String[]{"Min","Max"}) {
+                String id=key+suffix, description=label+" · "+suffix;
+                LinearLayout cell=new LinearLayout(this);
+                EditText input=numberInput(description);configInputs.put(id,input);
+                cell.addView(new NumberStepper(this,input,description,() -> settingBounds(id)),new LinearLayout.LayoutParams(-1,-2));
+                LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(0,-2,1);params.leftMargin=dp(4);row.addView(cell,params);
+            }
+            parent.addView(row,fullParams(0,6,0,0));
+        } else {
+            LinearLayout pair=new LinearLayout(this);pair.setOrientation(LinearLayout.VERTICAL);
+            addNumberField(pair,label+" · Min",key+"Min");addNumberField(pair,label+" · Max",key+"Max");
+            if(hasSettingControls(pair))parent.addView(pair);
+        }
     }
 
     private void addNumberField(LinearLayout parent, String label, String key) {
@@ -2027,6 +2062,8 @@ public final class MainActivity extends Activity {
 
     private CheckBox addCheckField(LinearLayout parent, String label, String key, boolean pinRelated) {
         CheckBox check = new CheckBox(this);
+        check.setButtonDrawable(null);check.setCompoundDrawablePadding(dp(8));
+        check.setCompoundDrawablesRelativeWithIntrinsicBounds(null,null,new Design.Toggle(getResources().getDisplayMetrics().density),null);
         if (!settingVisible(key)) return check;
         check.setText(label);
         check.setTextColor(Design.INK);
@@ -2479,7 +2516,7 @@ public final class MainActivity extends Activity {
             return insets;
         });
         LinearLayout brand=new LinearLayout(this);brand.setGravity(Gravity.CENTER_VERTICAL);
-        brand.setPadding(dp(12),dp(8),dp(16),dp(8));brand.setMinimumHeight(dp(72));brand.setBackgroundColor(Design.NAVY);
+        brand.setPadding(dp(12),dp(8),dp(16),dp(8));brand.setMinimumHeight(dp(64));brand.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,new int[]{Design.NAVY,0xFF103B4B}));
         ImageView logo=icon("brand",Design.MINT,40);
         logo.setPadding(dp(4),dp(4),dp(4),dp(4));
         brand.addView(logo,new LinearLayout.LayoutParams(dp(48),dp(48)));
@@ -2496,6 +2533,8 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams wordmarkParams=new LinearLayout.LayoutParams(0,dp(48),1);wordmarkParams.leftMargin=dp(10);
         wordmark.setGravity(Gravity.CENTER_VERTICAL);brand.addView(wordmark,wordmarkParams);
         pageRoot.addView(brand);
+        View brandLine=new View(this);brandLine.setBackgroundColor(Design.MINT);
+        pageRoot.addView(brandLine,new LinearLayout.LayoutParams(-1,dp(1)));
         if(demoMode){
             TextView demo=mutedText("XEM THỬ  •  DỮ LIỆU MINH HỌA");
             demo.setTextColor(Design.TEAL); demo.setGravity(Gravity.CENTER);
@@ -2505,16 +2544,16 @@ public final class MainActivity extends Activity {
         ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true);scroll.setBackgroundColor(Design.BG);
         scroll.setClipToPadding(false); scroll.setVerticalScrollBarEnabled(false);
         LinearLayout content=new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16),dp(16),dp(16),dp(28));
+        content.setPadding(dp(12),dp(12),dp(12),dp(24));
         if (!eyebrow.isEmpty()) {
             TextView eyebrowView=mutedText(eyebrow); eyebrowView.setTextColor(Design.TEAL);
             eyebrowView.setTextSize(10); eyebrowView.setLetterSpacing(.12f);
             content.addView(eyebrowView,fullParams(0,0,0,7));
         }
-        TextView heading=valueText(title); heading.setTextSize(26);
+        TextView heading=valueText(title); heading.setTextSize(24);
         heading.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
         if(Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);
-        content.addView(heading,fullParams(0,0,0,subtitle.isEmpty() ? 20 : 5));
+        content.addView(heading,fullParams(0,0,0,subtitle.isEmpty() ? 10 : 5));
         if (!subtitle.isEmpty()) content.addView(bodyText(subtitle),fullParams(0,0,0,22));
         messageView=bodyText(lastUiMessage); messageView.setTextSize(12);
         messageView.setPadding(dp(14),dp(12),dp(14),dp(12));
@@ -2549,19 +2588,15 @@ public final class MainActivity extends Activity {
 
     private LinearLayout card() {
         LinearLayout card=new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(16),dp(18),dp(16),dp(18));
-        GradientDrawable bg=rounded(Color.WHITE,dp(18)); bg.setStroke(dp(1),Design.LINE);
+        card.setPadding(dp(12),dp(14),dp(12),dp(14));
+        GradientDrawable bg=rounded(Color.WHITE,dp(14)); bg.setStroke(dp(1),Design.LINE);
         card.setBackground(bg); return card;
     }
 
     private void addSectionTitle(LinearLayout parent, String title) {
         TextView view=valueText(title); view.setTextSize(17);view.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
         if(Build.VERSION.SDK_INT>=28)view.setAccessibilityHeading(true);
-        String symbol=title.contains("Nhiệt")?"thermometer":title.contains("Mật khẩu")?"lock":title.contains("Cập nhật")?"upload":title.contains("Kết nối")?"wifi":title.contains("Thời gian")?"clock":title.contains("rơ-le")?"power":"settings";
-        Design.Icon drawable=new Design.Icon(symbol,Design.TEAL);drawable.setBounds(0,0,dp(20),dp(20));
-        // Narrow sensor columns already have their own visual identity.
-        if(!title.startsWith("Ngưỡng")){view.setCompoundDrawables(drawable,null,null,null);view.setCompoundDrawablePadding(dp(8));}
-        parent.addView(view,fullParams(0,0,0,10));
+        parent.addView(view,fullParams(0,0,0,6));
     }
 
     private void addHelp(LinearLayout parent, String text) {
@@ -2621,7 +2656,7 @@ public final class MainActivity extends Activity {
         input.setHintTextColor(Design.MUTED);
         input.setHint(hint);
         input.setPadding(dp(14), dp(12), dp(14), dp(12));
-        input.setMinHeight(dp(52));
+        input.setMinHeight(dp(48));
         input.setContentDescription(hint);
         input.setBackground(rounded(Design.FIELD, dp(12)));
         input.setInputType(password
@@ -2652,7 +2687,11 @@ public final class MainActivity extends Activity {
     }
 
     private Button primaryButton(String text) { return button(text, Design.ACCENT); }
-    private Button neutralButton(String text) { return button(text, Design.FIELD); }
+    private Button neutralButton(String text) {
+        Button button=button(text,Color.WHITE);button.setTextColor(Design.ACCENT);
+        GradientDrawable border=rounded(Color.WHITE,dp(10));border.setStroke(dp(1),Design.LINE);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),border,null));return button;
+    }
     private Button dangerButton(String text) { return button(text, 0xFFFFEEF0); }
 
     private Button button(String text, int color) {
@@ -2660,7 +2699,7 @@ public final class MainActivity extends Activity {
         button.setTextColor(color==Design.ACCENT ? Color.WHITE : color==0xFFFFEEF0 ? 0xFFAA354A : Design.INK);
         button.setTextSize(14); button.setAllCaps(false);
         button.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        button.setMinHeight(dp(52)); button.setMinimumHeight(dp(52));
+        button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48));
         button.setPadding(dp(14),dp(12),dp(14),dp(12)); button.setStateListAnimator(null);
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),rounded(color,dp(12)),null));
         return button;

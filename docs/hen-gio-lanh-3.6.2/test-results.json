@@ -1,0 +1,32 @@
+{
+  "version": "3.6.2",
+  "versionCode": 53,
+  "date": "2026-10-31",
+  "scope": "Android UI only; offline native emulator fixtures; no controller commands or firmware writes",
+  "apkSha256": "9fe2755424d9800e2c741acc57a721d433047e4077b9bb62403343bc998c1107",
+  "lint": {
+    "Error": 0,
+    "Warning": 54
+  },
+  "checks": {
+    "test-360-managed": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "test-360-ui-preview": "PASS: offline native preview captured, no device commands sent.",
+    "test-choice": "PASS: touch opens anchored menu, matching width, selection identity, dismiss preserves value, disabled and detached controls close menu, long options selectable.",
+    "test-landscape-ui-preview": "PASS: offline native preview captured, no device commands sent.",
+    "test-largefont-managed": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "test-largefont-ui-preview": "PASS: offline native preview captured, no device commands sent.",
+    "test-managed": "PASS: motor 10k/20k and monitoring 50k; dual thresholds, persisted source, edit preservation, sensor fault fallback, save/mode overlap guards; mode confirmation, countdown and managed settings/update/history regression.",
+    "test-render": "PASS: hero remains identical across 30 redraws at each of two sizes; center stays opaque.",
+    "test-scroll": "PASS: attached dashboard preserves top/mid-page scroll during initial polling, late Save acknowledgement, history changes and disconnect/reconnect; explicit input focus, visible editing and draft/caret preserved.",
+    "test-stepper": "PASS: single-unit taps, accelerating hold, release/cancel/disable/detach stop, bounded values, manual editing and accessibility click; decimal temperature +/-1, comma, negative values, zero crossing and -55/125 bounds.",
+    "test-ui-preview": "PASS: offline native preview captured, no device commands sent."
+  },
+  "visualConfigurations": [
+    "411dp portrait / font 100%",
+    "360dp portrait / font 100%",
+    "360dp portrait / font 140%",
+    "891dp landscape / font 100%"
+  ],
+  "hardwareTested": false,
+  "design": "Approved blue ice concept dated 2026-10-28, with settings grouping superseded by the 2026-10-31 video. Layout adapts to available width and large fonts; not a pixel-identical bitmap."
+}

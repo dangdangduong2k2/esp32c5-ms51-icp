@@ -51,10 +51,13 @@ final class IcePreviewChecks {
                 LinearLayout overview=page(a,"Tổng quan");call(a,"buildOverview",new Class[]{LinearLayout.class},overview);
                 call(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,debug);call(a,"stopCounting",new Class[]{});
                 capture(a,"03-overview",true);
-                state(a,"tab","SETTINGS");LinearLayout settings=page(a,"Cài đặt vận hành");
+                state(a,"tab","SETTINGS");LinearLayout settings=page(a,"Cài đặt");
                 RuntimeConfigCodec.Config config=RuntimeConfigCodec.defaults();config.values.put("coolCl",6);config.values.put("coolOp",5);config.values.put("defrostCl",5);config.values.put("defrostOp",32);config.values.put("delaySt",70);config.values.put("stLed",50);config.values.put("stLcd",50);
                 set(a,"runtimeConfig",config);set(a,"configLoaded",true);call(a,"buildSettings",new Class[]{LinearLayout.class},settings);capture(a,"04-settings",true);
                 SettingsLayoutChecks.expandGroups(settings);capture(a,"04-settings-expanded",true);
+                captureSection(a,settings,"Cài đặt nâng cao","04-startup-cycle");
+                captureSection(a,settings,"Giới hạn thời gian","04-limits");
+                captureSection(a,settings,"Mật khẩu bảo vệ","04-password");
                 state(a,"tab","FIRMWARE");LinearLayout update=page(a,"Cập nhật");call(a,"buildManagedFirmware",new Class[]{LinearLayout.class,JSONObject.class,int.class},update,new JSONObject(),-50);capture(a,"05-update",false);
                 state(a,"tab","DEVICE");LinearLayout info=page(a,"Thiết bị");call(a,"buildDevice",new Class[]{LinearLayout.class},info);capture(a,"06-device",true);
                 state(a,"screen","AUTH");set(a,"demoMode",false);call(a,"showConnectDevice",new Class[]{boolean.class},false);capture(a,"07-pair",false);
@@ -67,6 +70,19 @@ final class IcePreviewChecks {
     static LinearLayout page(MainActivity a,String title)throws Exception {
         LinearLayout content=(LinearLayout)call(a,"createPage",new Class[]{String.class,String.class,String.class},"",title,"");
         call(a,"addNavigation",new Class[]{LinearLayout.class},content);return content;
+    }
+    static void captureSection(MainActivity a,LinearLayout content,String title,String name)throws Exception {
+        android.widget.ScrollView scroll=(android.widget.ScrollView)content.getParent();
+        for(int i=0;i<content.getChildCount();i++) {
+            View child=content.getChildAt(i);
+            if(!(child instanceof ViewGroup) || ((ViewGroup)child).getChildCount()==0)continue;
+            View first=((ViewGroup)child).getChildAt(0);
+            if(first instanceof android.widget.TextView && ((android.widget.TextView)first).getText().toString().startsWith(title)) {
+                scroll.scrollTo(0,Math.max(0,child.getTop()-Math.round(12*a.getResources().getDisplayMetrics().density)));
+                capture(a,name,false);return;
+            }
+        }
+        throw new AssertionError("Missing preview section: "+title);
     }
     static void capture(MainActivity a,String name,boolean full)throws Exception {
         ViewGroup root=(ViewGroup)get(a,"pageRoot");

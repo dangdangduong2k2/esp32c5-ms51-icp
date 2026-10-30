@@ -1,3 +1,7 @@
+# Hẹn Giờ Lạnh 3.6.2
+
+Bố trí lại cài đặt theo video và cập nhật giao diện bám concept xanh lạnh. [Thay đổi, ảnh chụp và kiểm thử](../../docs/hen-gio-lanh-3.6.2/README.md). Chỉ cài đè APK; giữ VPS/C5/MS51 hiện có.
+
 # Hẹn Giờ Lạnh 3.6.1
 
 Production endpoint moved to the new VinaHost VPS; login and pair again with the new registry.

@@ -104,7 +104,7 @@ final class ManagedChecks {
                         uplink.put("rssi",signals[i]);
                         invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                         check(Design.WifiSignal.level(true,signals[i])==levels[i],"RSSI threshold "+signals[i]);
-                        check(connection.getCompoundDrawables()[0] instanceof Design.WifiSignal,"Signal icon precedes SSID");
+                        check(connection.getCompoundDrawables()[a.getResources().getConfiguration().screenWidthDp>=360 && a.getResources().getConfiguration().fontScale<1.3f?1:0] instanceof Design.WifiSignal,"Signal icon remains attached to SSID in adaptive layout");
                         String description=connection.getContentDescription().toString();
                         check(levels[i]==0 ? description.contains("chưa có") : description.contains(levels[i]+" trên 4"),"Signal accessibility matches reading");
                     }
