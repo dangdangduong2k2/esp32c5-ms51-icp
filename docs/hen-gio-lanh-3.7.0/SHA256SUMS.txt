@@ -1,0 +1,5 @@
+2b70fce98b30b14623bb810faeb6269ca6e4fd0a55d7d7b54cc2c65f31f31504  Hen-Gio-Lanh-3.7.0.apk
+c48a87a50e92236838af6e68eb4c4b0301c7afdf835839c5ce12aab20d78b9c3  ESP32-C5-Bluetooth-3.7.0.zip
+c464eafe6d03b36f8c6dc3d1636ca75fb4cd78f8e2fb8c9e507a2d1f4b8a0318  MS51-Bluetooth-3.7.0.hex
+3197e688a9ba18bb367ebc0c5a2e650b7ffc0ec2e3d1767600962202b7bdac56  Anh-chup-Bluetooth-3.7.0.zip
+79d9702cde95e4ebb1ad321d20a6c0d7d387a60efd0c6611cdc872b6320f80e8  HUONG-DAN.txt

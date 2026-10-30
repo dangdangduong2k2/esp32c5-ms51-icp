@@ -156,7 +156,7 @@ static bool write_all(esp_http_client_handle_t http, const char *bytes, int leng
     }
     return true;
 }
-static cJSON *local_request(const char *method,const char *path,const cJSON *body) {
+cJSON *ms51_local_request(const char *method,const char *path,const cJSON *body) {
     esp_http_client_handle_t http=local_client(path);
     if(!http) return error_result("Khong tao duoc ket noi noi bo.");
     bool post=!strcmp(method,"POST");
@@ -311,7 +311,7 @@ static void process(char *text) {
             if(e==ESP_OK) { e=nvs_erase_key(nvs,"config"); if(e==ESP_OK) e=nvs_commit(nvs); nvs_close(nvs); }
             if(e==ESP_OK) { unpair=true; result=cJSON_CreateObject(); cJSON_AddBoolToObject(result,"ok",true); }
             else result=error_result("Chua xoa duoc ghep noi. Vui long thu lai.");
-        } else result=local_request(method,path,body);
+        } else result=ms51_local_request(method,path,body);
     }
     cJSON *reply=cJSON_CreateObject(); cJSON_AddStringToObject(reply,"id",id); cJSON_AddItemToObject(reply,"result",result);
     char topic[120]; snprintf(topic,sizeof(topic),"%s/reply/%s",s_topic,id);
@@ -328,7 +328,7 @@ static void heartbeat(void) {
     char topic[120]; snprintf(topic,sizeof(topic),"%s/hello",s_topic); publish_json(topic,hello); cJSON_Delete(hello);
     cJSON *state=cJSON_CreateObject();
     cJSON_AddStringToObject(state,"device",ms51_presence_id()); cJSON_AddBoolToObject(state,"online",true);
-    cJSON_AddItemToObject(state,"status",local_request("GET","/api/status",NULL));
+    cJSON_AddItemToObject(state,"status",ms51_local_request("GET","/api/status",NULL));
     snprintf(topic,sizeof(topic),"%s/state",s_topic); publish_json(topic,state); cJSON_Delete(state);
 }
 static void worker(void *arg) {

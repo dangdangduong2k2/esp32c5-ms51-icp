@@ -10,7 +10,7 @@
 extern "C" {
 #endif
 
-#define MS51_DEBUG_MAX_VARIABLES 16u
+#define MS51_DEBUG_MAX_VARIABLES 24u
 #define MS51_DEBUG_MAX_LOG_LINES 8u
 #define MS51_DEBUG_VARIABLE_NAME_SIZE 20u
 #define MS51_DEBUG_VARIABLE_VALUE_SIZE 44u
@@ -70,6 +70,8 @@ esp_err_t ms51_debug_uart_get_runtime_config(uint8_t config[MS51_RUNTIME_CONFIG_
 /** Write the complete app.py-compatible EEPROM image through runtime UART.
  * The MS51 validates it, commits EEPROM once, replies, then restarts. */
 esp_err_t ms51_debug_uart_set_runtime_config(
+    const uint8_t config[MS51_RUNTIME_CONFIG_SIZE], uint8_t *target_status);
+esp_err_t ms51_debug_uart_set_local_config(
     const uint8_t config[MS51_RUNTIME_CONFIG_SIZE], uint8_t *target_status);
 
 esp_err_t ms51_debug_uart_set_trigger(uint8_t source, bool active, uint8_t *status);

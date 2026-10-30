@@ -253,6 +253,156 @@ public final class MainActivity extends Activity {
         }
     };
 
+    private static final int BLE_PERMISSION_REQUEST=91;
+    private BleTransport bleLink;
+    private BlePicker blePicker;
+    private boolean bleMode, pendingBleWifi, bleSaving;
+
+    private void disconnectBle() {
+        if(blePicker!=null){blePicker.close();blePicker=null;}
+        if(bleLink!=null){bleLink.close();bleLink=null;}
+        api.setBle(null);bleMode=false;pendingBleWifi=false;bleSaving=false;
+    }
+    private void chooseBleDevice() {
+        if(authBusy){++authEpoch;showAuth(false);}
+        java.util.ArrayList<String> needed=new java.util.ArrayList<>();
+        String[] permissions=Build.VERSION.SDK_INT>=31
+                ? new String[]{"android.permission.BLUETOOTH_SCAN","android.permission.BLUETOOTH_CONNECT"}
+                : new String[]{"android.permission.ACCESS_FINE_LOCATION"};
+        for(String permission:permissions)if(checkSelfPermission(permission)!=android.content.pm.PackageManager.PERMISSION_GRANTED)needed.add(permission);
+        if(!needed.isEmpty()){requestPermissions(needed.toArray(new String[0]),BLE_PERMISSION_REQUEST);return;}
+        android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)getSystemService(BLUETOOTH_SERVICE);
+        android.bluetooth.BluetoothAdapter adapter=manager==null?null:manager.getAdapter();
+        if(adapter==null){showMessage("Điện thoại không hỗ trợ Bluetooth.");return;}
+        if(!adapter.isEnabled()){
+            startActivity(new Intent(android.bluetooth.BluetoothAdapter.ACTION_REQUEST_ENABLE));
+            showMessage("Bật Bluetooth rồi nhấn kết nối lại.");return;
+        }
+        if(blePicker!=null)blePicker.close();
+        try{blePicker=new BlePicker(this,adapter,this::connectBleDevice);}
+        catch(SecurityException error){showMessage("Hãy cấp quyền Thiết bị ở gần cho ứng dụng rồi thử lại.");}
+    }
+    private void connectBleDevice(android.bluetooth.BluetoothDevice device) {
+        disconnectBle();stopHome();stopDashboard();++controlEpoch;++authEpoch;
+        newSetupPage(Screen.CONNECT_DEVICE);setupBusy=true;
+        LinearLayout content=createPage("","Kết nối Bluetooth","");
+        addHelp(content,"Đang ghép thiết bị. Xác nhận yêu cầu Bluetooth trên điện thoại nếu được hỏi.");
+        final int token=setupEpoch;
+        Button cancel=neutralButton("Hủy");content.addView(cancel);
+        cancel.setOnClickListener(v->{++setupEpoch;setupBusy=false;disconnectBle();if(accountId.isEmpty())showAuth(false);else showDevices();});
+        presenceIo.execute(()->{
+            BleTransport link=null;
+            try {
+                link=BleTransport.connect(this,device);
+                EspApi session=new EspApi();session.setBle(link);
+                JSONObject status=session.get("/api/status");String id=DeviceStore.identity(status);
+                if(id.isEmpty())throw new IOException("Thiết bị chưa cung cấp định danh hợp lệ.");
+                String saved=getSharedPreferences("ble_devices_v1",MODE_PRIVATE).getString(device.getAddress(),"");
+                if(!saved.isEmpty() && !saved.equals(id))throw new IOException("Định danh Bluetooth đã thay đổi. Hãy kiểm tra lại thiết bị.");
+                final BleTransport connected=link;
+                runOnUiThread(()->{
+                    if(!currentSetup(token)){connected.close();return;}
+                    bleLink=connected;bleMode=true;api.setDemo(false);demoMode=false;
+                    releaseRequestedNetwork();clearDeviceState();api.setBle(connected);api.setExpectedDeviceId(id);
+                    pairingDeviceId=id;pairingHostname=id+".local";localDeviceReady=true;
+                    activeDevice=new DeviceStore.Device(id,"Hộp hẹn giờ "+id.substring(id.length()-6).toUpperCase(Locale.ROOT),"",pairingHostname,"");
+                    getSharedPreferences("ble_devices_v1",MODE_PRIVATE).edit().putString(device.getAddress(),id).apply();
+                    rememberStatus(status);showBleConnected();
+                });
+            } catch(Exception error) {
+                if(link!=null)link.close();
+                runOnUiThread(()->{if(currentSetup(token)){setupBusy=false;addHelp(content,errorMessage(error));Button retry=primaryButton("Tìm lại thiết bị");content.addView(retry);retry.setOnClickListener(v->chooseBleDevice());}});
+            }
+        });
+    }
+    private void showBleConnected() {
+        newSetupPage(Screen.CONNECT_DEVICE);
+        LinearLayout content=createPage("","Thiết bị đã kết nối",activeDevice.name);
+        addHelp(content,"Bluetooth · Điều khiển gần không cần Internet hay tài khoản.");
+        Button offline=primaryButton("Dùng không Internet");content.addView(offline,fullParams(0,16,0,12));
+        offline.setOnClickListener(v->{++controlEpoch;showControl(Tab.OVERVIEW);});
+        Button wifi=neutralButton("Thêm Wi-Fi và liên kết tài khoản");content.addView(wifi);
+        wifi.setOnClickListener(v->beginBleWifi());
+        addHelp(content,"Khi có Internet, tài khoản sẽ quyết định các chức năng bổ sung.");
+    }
+    private void beginBleWifi() {
+        if(bleLink==null || !bleLink.connected()){showMessage("Hãy kết nối Bluetooth lại trước.");return;}
+        pendingBleWifi=true;stopDashboard();
+        if(accounts.session()==null){showAuth(false);return;}
+        pendingBleWifi=false;localDeviceReady=true;showWifiSetup(lastStatus);
+    }
+    private void finishBleAccountLogin() {
+        if(pendingBleWifi && bleMode){pendingBleWifi=false;localDeviceReady=true;showWifiSetup(lastStatus);}
+        else showDevices();
+    }
+    private void linkBleAccount(int token) {
+        final CloudApi cloud=accounts.api();final EspApi session=api.snapshot(45000);
+        final String id=pairingDeviceId,owner=accountId;
+        io.execute(()->{
+            try {
+                JSONObject claim=cloud.post("/pair/start",new JSONObject().put("device",id));
+                if(!claim.optBoolean("paired")){
+                    if(!currentSetup(token))return;
+                    session.post("/api/cloud/pair",claim.getJSONObject("config"));
+                    boolean paired=false;
+                    for(int attempt=0;attempt<40 && currentSetup(token);attempt++){
+                        JSONObject progress=cloud.get("/pair/"+claim.getString("claim_id"));
+                        if(progress.optBoolean("paired")){paired=true;break;}
+                        if(progress.optBoolean("expired"))break;
+                        Thread.sleep(1500);
+                    }
+                    if(!paired)throw new IOException("Chưa liên kết được tài khoản. Kiểm tra Internet của thiết bị và điện thoại. Bluetooth vẫn dùng được.");
+                }
+                JSONArray rows=cloud.get("/devices").getJSONArray("devices");
+                runOnUiThread(()->{
+                    if(!currentSetup(token) || !owner.equals(accountId))return;
+                    try{deviceStore.replace(owner,rows);}catch(Exception e){finishSetup(token,errorMessage(e));return;}
+                    uplinkPasswordForPhone="";if(setupPassword!=null)setupPassword.setText("");
+                    disconnectBle();showDevices();
+                });
+            }catch(Exception error){runOnUiThread(()->finishSetup(token,errorMessage(error)));}
+        });
+    }
+    private void loadBleSettings(LinearLayout content,int token,int viewToken) {
+        TextView loading=bodyText("Đang đọc cài đặt từ mạch…");content.addView(loading);
+        final EspApi session=api.snapshot(45000);
+        io.execute(()->{
+            try {
+                JSONObject result=session.get("/api/runtime-config");
+                RuntimeConfigCodec.Config config=RuntimeConfigCodec.decode(result.getString("data"));
+                onControl(token,()->{
+                    if(viewToken!=accessViewEpoch)return;
+                    content.removeView(loading);deviceAccess=result;runtimeConfig=config;configLoaded=true;
+                    buildSettings(content);applyRuntimeConfigToViews();
+                });
+            }catch(Exception error){onControl(token,()->{
+                if(viewToken!=accessViewEpoch)return;loading.setText(errorMessage(error));
+                Button retry=neutralButton("Đọc lại");content.addView(retry);retry.setOnClickListener(v->showControl(Tab.SETTINGS));
+            });}
+        });
+    }
+    private void saveBleSettings(JSONObject values) {
+        if(bleSaving){showMessage("Đang lưu cài đặt, vui lòng chờ.");return;}
+        bleSaving=true;
+        final int token=controlEpoch;final EspApi session=api.snapshot(45000);
+        io.execute(()->{
+            try{
+                if(!currentControl(token))return;
+                JSONObject result=session.post("/api/ble/settings",new JSONObject().put("values",values));
+                RuntimeConfigCodec.Config config=RuntimeConfigCodec.decode(result.getString("data"));
+                onControl(token,()->{runtimeConfig=config;deviceAccess=result;showMessage("Đã lưu xuống mạch. Bộ điều khiển đang khởi động lại.");});
+            }catch(Exception error){onControl(token,()->showMessage(errorMessage(error)));}
+            finally{runOnUiThread(()->bleSaving=false);}
+        });
+    }
+    private void buildBleDevice(LinearLayout content) {
+        LinearLayout box=card();content.addView(box);
+        addSectionTitle(box,"Kết nối Bluetooth");addHelp(box,"Đang dùng trực tiếp các chức năng trên bộ điều khiển. Không cần máy chủ.");
+        Button wifi=primaryButton("Thêm Wi-Fi và liên kết tài khoản");box.addView(wifi,fullParams(0,16,0,8));wifi.setOnClickListener(v->beginBleWifi());
+        Button leave=neutralButton("Ngắt kết nối");box.addView(leave);
+        leave.setOnClickListener(v->{++controlEpoch;stopDashboard();disconnectBle();if(accountId.isEmpty())showAuth(false);else showDevices();});
+    }
+
     private void showAuth(boolean register) {
         stopHome(); stopDashboard(); ++setupEpoch; ++authEpoch;
         screen = Screen.AUTH; setupBusy = false; authBusy = false; registerMode = register;
@@ -285,7 +435,7 @@ public final class MainActivity extends Activity {
                     runOnUiThread(() -> {
                         if (token != authEpoch || isDestroyed()) return;
                         accountPassword.setText(""); if (accountConfirm != null) accountConfirm.setText("");
-                        authBusy = false; acceptAccount(user); showDevices();
+                        authBusy = false; acceptAccount(user); finishBleAccountLogin();
                     });
                 } catch (Exception error) {
                     runOnUiThread(() -> {
@@ -300,6 +450,8 @@ public final class MainActivity extends Activity {
         alternate.setOnClickListener(v -> { if (!authBusy) showAuth(!register); });
         content.addView(submit,fullParams(0,20,0,8)); content.addView(alternate);
         if(register) addHelp(content,"Mật khẩu tối thiểu 8 ký tự.");
+        Button nearby=neutralButton("Dùng Bluetooth · Không cần Internet");
+        content.addView(nearby,fullParams(0,16,0,0));nearby.setOnClickListener(v->{pendingBleWifi=false;chooseBleDevice();});
     }
 
     private EditText accountSecret(LinearLayout content, String hint) {
@@ -354,6 +506,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showDevices() {
+        disconnectBle();
+        if(accountId.isEmpty()){showAuth(false);return;}
         ++controlEpoch; ++setupEpoch; stopDashboard(); stopHome();
         screen = Screen.HOME; setupBusy = false; openingDevice = false; activeDevice = null;
         clearDeviceState(); api.setExpectedDeviceId(""); api.setCloud(null,""); lastUiMessage = "";
@@ -391,6 +545,8 @@ public final class MainActivity extends Activity {
         Button add=primaryButton("+  Thêm thiết bị");
         add.setOnClickListener(v -> { legacyPairingId="";activeDevice=null;releaseRequestedNetwork();showConnectDevice(false); });
         content.addView(add,fullParams(0,20,0,0));
+        Button nearby=neutralButton("Bluetooth · Điều khiển gần");
+        nearby.setOnClickListener(v->chooseBleDevice());content.addView(nearby,fullParams(0,8,0,0));
         mainHandler.post(homeRefresh);
     }
 
@@ -597,6 +753,8 @@ public final class MainActivity extends Activity {
     }
 
     private void showConnectDevice(boolean changing) {
+        if(!changing){chooseBleDevice();return;}
+        disconnectBle();
         ++controlEpoch;
         api.setExpectedDeviceId(changing && activeDevice != null ? activeDevice.id : "");
         pairingDeviceId = changing && activeDevice != null ? activeDevice.id : "";
@@ -772,7 +930,9 @@ public final class MainActivity extends Activity {
                         && isPrivateIpv4(uplink.optString("ip"))) {
                     runOnUiThread(() -> {
                         if (!currentSetup(token)) return;
-                        rememberStatus(status); showSwitchPhone();
+                        rememberStatus(status);
+                        if(bleMode){showMessage("Đang liên kết với tài khoản…");linkBleAccount(token);}
+                        else showSwitchPhone();
                     }); return;
                 }
                 if (ssid.equals(uplink.optString("ssid")) && "failed".equals(state)) {
@@ -988,6 +1148,10 @@ public final class MainActivity extends Activity {
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if(requestCode==BLE_PERMISSION_REQUEST){
+            for(int result:grantResults)if(result!=android.content.pm.PackageManager.PERMISSION_GRANTED){showMessage("Cần cho phép Thiết bị ở gần để kết nối Bluetooth.");return;}
+            if(grantResults.length>0)chooseBleDevice();return;
+        }
         if (requestCode != WIFI_PERMISSION_REQUEST || !setupBusy
                 || (screen != Screen.CONNECT_DEVICE && screen != Screen.SWITCH_PHONE)) return;
         if (!hasWifiPermission()) {
@@ -1049,6 +1213,7 @@ public final class MainActivity extends Activity {
             TextView deviceName = mutedText(activeDevice == null ? "" : activeDevice.name);
             deviceName.setTextColor(Design.TEAL); content.addView(deviceName, fullParams(0,0,0,12));
         }
+        if(bleMode)addHelp(content,"Bluetooth · Không cần Internet");
         addNavigation(content);
         if(tab!=Tab.OVERVIEW) mainHandler.post(unlockPoll);
         switch (tab) {
@@ -1076,7 +1241,7 @@ public final class MainActivity extends Activity {
         row.setElevation(dp(3));
         addNavButton(row, Tab.OVERVIEW, "Tổng quan", "home");
         addNavButton(row, Tab.SETTINGS, "Cài đặt", "gear");
-        addNavButton(row, Tab.FIRMWARE, "Cập nhật", "cloud-upload");
+        if(!bleMode) addNavButton(row, Tab.FIRMWARE, "Cập nhật", "cloud-upload");
         addNavButton(row, Tab.DEVICE, "Thiết bị", "device");
         pageRoot.addView(row, fullParams(0, 0, 0, 0));
     }
@@ -1287,6 +1452,11 @@ public final class MainActivity extends Activity {
         LinearLayout row=new LinearLayout(this);
         LinearLayout cutoff=temperatureCard("Nhiệt độ động cơ",0);
         LinearLayout defrost=temperatureCard("Nhiệt độ giám sát",2);
+        if(bleMode){
+            triggerSave=null;row.addView(cutoff,new LinearLayout.LayoutParams(0,-2,1));
+            LinearLayout.LayoutParams right=new LinearLayout.LayoutParams(0,-2,1);right.leftMargin=dp(12);row.addView(defrost,right);
+            content.addView(row,fullParams(0,6,0,12));return;
+        }
         for(LinearLayout column : new LinearLayout[]{cutoff,defrost}) {
             View divider=new View(this); divider.setBackgroundColor(Design.LINE);
             LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));
@@ -1786,6 +1956,7 @@ public final class MainActivity extends Activity {
         Button read = neutralButton("Đọc cài đặt");
         read.setOnClickListener(v -> loadRuntimeConfig());
         Button save = primaryButton("Lưu cài đặt");
+        if(bleMode && !deviceAccess.optBoolean("settings_write_supported")){save.setEnabled(false);addHelp(intro,"Cần cập nhật MS51 để lưu qua Bluetooth. Bạn vẫn xem được dữ liệu hiện tại.");}
         save.setOnClickListener(v -> saveRuntimeConfig());
         topRow.addView(read, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f); saveParams.setMargins(dp(5), 0, 0, 0);
@@ -2092,6 +2263,7 @@ public final class MainActivity extends Activity {
                 onControl(controlToken, () -> {
                     runtimeConfig = decoded;
                     configLoaded = true;
+                    if(bleMode){deviceAccess=response;showControl(Tab.SETTINGS);return;}
                     applyRuntimeConfigToViews();
                     showMessage("Đã đọc cài đặt.");
                 });
@@ -2119,6 +2291,7 @@ public final class MainActivity extends Activity {
         }
         showMessage("Đang lưu cài đặt. Thiết bị sẽ khởi động lại…");
         final int controlToken = controlEpoch;
+        if(bleMode){saveBleSettings(visibleValues);return;}
         final CloudApi cloud = accounts.api();
         final String device = activeDevice.id;
         final int revision = deviceAccess.optInt("revision", -1);
@@ -2198,6 +2371,11 @@ public final class MainActivity extends Activity {
     }
 
     private void loadManagedTab(LinearLayout content, Tab selected) {
+        if(bleMode){
+            if(selected==Tab.SETTINGS)loadBleSettings(content,controlEpoch,accessViewEpoch);
+            else addHelp(content,"Cập nhật cần kết nối Internet và quyền từ tài khoản.");
+            return;
+        }
         if (demoMode) {
             if (selected == Tab.SETTINGS) buildSettings(content);
             else { LinearLayout card=card(); addSectionTitle(card,"Cập nhật thiết bị"); addHelp(card,"Không có phiên bản cập nhật."); content.addView(card); }
@@ -2451,6 +2629,7 @@ public final class MainActivity extends Activity {
     // -------------------------------------------------------------------------
 
     private void buildDevice(LinearLayout content) {
+        if(bleMode){buildBleDevice(content);return;}
         LinearLayout networkCard = card();
         addSectionTitle(networkCard, "Kết nối hiện tại");
         JSONObject uplink = getUplink(lastStatus);
@@ -2935,6 +3114,17 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if(bleMode && screen==Screen.CONNECT_DEVICE){
+            ++setupEpoch;setupBusy=false;disconnectBle();
+            if(accountId.isEmpty())showAuth(false);else showDevices();return;
+        }
+        if(bleMode && (screen==Screen.CONFIGURE_WIFI || screen==Screen.SWITCH_PHONE)){
+            ++setupEpoch;setupBusy=false;showBleConnected();return;
+        }
+        if(bleMode && screen==Screen.CONTROL && tab==Tab.OVERVIEW){
+            ++controlEpoch;stopDashboard();showBleConnected();return;
+        }
+        if(screen==Screen.AUTH && pendingBleWifi && bleMode){pendingBleWifi=false;showBleConnected();return;}
         if (screen == Screen.AUTH) {
             if (authBusy) return;
             if (registerMode) { showAuth(false); return; }
@@ -2961,6 +3151,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        disconnectBle();
         mainHandler.removeCallbacks(internetChanged);
         if(internetCallback!=null)connectivityManager.unregisterNetworkCallback(internetCallback);
         ++setupEpoch; ++authEpoch; ++controlEpoch; stopHome();

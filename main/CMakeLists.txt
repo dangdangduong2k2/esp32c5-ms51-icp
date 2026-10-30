@@ -30,7 +30,7 @@ if(NOT CMAKE_BUILD_EARLY_EXPANSION)
 endif()
 
 idf_component_register(
-    SRCS "ms51_cloud.c" "ms51_presence.c"
+    SRCS "ms51_ble.c" "ms51_ble_policy.c" "ms51_cloud.c" "ms51_presence.c"
         "app_main.c"
         "ms51_analog.c"
         "ms51_trigger.c"
@@ -45,7 +45,7 @@ idf_component_register(
         "${ms51_generated_c}"
     INCLUDE_DIRS "."
     EMBED_TXTFILES "web/index.html"
-    PRIV_REQUIRES mqtt cjson mbedtls esp_http_client
+    PRIV_REQUIRES bt mqtt cjson mbedtls esp_http_client
         esp_adc
         console
         esp_driver_gpio

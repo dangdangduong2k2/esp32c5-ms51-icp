@@ -1,3 +1,7 @@
+# Hẹn Giờ Lạnh 3.7.0 — Bản thử Bluetooth
+
+[Thay đổi, cách dùng offline và cập nhật C5/MS51](../../docs/hen-gio-lanh-3.7.0/README.md). Không cần tài khoản khi dùng BLE; Wi-Fi + tài khoản để dùng quyền online.
+
 # Hẹn Giờ Lạnh 3.6.4
 
 Căn hai thẻ nhiệt độ và làm rõ nút chế độ chưa chọn. [Thay đổi và kiểm thử](../../docs/hen-gio-lanh-3.6.4/README.md). Chỉ cài đè APK.

@@ -137,7 +137,7 @@ esp_err_t ms51_trigger_init(void) {
         source=data.source; threshold=data.threshold;
         if(current) { defrost_threshold=data.defrost; thermal_enabled=data.enabled; safety_enabled=(v3 || v4) && data.safety; defrost_enabled=v4 ? data.defrost_enabled : data.enabled; }
     }
-    if(xTaskCreate(trigger_task,"sig_trigger",4096,NULL,1,NULL)!=pdPASS) return ESP_ERR_NO_MEM;
+    if(xTaskCreate(trigger_task,"sig_trigger",6144,NULL,1,NULL)!=pdPASS) return ESP_ERR_NO_MEM;
     ready=true;
     return ESP_OK;
 }

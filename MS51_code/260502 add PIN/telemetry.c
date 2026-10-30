@@ -33,6 +33,7 @@
 #define TELEMETRY_COMMAND_THERMAL 0x55u
 #define TELEMETRY_COMMAND_SAFETY 0x56u
 #define TELEMETRY_COMMAND_UNLOCK 0x57u
+#define TELEMETRY_COMMAND_SET_LOCAL 0x58u /* Basic settings only; keep live protection state. */
 #define TELEMETRY_COMMAND_TRIGGER 0x54u /* source, active; renewed every 500 ms */
 #define TELEMETRY_COMMAND_MODE      0x4Du /* M: one byte COOL=0, ICE_FLUSH=1 */
 
@@ -290,6 +291,7 @@ static void telemetry_build_snapshot(void)
 	EA = saved_ea;
 
 	telemetry_append_var_u16("unlock_v", 1);
+    telemetry_append_var_u16("local_settings", 1);
     telemetry_append_var_u16("pin_state", password_remote_state());
 	telemetry_append_var_text("mode", telemetry_mode_text());
 	telemetry_append_var_text("mode_source", mode_from_app ? "APP" : "PHYSICAL");
@@ -473,6 +475,44 @@ static void telemetry_build_config_response(void)
 	telemetry_append_char((uint8_t)crc);
 }
 
+static uint8_t telemetry_local_editable(uint8_t index)
+{
+    uint8_t xdata *current = (uint8_t xdata *)&eData;
+    return (index >= 1 && index <= 0x10) || (index >= 0x12 && index <= 0x16) ||
+        index == 0x1D || index == 0xC4 ||
+        (index == 0x17 && current[0x29] == 1) ||
+        (index == 0x1C && current[0x2A] == 1);
+}
+
+static uint8_t telemetry_apply_local_settings(void)
+{
+    uint8_t index;
+    uint8_t xdata *current = (uint8_t xdata *)&eData;
+    uint32_t value;
+    if (password_remote_state() != 0) return 0;
+    /* Ignore every non-local byte from the client. Validate against current limits,
+     * and never copy passwords, elapsed counters, menu permissions or relay setup. */
+    for (index = 0; index < TELEMETRY_CONFIG_SIZE; ++index)
+        if (!telemetry_local_editable(index)) telemetry_rx_payload[index] = current[index];
+    /* Legacy validator expects cleared PIN state. Clear only the validation copy;
+     * the protected live bytes are never assigned back to eData. */
+    for (index = 0xC5; index < TELEMETRY_CONFIG_SIZE; ++index) telemetry_rx_payload[index] = 0;
+    if (!telemetry_config_blob_is_valid(telemetry_rx_payload)) return 0;
+    for (index = 0; index < 4; ++index) {
+        value = telemetry_read_u32_be(telemetry_rx_payload + 1u + ((uint16_t)index * 4u));
+        if (value < telemetry_read_u16_be(current + 0xABu + index * 2u) ||
+            value > telemetry_read_u16_be(current + 0xB7u + index * 2u)) return 0;
+    }
+    if (telemetry_rx_payload[0xC4] < telemetry_read_u16_be(current + 0xB3) ||
+        telemetry_rx_payload[0xC4] > telemetry_read_u16_be(current + 0xBF) ||
+        telemetry_rx_payload[0x12] < telemetry_read_u16_be(current + 0xB5) ||
+        telemetry_rx_payload[0x12] > telemetry_read_u16_be(current + 0xC1)) return 0;
+    for (index = 0; index < TELEMETRY_CONFIG_SIZE; ++index)
+        if (telemetry_local_editable(index)) current[index] = telemetry_rx_payload[index];
+    AP_EEPROM_Commit();
+    return 1;
+}
+
 static void telemetry_finish_config_command(void)
 {
 	uint8_t index;
@@ -515,6 +555,12 @@ static void telemetry_finish_config_command(void)
 			telemetry_pending_sequence, mode_select_app(telemetry_rx_payload[0]) ?
 			TELEMETRY_STATUS_OK : TELEMETRY_STATUS_BAD_CONFIG, 0, 0);
 	}
+    else if (telemetry_pending_command == TELEMETRY_COMMAND_SET_LOCAL)
+    {
+        index = telemetry_apply_local_settings();
+        telemetry_schedule_config_response(telemetry_pending_command,
+            telemetry_pending_sequence, index ? TELEMETRY_STATUS_OK : TELEMETRY_STATUS_BAD_CONFIG, 0, index);
+    }
 	else if (telemetry_pending_command == TELEMETRY_COMMAND_SET)
 	{
 		if (!telemetry_config_blob_is_valid(telemetry_rx_payload))
@@ -560,7 +606,7 @@ static void telemetry_process_command_byte(uint8_t value)
 		}
 		break;
 	case telemetry_rx_state_command:
-		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET && value != TELEMETRY_COMMAND_MODE && value != TELEMETRY_COMMAND_TRIGGER && value != TELEMETRY_COMMAND_THERMAL && value != TELEMETRY_COMMAND_SAFETY && value != TELEMETRY_COMMAND_UNLOCK)
+		if (value != TELEMETRY_COMMAND_GET && value != TELEMETRY_COMMAND_SET && value != TELEMETRY_COMMAND_SET_LOCAL && value != TELEMETRY_COMMAND_MODE && value != TELEMETRY_COMMAND_TRIGGER && value != TELEMETRY_COMMAND_THERMAL && value != TELEMETRY_COMMAND_SAFETY && value != TELEMETRY_COMMAND_UNLOCK)
 		{
 			telemetry_reset_rx_parser();
 			break;
@@ -582,7 +628,7 @@ static void telemetry_process_command_byte(uint8_t value)
             (telemetry_rx_command == TELEMETRY_COMMAND_TRIGGER && value != 2) ||
             (telemetry_rx_command == TELEMETRY_COMMAND_MODE && value != 1) ||
 			(telemetry_rx_command == TELEMETRY_COMMAND_GET && value != 0) ||
-			(telemetry_rx_command == TELEMETRY_COMMAND_SET &&
+			((telemetry_rx_command == TELEMETRY_COMMAND_SET || telemetry_rx_command == TELEMETRY_COMMAND_SET_LOCAL) &&
 			 value != TELEMETRY_CONFIG_SIZE))
 		{
 			telemetry_schedule_config_response(telemetry_rx_command,

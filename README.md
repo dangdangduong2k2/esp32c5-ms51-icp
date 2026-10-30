@@ -1,6 +1,10 @@
 # MS51 Connect · ESP32-C5 / MS51
 
-## Android mới nhất: Hẹn Giờ Lạnh 3.6.4
+## Bản thử mới: Hẹn Giờ Lạnh 3.7.0 — Bluetooth
+
+[APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.0.apk) · [Cách dùng, file C5/MS51 và kiểm thử](docs/hen-gio-lanh-3.7.0/README.md). Thêm và điều khiển gần không cần Internet/tài khoản; thêm Wi-Fi để nhận quyền online. Cần cập nhật C5 và MS51; đang chờ kiểm thử BLE trên điện thoại thật.
+
+## Android 3.6.4
 
 [Tải APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.6.4.apk) · [Căn thẻ nhiệt độ và viền nút chế độ](docs/hen-gio-lanh-3.6.4/README.md). Chỉ cập nhật app.
 

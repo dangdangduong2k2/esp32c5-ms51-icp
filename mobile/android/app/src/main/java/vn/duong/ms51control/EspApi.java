@@ -26,7 +26,10 @@ final class EspApi {
     private int readTimeoutMs = 15000;
     private CloudApi cloud;
     private String cloudDevice = "";
-    void setCloud(CloudApi session, String device) { cloud=session; cloudDevice=device; }
+    interface LocalTransport { JSONObject request(String method,String path,JSONObject body) throws IOException; }
+    private LocalTransport ble;
+    void setBle(LocalTransport link) { ble=link; if(link!=null) { cloud=null;cloudDevice="";network=null; } }
+    void setCloud(CloudApi session, String device) { cloud=session; cloudDevice=device; if(session!=null)ble=null; }
 
     /** Freeze destination and network before queuing a provisioning operation. */
     EspApi snapshot(int timeoutMs) {
@@ -37,6 +40,7 @@ final class EspApi {
         copy.expectedDeviceId = expectedDeviceId;
         copy.readTimeoutMs = timeoutMs;
         copy.cloud=cloud; copy.cloudDevice=cloudDevice;
+        copy.ble=ble;
         return copy;
     }
 
@@ -89,6 +93,12 @@ final class EspApi {
 
     JSONObject get(String path) throws IOException, JSONException {
         if (demo) return demoResponse(path);
+        if (ble != null) {
+            JSONObject result=ble.request("GET",path,null);
+            if("/api/status".equals(path) && !expectedDeviceId.isEmpty() && !expectedDeviceId.equals(DeviceStore.identity(result)))
+                throw new IOException("Bluetooth không thuộc thiết bị đã chọn.");
+            return result;
+        }
         if (cloud != null) return remote("GET",path,null);
         HttpURLConnection connection = open(path, "GET");
         JSONObject result = executeJson(connection, null, null);
@@ -100,6 +110,7 @@ final class EspApi {
 
     JSONObject post(String path, JSONObject body) throws IOException, JSONException {
         if (demo) throw new IOException("Chế độ xem thử: không gửi lệnh đến thiết bị.");
+        if (ble != null) return ble.request("POST",path,body);
         if (cloud != null) return remote("POST",path,body);
         HttpURLConnection connection = open(path, "POST");
         return executeJson(connection, body.toString().getBytes(StandardCharsets.UTF_8),
@@ -108,6 +119,7 @@ final class EspApi {
 
     JSONObject upload(String fileName, byte[] data) throws IOException, JSONException {
         if (demo) throw new IOException("Chế độ xem thử: không tải tệp lên thiết bị.");
+        if (ble != null) throw new IOException("Cập nhật cần kết nối Internet và quyền từ tài khoản.");
         if (cloud != null) {
             try { return cloud.upload(cloudDevice,fileName,data); }
             catch(IOException e) { throw e; }

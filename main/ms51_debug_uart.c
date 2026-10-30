@@ -1,3 +1,4 @@
+#define MS51_RUNTIME_COMMAND_SET_LOCAL 0x58u
 #include "ms51_debug_uart.h"
 
 #include <ctype.h>
@@ -294,7 +295,7 @@ static bool process_runtime_response_byte_locked(uint8_t byte)
         return true;
 
     case MS51_RUNTIME_RX_COMMAND:
-        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET && byte != MS51_RUNTIME_COMMAND_MODE && byte != MS51_RUNTIME_COMMAND_TRIGGER && byte != MS51_RUNTIME_COMMAND_THERMAL && byte != MS51_RUNTIME_COMMAND_SAFETY && byte != MS51_RUNTIME_COMMAND_UNLOCK) {
+        if (byte != MS51_RUNTIME_COMMAND_GET && byte != MS51_RUNTIME_COMMAND_SET && byte != MS51_RUNTIME_COMMAND_SET_LOCAL && byte != MS51_RUNTIME_COMMAND_MODE && byte != MS51_RUNTIME_COMMAND_TRIGGER && byte != MS51_RUNTIME_COMMAND_THERMAL && byte != MS51_RUNTIME_COMMAND_SAFETY && byte != MS51_RUNTIME_COMMAND_UNLOCK) {
             ++s_state.dropped_lines;
             reset_runtime_parser_locked();
             return true;
@@ -488,7 +489,7 @@ static esp_err_t runtime_config_request(uint8_t command, const uint8_t *payload,
         (command == MS51_RUNTIME_COMMAND_MODE && (payload_length != 1u || payload[0] > 1u)) ||
         (command == MS51_RUNTIME_COMMAND_GET && payload_length != 0u) ||
         (command == MS51_RUNTIME_COMMAND_SET && payload_length != MS51_RUNTIME_CONFIG_SIZE) ||
-        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET && command != MS51_RUNTIME_COMMAND_MODE && command != MS51_RUNTIME_COMMAND_TRIGGER && command != MS51_RUNTIME_COMMAND_THERMAL && command != MS51_RUNTIME_COMMAND_SAFETY && command != MS51_RUNTIME_COMMAND_UNLOCK)) {
+        (command != MS51_RUNTIME_COMMAND_GET && command != MS51_RUNTIME_COMMAND_SET && command != MS51_RUNTIME_COMMAND_SET_LOCAL && command != MS51_RUNTIME_COMMAND_MODE && command != MS51_RUNTIME_COMMAND_TRIGGER && command != MS51_RUNTIME_COMMAND_THERMAL && command != MS51_RUNTIME_COMMAND_SAFETY && command != MS51_RUNTIME_COMMAND_UNLOCK)) {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -755,4 +756,8 @@ esp_err_t ms51_debug_uart_unlock(uint8_t kind, uint16_t pin, uint8_t *status)
 {
     uint8_t payload[]={kind,(uint8_t)(pin>>8),(uint8_t)pin};
     return runtime_config_request(MS51_RUNTIME_COMMAND_UNLOCK,payload,sizeof(payload),NULL,status);
+}
+
+esp_err_t ms51_debug_uart_set_local_config(const uint8_t config[MS51_RUNTIME_CONFIG_SIZE], uint8_t *status) {
+    return runtime_config_request(MS51_RUNTIME_COMMAND_SET_LOCAL, config, MS51_RUNTIME_CONFIG_SIZE, NULL, status);
 }

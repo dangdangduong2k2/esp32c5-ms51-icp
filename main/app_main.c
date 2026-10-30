@@ -1,3 +1,4 @@
+#include "ms51_ble.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -448,6 +449,7 @@ static esp_err_t start_console(void)
     esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
     repl_config.prompt = "ms51> ";
     repl_config.max_cmdline_length = 128;
+    repl_config.task_stack_size = 6144; /* Debug snapshot now includes BLE capability fields. */
 
     ESP_RETURN_ON_ERROR(esp_console_register_help_command(), TAG, "console help failed");
     ESP_RETURN_ON_ERROR(register_commands(), TAG, "console commands failed");
@@ -529,6 +531,8 @@ void app_main(void)
                  esp_err_to_name(web_error));
     }
 
+    const esp_err_t ble_error = ms51_ble_start();
+    if(ble_error != ESP_OK) ESP_LOGE(TAG,"Bluetooth unavailable: %s",esp_err_to_name(ble_error));
     const esp_err_t trigger_error = ms51_trigger_init();
     if(trigger_error != ESP_OK) ESP_LOGW(TAG,"Trigger unavailable: %s",esp_err_to_name(trigger_error));
 
