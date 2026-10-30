@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ms51_image.h"
+size_t image_test_allocated;
+size_t image_test_limit = 36u * 1024u;
 typedef struct { const uint8_t *bytes; size_t size, offset, chunk; } input_t;
 static int read_chunk(void *arg,uint8_t *out,size_t max) {
     input_t *in=arg;
@@ -47,6 +49,14 @@ int main(void) {
     ms51_image_t image;
     assert(parse((uint8_t*)hex,length,0,"broken.hex",&image)==ESP_ERR_INVALID_RESPONSE);
     assert(image.allocation==NULL);
+    assert(image_test_allocated==0);
+    image_test_limit=36u*1024u-1u;
+    assert(parse(binary,sizeof(binary),512,"no-memory.bin",&image)==ESP_ERR_NO_MEM);
+    assert(image.allocation==NULL && image_test_allocated==0);
+    image_test_limit=36u*1024u;
+    assert(parse(binary,sizeof(binary),512,"retry.bin",&image)==ESP_OK);
+    ms51_image_free(&image);
+    assert(image_test_allocated==0);
     free(hex);
-    puts("PASS streaming 32KiB BIN/HEX, 1-byte/chunk boundaries, checksum/EOF/overlap/range rejection, interrupted reader");
+    puts("PASS streaming 32KiB BIN/HEX, chunk boundaries, invalid inputs, interruption, 36KiB budget, allocation failure/recovery, no retained buffer");
 }

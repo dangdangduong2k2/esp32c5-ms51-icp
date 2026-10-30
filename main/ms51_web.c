@@ -1422,6 +1422,11 @@ static esp_err_t upload_handler(httpd_req_t *request)
         const char *message = NULL;
         if (error == ESP_ERR_INVALID_RESPONSE || error == ESP_ERR_TIMEOUT) {
             message = "Firmware upload was interrupted. Reconnect to the ESP32 Wi-Fi and upload again.";
+        } else if (error == ESP_ERR_NO_MEM) {
+            message = "Thiết bị chưa đủ bộ nhớ để nhận bản cập nhật. Hãy thử lại khi thiết bị đang rảnh.";
+            ESP_LOGW(TAG, "Upload RAM: free=%u largest=%u",
+                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
         } else {
             message = is_hex ? "Invalid Intel HEX: check checksum, EOF, and APROM addresses."
                              : "Could not store BIN firmware; upload it again.";

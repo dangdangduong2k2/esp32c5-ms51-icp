@@ -1,5 +1,11 @@
 # Hẹn Giờ Lạnh 3.7.0 — Bluetooth không cần Internet
 
+**Gói C5 mới: `ESP32-C5-Bluetooth-3.7.0-r2.zip`. APK vẫn là 3.7.0.**
+
+Bản r2 giảm RAM dành cho tối ưu tốc độ Wi-Fi và các hàng đợi Bluetooth, chỉ cấp phát bộ đệm 36 KiB khi nhận firmware rồi giải phóng. Không giữ bộ đệm firmware cố định khi TLS cần bắt tay. Lỗi thiếu RAM cũng được báo đúng, thay vì báo nhầm file HEX hỏng. USB `debug` bổ sung thông tin RAM và IP để chẩn đoán.
+
+Trước khi người dùng rút bo, đã thấy trao đổi BLE và MS51 đã báo xác minh đủ 28.942 byte cùng tín hiệu `local_settings=1`. Tuy nhiên bản C5 đang trên bo khi rút vẫn gặp thiếu RAM khi kết nối máy chủ. **C5 r2 được build và kiểm thử phần mềm sau khi bo đã rút, chưa được nạp hoặc xác nhận đồng thời Wi-Fi/BLE/TLS trên mạch thật. Lần tới cần nạp lại C5 r2.** Không cần cài lại APK nếu đã có 3.7.0.
+
 Bản thử gồm APK, C5 và MS51. App thêm thiết bị qua BLE; không cần đăng nhập, Wi-Fi hay máy chủ để dùng chế độ gần. Khi chọn **Thêm Wi-Fi và liên kết tài khoản**, điện thoại gửi cấu hình Wi-Fi qua BLE, đăng nhập và ghép tài khoản với VPS hiện tại. Sau đó các chức năng bổ sung vẫn do quyền tài khoản trên máy chủ quyết định.
 
 ## Cách dùng
@@ -51,6 +57,7 @@ Nạp MS51 bằng **program thường**, không dùng erase/program-full. HEX m�
 - ESP-IDF 6.0 build C5; Keil build MS51 không lỗi/cảnh báo.
 - Native C chạy chính policy C5: byte order, trường được phép, từ chối giá trị xấu không ghi một phần, cờ hỗ trợ hết hạn, che PIN, chặn cập nhật/ghi raw/thermal qua BLE.
 - Native C chạy chính hàm MS51: giữ mật khẩu và bộ đếm, khóa PIN, giới hạn min/max, cờ menu và ghi EEPROM một lần.
+- Parser BIN/HEX chạy trong ngân sách heap 36 KiB, kiểm tra thiếu bộ nhớ, phục hồi sau lỗi, đọc phân mảnh và không giữ bộ đệm sau khi xong.
 - Android build/lint; kiểm thử BLE trên giả lập cho phân mảnh UTF-8, MTU 23, giới hạn khung, định danh thiết bị, snapshot, cài đặt không tài khoản, quyền theo mạch và lưu phần thay đổi.
 - Kiểm thử hồi quy quản lý cài đặt, cuộn, mở khóa và quyền công tắc vật lý.
-- Chưa xác nhận trên sóng BLE/điện thoại thật tại thời điểm xuất bản thử. Không coi kiểm thử giả lập là kiểm thử ghép Bluetooth thực tế.
+- Còn cần kiểm tra trên C5 r2: kết nối lại bằng điện thoại, lưu offline sau khi mở khóa, đọc lại cấu hình, thêm Wi-Fi/tài khoản và tải HEX khi cùng dùng BLE. Kiểm thử giả lập không thay thế kiểm thử này.

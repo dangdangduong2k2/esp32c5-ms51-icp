@@ -8,6 +8,8 @@
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -158,6 +160,15 @@ static int command_debug(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
+
+    printf("RAM free=%u largest=%u\n", (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+           (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    wifi_mode_t mode;
+    printf("Wi-Fi driver: %s\n", esp_err_to_name(esp_wifi_get_mode(&mode)));
+    esp_netif_t *station = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t ip;
+    if (station && esp_netif_get_ip_info(station, &ip) == ESP_OK)
+        printf("Station IP: " IPSTR "\n", IP2STR(&ip.ip));
 
     ms51_debug_uart_snapshot_t snapshot;
     const esp_err_t error = ms51_debug_uart_get_snapshot(&snapshot);
