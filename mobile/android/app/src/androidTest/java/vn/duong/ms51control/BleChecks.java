@@ -76,6 +76,7 @@ final class BleChecks {
                     Map<?,?> choices=(Map<?,?>)ManagedChecks.get(a,"configChoices");
                     check(choices.containsKey("hcfMode") && choices.containsKey("displayMode"),"Conditional fields appear when physical menu exposes them");
                     ManagedChecks.invoke(a,"showBleConnected",new Class[]{});
+                    check(ManagedChecks.get(a,"screen").toString().equals("CONTROL"),"BLE connection opens control directly without onboarding buttons");
                     a.onBackPressed();
                     check(!(Boolean)ManagedChecks.get(a,"bleMode") && ManagedChecks.get(a,"screen").toString().equals("AUTH"),"Back exits Bluetooth onboarding without an account");
                 }catch(Throwable e){uiFailure.set(e);}

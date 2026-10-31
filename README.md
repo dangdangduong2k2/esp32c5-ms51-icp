@@ -1,5 +1,9 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Hẹn Giờ Lạnh 3.7.1 — Popup kết nối gần
+
+[Tải APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.1.apk) · [Thay đổi và kiểm thử](docs/hen-gio-lanh-3.7.1/README.md). App tự tìm thiết bị, hiện GIF xoay và mở thẳng điều khiển khi chạm vào hộp. Chỉ cập nhật app; vẫn cần C5/MS51 hỗ trợ BLE.
+
 ## Bản thử mới: Hẹn Giờ Lạnh 3.7.0 — Bluetooth
 
 [APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.0.apk) · [C5 r2](https://103-9-78-139.sslip.io/downloads/ESP32-C5-Bluetooth-3.7.0-r2.zip) · [Cách dùng và kiểm thử](docs/hen-gio-lanh-3.7.0/README.md). Thêm và điều khiển gần không cần Internet/tài khoản; thêm Wi-Fi để nhận quyền online. C5 r2 sửa cấu hình bộ nhớ, đang chờ nạp và kiểm tra đồng thời Wi-Fi/BLE trên mạch thật. APK vẫn 3.7.0.
