@@ -24,7 +24,7 @@ C5 kiểm tra lại trên cấu hình mới đọc cho cả GET và POST, trả 
 ## Cập nhật
 
 - Cài đè APK cùng chữ ký, code 60. Phần hiển thị và kiểm tra trước lưu có hiệu lực với C5 r2 đang dùng.
-- Đã xuất C5 và MS51; **chưa nạp lên bo trong lần này**. Để có kiểm tra quyền đồng bộ ở cả ba lớp, nạp C5 mới trước rồi MS51 mới. C5 cũ chỉ nhận `local_settings=1`, nên sẽ khóa lưu offline nếu nạp MS51 mới trước.
+- Đã nạp và xác minh C5 rồi MS51 trên bo ngày 31/10/2026; xem [biên bản kiểm tra](hardware-check-2026-10-31.md). Với bo khác, nạp C5 mới trước rồi MS51 mới. C5 cũ chỉ nhận `local_settings=1`, nên sẽ khóa lưu offline nếu nạp MS51 mới trước.
 - Gói C5 dùng profile RAM r2, flash 16 MB; DAT IO1 / CLK IO0 / RS IO3; NTC 10k IO5, 20k IO6, 50k IO4.
 - Ba file nạp: `bootloader.bin` tại `0x2000`, `partition-table.bin` tại `0x8000`, `esp32c5_ms51_icp.bin` tại `0x10000`. Không Erase All; bố cục NVS giữ nguyên.
 - HEX MS51 không ghi trang EEPROM `0x7F00–0x7FFF`; không dùng thao tác xóa toàn bộ mạch.
@@ -33,4 +33,4 @@ C5 kiểm tra lại trên cấu hình mới đọc cho cả GET và POST, trả 
 
 Build Android và lint thành công; Android 35 giả lập chạy qua `ble`, `nearby`, `managed`. App, test C5 và test từ hàm MS51 thật cùng kiểm tra 128 tổ hợp (sáu cờ menu × LCD/LED), gồm cờ tắt nhưng giá trị chức năng đang bật, thiếu danh sách quyền và từ chối lưu khi quyền thay đổi.
 
-C5 build ESP-IDF 6.0 thành công, MS51 Keil 0 lỗi/0 cảnh báo; MS51 29.159 byte. Test MS51 giữ mật khẩu/bộ đếm, khóa PIN, Min/Max và từ chối nguyên lệnh. C5 giữ dữ liệu riêng tư, không dùng lệnh ghi cũ, từ chối quyền không hợp lệ/capability hết hạn. Chưa xác minh bản C5/MS51 mới qua radio hoặc nạp thực tế.
+C5 build ESP-IDF 6.0 thành công, MS51 Keil 0 lỗi/0 cảnh báo; MS51 29.159 byte. Test MS51 giữ mật khẩu/bộ đếm, khóa PIN, Min/Max và từ chối nguyên lệnh. C5 giữ dữ liệu riêng tư, không dùng lệnh ghi cũ, từ chối quyền không hợp lệ/capability hết hạn. Nạp thực tế và đọc lại xác minh đã thành công; chưa kiểm thử lại phiên BLE bằng điện thoại sau lần nạp 3.7.4.
