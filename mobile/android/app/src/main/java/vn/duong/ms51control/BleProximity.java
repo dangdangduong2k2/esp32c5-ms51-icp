@@ -4,7 +4,7 @@ import java.util.LinkedHashMap;
 
 /** RSSI is a proximity hint, not a distance or authorization measurement. */
 final class BleProximity {
-    static final int MIN_RSSI = -45;
+    static final int MIN_RSSI = -50;
     private static final long WINDOW_MS = 2000, MIN_SPAN_MS = 600;
     private static final class Sample { long first,last; int count; }
     private final LinkedHashMap<String,Sample> samples=new LinkedHashMap<>();

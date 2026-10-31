@@ -307,6 +307,10 @@ final class NearbyChecks {
     }
     private static void checkProximity() {
         BleProximity p=new BleProximity();
+        check(!p.accept("range",-50,1000,1000),"Expanded range still requires stability");
+        check(!p.accept("range",-49,1300,1300),"Expanded range requires third sample");
+        check(p.accept("range",-50,1600,1600),"Stable -50 dBm now qualifies");
+        check(!p.accept("outside",-51,1000,1000) && !p.accept("outside",-51,1300,1300) && !p.accept("outside",-51,1600,1600),"Weaker than -50 dBm remains outside first-pair range");
         check(!p.accept("a",-80,1000,1000),"Weak sample rejected");
         check(!p.accept("a",-40,1100,1100),"Strong spike waits");
         check(!p.accept("a",-41,1400,1400),"Two samples wait");
