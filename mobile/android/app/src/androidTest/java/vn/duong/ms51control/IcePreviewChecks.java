@@ -29,6 +29,7 @@ final class IcePreviewChecks {
         try {
             MainActivity a=(MainActivity)test.startActivitySync(new Intent(test.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             AtomicReference<Throwable> error=new AtomicReference<>();
+            JSONObject[] samples=new JSONObject[2];
             test.runOnMainSync(()->{try {
                 set(a,"foreground",false);call(a,"stopDashboard",new Class[]{});call(a,"stopHome",new Class[]{});
                 call(a,"showAuth",new Class[]{boolean.class},false);capture(a,"01-login",false);
@@ -37,7 +38,7 @@ final class IcePreviewChecks {
                 DeviceStore store=(DeviceStore)get(a,"deviceStore");
                 DeviceStore.Device device=new DeviceStore.Device("ms51-000000000001","Đầu kéo 01","","","Cabin Wi-Fi");
                 store.save("offline-preview",device);call(a,"showDevices",new Class[]{});call(a,"stopHome",new Class[]{});capture(a,"02-devices",false);
-                store.remove("offline-preview",device.id);set(a,"activeDevice",device);
+                store.remove("offline-preview",device.id);set(a,"activeDevice",device);set(a,"demoMode",false);
                 EspApi demo=new EspApi();demo.setDemo(true);JSONObject status=demo.get("/api/status"),debug=demo.get("/api/debug");
                 JSONObject sensor=new JSONObject().put("gpio",5).put("enabled",true).put("valid",true).put("age_ms",100).put("sensor","ok").put("temperature_centi",3050);
                 status.put("analog",sensor).put("analog20k",new JSONObject(sensor.toString()).put("gpio",6).put("temperature_centi",3080)).put("analog50k",new JSONObject(sensor.toString()).put("gpio",4).put("temperature_centi",2700));
@@ -47,7 +48,7 @@ final class IcePreviewChecks {
                 debug.getJSONArray("variables").put(new JSONObject().put("name","selected_mode").put("value","0").put("age_ms",100)).put(new JSONObject().put("name","mode_source").put("value","PHYSICAL").put("age_ms",100));
                 status.put("busy",false);
                 for(int i=0;i<debug.getJSONArray("variables").length();i++)debug.getJSONArray("variables").getJSONObject(i).put("age_ms",100);
-                set(a,"lastStatus",status);set(a,"lastDebug",debug);
+                samples[0]=status;samples[1]=debug;set(a,"lastStatus",status);set(a,"lastDebug",debug);
                 set(a,"lastHistory",new long[]{7620,5460,8400});
                 state(a,"screen","CONTROL");state(a,"tab","OVERVIEW");
                 LinearLayout overview=page(a,"Tổng quan");call(a,"buildOverview",new Class[]{LinearLayout.class},overview);
@@ -60,8 +61,11 @@ final class IcePreviewChecks {
                 }
                 call(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,debug);call(a,"stopCounting",new Class[]{});
                 capture(a,"03-overview-defrost",true);
+                ((java.util.Set<String>)get(a,"expandedSettings")).clear();((java.util.Set<String>)get(a,"expandedSettings")).add("Khởi động");
                 state(a,"tab","SETTINGS");LinearLayout settings=page(a,"Cài đặt");
                 RuntimeConfigCodec.Config config=RuntimeConfigCodec.defaults();config.values.put("coolCl",6);config.values.put("coolOp",5);config.values.put("defrostCl",5);config.values.put("defrostOp",32);config.values.put("delaySt",70);config.values.put("stLed",50);config.values.put("stLcd",50);
+                JSONArray allowed=new JSONArray();for(String key:config.values.keySet())if(!key.equals("hcfTime"))allowed.put(key);
+                set(a,"deviceAccess",new JSONObject().put("visible",allowed));
                 set(a,"runtimeConfig",config);set(a,"configLoaded",true);call(a,"buildSettings",new Class[]{LinearLayout.class},settings);capture(a,"04-settings",true);
                 captureSection(a,settings,"Cài đặt nâng cao","04-advanced-collapsed");
                 SettingsLayoutChecks.expandGroups(settings);capture(a,"04-settings-expanded",true);
@@ -74,8 +78,26 @@ final class IcePreviewChecks {
                 call(a,"stopDashboard",new Class[]{});call(a,"stopHome",new Class[]{});
             }catch(Throwable e){error.set(e);}});
             if(error.get()!=null)throw error.get();
+            test.runOnMainSync(()->{try {
+                set(a,"foreground",false);set(a,"demoMode",false);state(a,"screen","CONTROL");state(a,"tab","OVERVIEW");
+                set(a,"lastStatus",samples[0]);set(a,"lastDebug",samples[1]);
+                LinearLayout content=page(a,"Tổng quan");call(a,"buildOverview",new Class[]{LinearLayout.class},content);
+                call(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},samples[0],samples[1]);call(a,"stopCounting",new Class[]{});
+            }catch(Throwable e){error.set(e);}});test.waitForIdleSync();android.os.SystemClock.sleep(300);nativeShot(test,a,"native-overview");
+            test.runOnMainSync(()->{try {
+                state(a,"tab","SETTINGS");((java.util.Set<String>)get(a,"expandedSettings")).clear();((java.util.Set<String>)get(a,"expandedSettings")).add("Khởi động");
+                set(a,"configLoaded",true);LinearLayout content=page(a,"Cài đặt");call(a,"buildSettings",new Class[]{LinearLayout.class},content);
+            }catch(Throwable e){error.set(e);}});test.waitForIdleSync();android.os.SystemClock.sleep(300);nativeShot(test,a,"native-settings");
+            test.runOnMainSync(()->{try {set(a,"foreground",true);call(a,"showMessage",new Class[]{String.class},"Đã lưu cài đặt");set(a,"foreground",false);}catch(Throwable e){error.set(e);}});
+            test.waitForIdleSync();android.os.SystemClock.sleep(250);nativeShot(test,a,"native-notice");
+            if(error.get()!=null)throw error.get();
             report.putString("stream","PASS: offline native preview captured, no device commands sent.");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e);test.finish(0,report);}
+    }
+    static void nativeShot(Instrumentation test,MainActivity a,String name)throws Exception {
+        Bitmap bitmap=test.getUiAutomation().takeScreenshot();
+        File folder=new File(a.getExternalFilesDir(null),"ui-preview");folder.mkdirs();
+        try(FileOutputStream out=new FileOutputStream(new File(folder,name+".png"))){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}bitmap.recycle();
     }
     static LinearLayout page(MainActivity a,String title)throws Exception {
         LinearLayout content=(LinearLayout)call(a,"createPage",new Class[]{String.class,String.class,String.class},"",title,"");

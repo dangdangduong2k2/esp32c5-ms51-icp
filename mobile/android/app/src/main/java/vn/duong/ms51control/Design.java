@@ -6,16 +6,16 @@ import android.graphics.drawable.Drawable;
 /** Small vector artwork keeps every icon crisp without external UI dependencies. */
 final class Design {
     static final int NAVY = 0xFF0A2638;
-    static final int INK = 0xFF0B2A48;
-    static final int MUTED = 0xFF526777;
-    static final int TEAL = 0xFF0079C4;
+    static final int INK = 0xFF10213B;
+    static final int MUTED = 0xFF586779;
+    static final int TEAL = 0xFF0071E3;
     static final int MINT = 0xFFB5E7FF;
-    static final int BG = 0xFFF2F9FD;
-    static final int LINE = 0xFFD8EAF6;
-    static final int ACCENT = 0xFF0079C4;
+    static final int BG = 0xFFF5F7FA;
+    static final int LINE = 0xFFE2EAF2;
+    static final int ACCENT = 0xFF0071E3;
     static final int SURFACE = Color.WHITE;
-    static final int FIELD = 0xFFF1F8FD;
-    static final int SOFT = 0xFFE6F4FD;
+    static final int FIELD = 0xFFF2F7FC;
+    static final int SOFT = 0xFFE8F4FE;
     static final int RIPPLE = 0x26087BB8;
 
     /** State-aware switch artwork; the host CompoundButton retains keyboard/accessibility behavior. */
@@ -37,8 +37,7 @@ final class Design {
             Rect b=getBounds();c.save();c.translate(b.left,b.top);c.scale(b.width()/48f,b.height()/24f);
             p.setColor(checked?ACCENT:MUTED);p.setAlpha(enabled?alpha:alpha/3);c.drawRoundRect(0,1,48,23,11,11,p);
             p.setColor(Color.WHITE);p.setAlpha(enabled?alpha:alpha/3);c.drawCircle(checked?37:11,12,8,p);
-            p.setTextSize(9);p.setTypeface(Typeface.DEFAULT_BOLD);p.setTextAlign(Paint.Align.CENTER);
-            c.drawText(checked?"ON":"OFF",checked?16:32,15,p);c.restore();
+            c.restore();
         }
         @Override public void setAlpha(int a){alpha=a;invalidateSelf();}
         @Override public void setColorFilter(ColorFilter f){p.setColorFilter(f);invalidateSelf();}
@@ -50,7 +49,7 @@ final class Design {
         @Override public void draw(Canvas canvas) {
             Rect b = getBounds();
             paint.setAlpha(255); paint.setStyle(Paint.Style.FILL);
-            paint.setShader(new LinearGradient(b.left,b.top,b.right,b.bottom,NAVY,0xFF103B4B,Shader.TileMode.CLAMP));
+            paint.setShader(null);paint.setColor(SOFT);
             float radius=14*android.content.res.Resources.getSystem().getDisplayMetrics().density;
             canvas.drawRoundRect(new RectF(b),radius,radius,paint);
         }
@@ -103,6 +102,8 @@ final class Design {
             p.setColor(color); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.65f);
             p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
             switch (name) {
+                case "check": c.drawCircle(12,12,9,p);path(c,7.5f,12,10.5f,15,16.5f,9);break;
+                case "info": c.drawCircle(12,12,9,p);path(c,12,11,12,17);c.drawCircle(12,7,0.6f,p);break;
                 case "home":
                     path(c, 3,11,12,3,21,11); path(c,5,10,5,21,10,21,10,15,14,15,14,21,19,21,19,10); break;
                 case "gear":
@@ -127,6 +128,7 @@ final class Design {
                     c.save(); c.translate(17.5f,17.5f); p.setStrokeWidth(1.15f);
                     for(int i=0;i<6;i++) { c.save();c.rotate(i*60);path(c,0,0,0,-4.3f);path(c,-1.5f,-3,0,-1.8f,1.5f,-3);c.restore(); }
                     c.restore(); break;
+                case "chevron-right": path(c,9,5,16,12,9,19); break;
                 case "chevron-down": path(c,5,9,12,16,19,9); break;
                 case "chevron-up": path(c,5,15,12,8,19,15); break;
                 case "device":
@@ -155,6 +157,10 @@ final class Design {
                     path(c,12,2,21,7,21,17,12,22,3,17,3,7,12,2);
                     path(c,3,7,12,12,21,7); path(c,12,12,12,22);
                     path(c,6,11,6,15); path(c,15,17,18,15); break;
+                case "fan":
+                    c.drawCircle(12,12,2,p);
+                    for(int blade=0;blade<3;blade++){c.save();c.rotate(blade*120,12,12);
+                        Path f=new Path();f.moveTo(11,10);f.cubicTo(3,5,9,0,14,3);f.cubicTo(18,6,15,10,13,10);c.drawPath(f,p);c.restore();}break;
                 case "power":
                     c.drawArc(4,4,20,21,310,280,false,p);
                     c.drawLine(12,2,12,12,p); break;

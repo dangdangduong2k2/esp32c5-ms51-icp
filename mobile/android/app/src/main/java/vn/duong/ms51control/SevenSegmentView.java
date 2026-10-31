@@ -81,8 +81,10 @@ final class SevenSegmentView extends View {
         float gap = dp(5);
         float digitWidth = (getWidth() - padding * 2 - gap * 2) / 3f;
         float digitHeight = getHeight() - padding * 2;
-        for (int index = 0; index < 3; index++) {
-            drawDigit(canvas, text.charAt(index), padding + index * (digitWidth + gap), padding, digitWidth, digitHeight);
+        String visible=text.trim();
+        float left=(getWidth()-(visible.length()*digitWidth+(visible.length()-1)*gap))/2f;
+        for (int index = 0; index < visible.length(); index++) {
+            drawDigit(canvas, visible.charAt(index), left + index * (digitWidth + gap), padding, digitWidth, digitHeight);
         }
     }
 
