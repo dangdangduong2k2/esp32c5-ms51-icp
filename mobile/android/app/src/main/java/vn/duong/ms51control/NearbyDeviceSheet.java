@@ -19,6 +19,10 @@ final class NearbyDeviceSheet implements AutoCloseable {
     private final HashSet<String> addresses=new HashSet<>();
     private final Runnable dismissed;
     private boolean closed, selected;
+    private DeviceSpinView discoverySpin;
+    private TextView discoveryTitle, discoveryDetail, discoveryHelp;
+    private Button firstChoice;
+    private String firstLabel;
     NearbyDeviceSheet(Activity activity,Runnable dismissed) {
         this.activity=activity;this.dismissed=dismissed;
         content=new LinearLayout(activity);content.setOrientation(LinearLayout.VERTICAL);
@@ -39,18 +43,29 @@ final class NearbyDeviceSheet implements AutoCloseable {
         Runnable select=()->{if(closed || selected)return;selected=true;close();connect.run();};
         if(addresses.size()==1) {
             DeviceSpinView spin=new DeviceSpinView(activity);
+            discoverySpin=spin;
             spin.setContentDescription("Kết nối "+name);spin.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
             spin.setFocusable(true);spin.setOnClickListener(v->select.run());
             content.addView(spin,new LinearLayout.LayoutParams(-1,dp(190)));
             TextView title=label("Hộp hẹn giờ máy lạnh",21,true);title.setGravity(Gravity.CENTER);content.addView(title);
+            discoveryTitle=title;
             TextView device=label(name+" · "+address.substring(Math.max(0,address.length()-8)),14,false);
             device.setTextColor(Design.MUTED);device.setGravity(Gravity.CENTER);content.addView(device,margin(0,6,0,14));
+            discoveryDetail=device;firstLabel=device.getText().toString();
             Button button=action("Kết nối",true);button.setOnClickListener(v->select.run());content.addView(button,margin(0,0,0,8));
+            firstChoice=button;button.setContentDescription("Kết nối "+name+" "+address);
             TextView help=label("Chạm vào hộp để điều khiển ngay",14,false);help.setGravity(Gravity.CENTER);help.setTextColor(Design.MUTED);content.addView(help);
+            discoveryHelp=help;
             content.addView(others);
             show();
         } else {
-            if(addresses.size()==2){TextView more=label("Thiết bị khác ở gần",14,true);others.addView(more,margin(0,18,0,4));}
+            discoveryTitle.setText("Chọn thiết bị");
+            discoveryDetail.setText("Tìm thấy "+addresses.size()+" hộp · Chọn một hộp bên dưới");
+            discoveryHelp.setVisibility(View.GONE);
+            discoverySpin.setOnClickListener(null);discoverySpin.setClickable(false);discoverySpin.setFocusable(false);
+            discoverySpin.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            firstChoice.setText(firstLabel);firstChoice.setTextColor(Design.TEAL);
+            firstChoice.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),shape(Design.FIELD,14),null));
             Button row=action(name+" · "+address.substring(Math.max(0,address.length()-8)),false);
             row.setContentDescription("Kết nối "+name+" "+address);row.setOnClickListener(v->select.run());others.addView(row,margin(0,6,0,0));resize();
         }

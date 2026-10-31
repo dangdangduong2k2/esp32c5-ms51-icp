@@ -80,6 +80,16 @@ final class BleChecks {
                     ManagedChecks.invoke(a,"showBleConnected",new Class[]{});
                     check(ManagedChecks.get(a,"bleConnectionSheet")==null,"Success removes reconnect popup automatically");
                     check(ManagedChecks.get(a,"screen").toString().equals("CONTROL"),"BLE connection opens control directly without onboarding buttons");
+                    android.content.SharedPreferences paired=a.getSharedPreferences("ble_devices_v1",0);
+                    String testAddress="AA:00:00:00:00:09",oldIdentity=paired.getString(testAddress,null);
+                    try {
+                        paired.edit().putString(testAddress,Fake.ID).commit();
+                        LinearLayout devicePage=new LinearLayout(a);
+                        ManagedChecks.invoke(a,"buildBleDevice",new Class[]{LinearLayout.class},devicePage);
+                        check(ManagedChecks.texts(devicePage).contains("Bỏ ghép nối") && ManagedChecks.texts(devicePage).contains("Ngắt kết nối"),"Device tab offers both forget and temporary disconnect");
+                    } finally {
+                        if(oldIdentity==null)paired.edit().remove(testAddress).commit();else paired.edit().putString(testAddress,oldIdentity).commit();
+                    }
                     a.onBackPressed();
                     check(!(Boolean)ManagedChecks.get(a,"bleMode") && ManagedChecks.get(a,"screen").toString().equals("AUTH"),"Back exits Bluetooth onboarding without an account");
                 }catch(Throwable e){uiFailure.set(e);}

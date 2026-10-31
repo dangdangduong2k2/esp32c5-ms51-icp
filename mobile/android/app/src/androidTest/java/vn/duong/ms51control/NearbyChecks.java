@@ -71,6 +71,11 @@ final class NearbyChecks {
                 sheet.set(new NearbyDeviceSheet(a,dismissed::incrementAndGet));
                 sheet.get().addDevice("38:44:BE:1F:E4:E0","First",selected::incrementAndGet);
                 sheet.get().addDevice("38:44:BE:1F:E4:E1","Second",()->selected.addAndGet(10));
+                check(findButton(dialog(sheet.get()).getWindow().getDecorView(),"First")!=null,"First and second boxes both have named selection rows");
+                find(dialog(sheet.get()).getWindow().getDecorView(),DeviceSpinView.class).performClick();
+                check(selected.get()==1,"With multiple boxes the illustration cannot silently select the first");
+                sheet.get().addDevice("38:44:BE:1F:E4:E1","Duplicate",()->selected.addAndGet(100));
+                check(ManagedChecks.texts(dialog(sheet.get()).getWindow().getDecorView()).contains("Tìm thấy 2 hộp"),"Repeated advertisements do not duplicate choices");
                 Button second=findButton(dialog(sheet.get()).getWindow().getDecorView(),"Second");check(second!=null,"Other nearby devices selectable");second.performClick();
                 check(selected.get()==11,"Select the requested device, not the first one");
                 sheet.set(new NearbyDeviceSheet(a,dismissed::incrementAndGet));sheet.get().addDevice("38:44:BE:1F:E4:E0","Dismiss",selected::incrementAndGet);
@@ -100,9 +105,30 @@ final class NearbyChecks {
                         check(connections.get()==1 && (Boolean)field(picker,"closed"),"Remembered advertisement connects without tapping, stops scanning and ignores queued duplicates");
                         picker.close();
                     }
+                    ManagedChecks.invoke(a,"forgetBleDevice",new Class[]{String.class},second);
+                    check(!prefs.contains(second) && prefs.contains(first),"Unpair forgets only the selected box");
+                    check(!a.shouldReconnectBle(second,true) && !a.shouldReconnectBle(first,true),"Unpair requires manual selection even when another box was remembered");
+                    check((Boolean)ManagedChecks.get(a,"bleChooseManually"),"Unpair opens explicit device selection");
+                    if(autoChecked){
+                        BlePicker picker=(BlePicker)ManagedChecks.get(a,"blePicker");
+                        check(picker!=null,"Unpair starts discovery immediately");
+                        java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
+                        add.invoke(picker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice(first),null,-50,System.nanoTime()));
+                        add.invoke(picker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice(second),null,-55,System.nanoTime()));
+                        check(!(Boolean)field(picker,"closed"),"Neither box auto-connects during explicit selection");
+                        NearbyDeviceSheet choices=(NearbyDeviceSheet)field(picker,"sheet");
+                        check(ManagedChecks.texts(dialog(choices).getWindow().getDecorView()).contains("Tìm thấy 2 hộp"),"Picker displays both advertisements after unpair");
+                        ManagedChecks.invoke(a,"stopNearby",new Class[]{});
+                    }
+                    a.rememberBleDevice(first,"ms51-test1");
+                    check(a.shouldReconnectBle(first,true) && !a.shouldReconnectBle(second,true),"Next successful selection becomes the automatic reconnect target");
+                    ManagedChecks.set(a,"nearbySuppressed",true);
                 } finally {
                     android.content.SharedPreferences.Editor restore=prefs.edit().clear();
-                    for(java.util.Map.Entry<String,?> entry:before.entrySet())restore.putString(entry.getKey(),(String)entry.getValue());
+                    for(java.util.Map.Entry<String,?> entry:before.entrySet()){
+                        if(entry.getValue() instanceof Boolean)restore.putBoolean(entry.getKey(),(Boolean)entry.getValue());
+                        else restore.putString(entry.getKey(),(String)entry.getValue());
+                    }
                     restore.commit();
                 }
                 sheet.set(new NearbyDeviceSheet(a,dismissed::incrementAndGet));sheet.get().showConnecting("Hộp đã ghép");
@@ -116,7 +142,15 @@ final class NearbyChecks {
             test.waitForIdleSync();
             check(failure.get()==null,String.valueOf(failure.get()));
             check(dismissed.get()==2,"Automatic connection can be cancelled");
-            report.putString("stream","PASS: silent discovery popup, GIF rotation, deduplication, one-tap new pairing, remembered/bonded reconnect policy, upgrade migration, duplicate automatic callbacks, progress popup cancellation; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
+            test.runOnMainSync(()->{
+                sheet.set(new NearbyDeviceSheet(a,()->{}));
+                sheet.get().addDevice("38:44:BE:1F:E4:E0","Hẹn Giờ Lạnh 1FE4E0",()->{});
+                sheet.get().addDevice("38:44:BE:1F:E4:E1","Hẹn Giờ Lạnh 1FE4E1",()->{});
+            });
+            test.waitForIdleSync();SystemClock.sleep(700);
+            android.graphics.Bitmap choicesShot=test.getUiAutomation().takeScreenshot();
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,"03-chon-thiet-bi.png"))){choicesShot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}choicesShot.recycle();
+            report.putString("stream","PASS: silent discovery popup, GIF rotation, deduplication, explicit multiple-device selection, unpair and reselect, no reconnect to forgotten box, remembered/bonded reconnect policy, upgrade migration, progress cancellation; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(()->{if(sheet.get()!=null)sheet.get().close();a.finish();});}}
     }

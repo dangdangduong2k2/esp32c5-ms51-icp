@@ -266,7 +266,7 @@ public final class MainActivity extends Activity {
         api.setBle(null);bleMode=false;pendingBleWifi=false;bleSaving=false;
     }
     private static final int BLE_ENABLE_REQUEST=92;
-    private boolean nearbySuppressed, blePromptAttempted, blePromptPending;
+    private boolean nearbySuppressed, blePromptAttempted, blePromptPending, bleChooseManually;
     private final Runnable nearbyRefresh=new Runnable(){
         @Override public void run(){
             if(!foreground)return;
@@ -281,6 +281,7 @@ public final class MainActivity extends Activity {
     }
     private void stopNearby(){if(blePicker!=null){blePicker.close();blePicker=null;}}
     private void chooseBleDevice(){
+        bleChooseManually=true;
         nearbySuppressed=false;blePromptAttempted=false;stopNearby();discoverNearby(true);
     }
     @android.annotation.SuppressLint("MissingPermission")
@@ -316,7 +317,7 @@ public final class MainActivity extends Activity {
             }
             blePromptAttempted=false;
             blePicker=new BlePicker(this,adapter,this::nearbyEligible,
-                    device->shouldReconnectBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
+                    device->!bleChooseManually && shouldReconnectBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
                     this::connectBleDevice,()->nearbySuppressed=true);
             if(manual)showMessage("Đang tìm thiết bị gần bạn…");
         }catch(SecurityException|IllegalStateException|ActivityNotFoundException error){
@@ -326,6 +327,7 @@ public final class MainActivity extends Activity {
     }
     boolean shouldReconnectBle(String address,boolean bonded) {
         android.content.SharedPreferences saved=getSharedPreferences("ble_devices_v1",MODE_PRIVATE);
+        if(saved.getBoolean("selection_required",false))return false;
         if(!bonded || saved.getString(address,"").isEmpty())return false;
         String last=saved.getString("last_connected_address","");
         if(!last.isEmpty())return last.equals(address);
@@ -335,6 +337,11 @@ public final class MainActivity extends Activity {
         return known==1;
     }
     private void closeBleConnectionSheet(){if(bleConnectionSheet!=null){bleConnectionSheet.close();bleConnectionSheet=null;}}
+    void rememberBleDevice(String address,String id){
+        getSharedPreferences("ble_devices_v1",MODE_PRIVATE).edit().putString(address,id)
+                .putString("last_connected_address",address).remove("selection_required").apply();
+        bleChooseManually=false;
+    }
     private void cancelBleConnection(){
         ++setupEpoch;setupBusy=false;nearbySuppressed=true;disconnectBle();
         if(accountId.isEmpty())showAuth(false);else showDevices();
@@ -364,8 +371,7 @@ public final class MainActivity extends Activity {
                     releaseRequestedNetwork();clearDeviceState();api.setBle(connected);api.setExpectedDeviceId(id);
                     pairingDeviceId=id;pairingHostname=id+".local";localDeviceReady=true;
                     activeDevice=new DeviceStore.Device(id,"Hộp hẹn giờ "+id.substring(id.length()-6).toUpperCase(Locale.ROOT),"",pairingHostname,"");
-                    getSharedPreferences("ble_devices_v1",MODE_PRIVATE).edit().putString(device.getAddress(),id)
-                            .putString("last_connected_address",device.getAddress()).apply();
+                    rememberBleDevice(device.getAddress(),id);
                     rememberStatus(status);showBleConnected();
                 });
             } catch(Exception error) {
@@ -460,6 +466,31 @@ public final class MainActivity extends Activity {
         Button wifi=primaryButton("Thêm Wi-Fi và liên kết tài khoản");box.addView(wifi,fullParams(0,16,0,8));wifi.setOnClickListener(v->beginBleWifi());
         Button leave=neutralButton("Ngắt kết nối");box.addView(leave);
         leave.setOnClickListener(v->{++controlEpoch;stopDashboard();nearbySuppressed=true;disconnectBle();if(accountId.isEmpty())showAuth(false);else showDevices();});
+        addBleUnpairButton(box);
+    }
+
+    private String rememberedBleAddress() {
+        if(bleLink!=null)return bleLink.address();
+        if(activeDevice==null)return "";
+        for(java.util.Map.Entry<String,?> entry:getSharedPreferences("ble_devices_v1",MODE_PRIVATE).getAll().entrySet())
+            if(entry.getKey().matches("(?i)([0-9a-f]{2}:){5}[0-9a-f]{2}") && activeDevice.id.equals(entry.getValue()))return entry.getKey();
+        return "";
+    }
+    private void addBleUnpairButton(LinearLayout box) {
+        String address=rememberedBleAddress();if(address.isEmpty())return;
+        Button forget=neutralButton("Bỏ ghép nối");box.addView(forget,fullParams(0,8,0,0));
+        forget.setOnClickListener(v->new AlertDialog.Builder(this).setTitle("Bỏ ghép nối trong app?")
+                .setMessage("App sẽ quên hộp này và cho bạn chọn hộp khác. Ghép Bluetooth trong cài đặt điện thoại vẫn được giữ.")
+                .setNegativeButton("Hủy",null).setPositiveButton("Bỏ ghép nối",(d,w)->forgetBleDevice(address)).show());
+    }
+    private void forgetBleDevice(String address) {
+        android.content.SharedPreferences saved=getSharedPreferences("ble_devices_v1",MODE_PRIVATE);
+        android.content.SharedPreferences.Editor change=saved.edit().remove(address).putBoolean("selection_required",true);
+        if(address.equals(saved.getString("last_connected_address","")))change.remove("last_connected_address");
+        change.apply();
+        ++controlEpoch;++setupEpoch;stopHome();stopDashboard();disconnectBle();
+        if(accountId.isEmpty())showAuth(false);else showDevices();
+        chooseBleDevice();
     }
 
     private void showAuth(boolean register) {
@@ -2720,6 +2751,7 @@ public final class MainActivity extends Activity {
         Button exit = neutralButton("Danh sách thiết bị");
         exit.setOnClickListener(v -> showDevices());
         about.addView(exit, fullParams(0, 12, 0, 0));
+        addBleUnpairButton(about);
         content.addView(about, fullParams(0, 16, 0, 0));
     }
 
