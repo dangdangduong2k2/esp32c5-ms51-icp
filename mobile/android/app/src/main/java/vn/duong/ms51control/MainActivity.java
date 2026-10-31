@@ -267,6 +267,15 @@ public final class MainActivity extends Activity {
     }
     private static final int BLE_ENABLE_REQUEST=92;
     private boolean nearbySuppressed, blePromptAttempted, blePromptPending, bleChooseManually;
+    private boolean bleManualDiscovery;
+    private Button bleDiscoveryButton;
+    boolean automaticNearbyAllowed(){
+        if(deviceStore==null)return false;
+        // Cached pairings also suppress discovery while offline or signed out.
+        // A new login waits for its first device-list response before deciding.
+        if(accountId.isEmpty())return !deviceStore.hasAnyDevices();
+        return deviceStore.hasKnownList(accountId) && deviceStore.list(accountId).isEmpty();
+    }
     private final Runnable nearbyRefresh=new Runnable(){
         @Override public void run(){
             if(!foreground)return;
@@ -277,11 +286,26 @@ public final class MainActivity extends Activity {
     private boolean nearbyEligible(){
         return foreground && !isFinishing() && !isDestroyed() && !demoMode && !bleMode
                 && !authBusy && !setupBusy && !openingDevice
-                && (screen==Screen.AUTH || screen==Screen.HOME || screen==Screen.CONNECT_DEVICE);
+                && (screen==Screen.AUTH || screen==Screen.HOME || screen==Screen.CONNECT_DEVICE)
+                && (bleManualDiscovery || automaticNearbyAllowed());
     }
     private void stopNearby(){if(blePicker!=null){blePicker.close();blePicker=null;}}
+    private void endManualDiscovery(){
+        bleManualDiscovery=false;stopNearby();updateDiscoveryButton();
+    }
+    private void updateDiscoveryButton(){
+        if(bleDiscoveryButton!=null)bleDiscoveryButton.setText(bleManualDiscovery ? "Đang dò… · Dừng dò" : "Dò thiết bị");
+    }
+    private void addDiscoveryButton(LinearLayout content){
+        bleDiscoveryButton=primaryButton("Dò thiết bị");
+        bleDiscoveryButton.setOnClickListener(v->{
+            if(bleManualDiscovery){nearbySuppressed=true;endManualDiscovery();}
+            else chooseBleDevice();
+        });
+        content.addView(bleDiscoveryButton,fullParams(0,20,0,0));updateDiscoveryButton();
+    }
     private void chooseBleDevice(){
-        bleChooseManually=true;
+        bleChooseManually=true;bleManualDiscovery=true;updateDiscoveryButton();
         nearbySuppressed=false;blePromptAttempted=false;stopNearby();discoverNearby(true);
     }
     @android.annotation.SuppressLint("MissingPermission")
@@ -289,7 +313,7 @@ public final class MainActivity extends Activity {
         if(!nearbyEligible() || nearbySuppressed || blePromptPending || blePicker!=null)return;
         android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)getSystemService(BLUETOOTH_SERVICE);
         android.bluetooth.BluetoothAdapter adapter=manager==null?null:manager.getAdapter();
-        if(adapter==null){if(manual)showMessage("Điện thoại không hỗ trợ Bluetooth.");return;}
+        if(adapter==null){endManualDiscovery();if(manual)showMessage("Điện thoại không hỗ trợ Bluetooth.");return;}
         java.util.ArrayList<String> needed=new java.util.ArrayList<>();
         String[] permissions=Build.VERSION.SDK_INT>=31
                 ? new String[]{"android.permission.BLUETOOTH_SCAN","android.permission.BLUETOOTH_CONNECT"}
@@ -312,16 +336,16 @@ public final class MainActivity extends Activity {
                 if(location!=null && !location.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
                         && !location.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)){
                     if(!blePromptAttempted){blePromptAttempted=true;showMessage("Bật Vị trí trên điện thoại để tìm thiết bị Bluetooth.");}
-                    return;
+                    endManualDiscovery();return;
                 }
             }
             blePromptAttempted=false;
             blePicker=new BlePicker(this,adapter,this::nearbyEligible,
                     device->!bleChooseManually && shouldReconnectBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
-                    this::connectBleDevice,()->nearbySuppressed=true);
+                    this::connectBleDevice,()->{nearbySuppressed=true;endManualDiscovery();});
             if(manual)showMessage("Đang tìm thiết bị gần bạn…");
         }catch(SecurityException|IllegalStateException|ActivityNotFoundException error){
-            blePromptPending=false;nearbySuppressed=true;
+            blePromptPending=false;nearbySuppressed=true;endManualDiscovery();
             if(manual)showMessage("Hãy bật Bluetooth và cấp quyền Thiết bị ở gần rồi thử lại.");
         }
     }
@@ -498,6 +522,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showAuth(boolean register) {
+        endManualDiscovery();
         stopHome(); stopDashboard(); ++setupEpoch; ++authEpoch;
         screen = Screen.AUTH; setupBusy = false; authBusy = false; registerMode = register;
         lastUiMessage = "";
@@ -544,6 +569,7 @@ public final class MainActivity extends Activity {
         alternate.setOnClickListener(v -> { if (!authBusy) showAuth(!register); });
         content.addView(submit,fullParams(0,20,0,8)); content.addView(alternate);
         if(register) addHelp(content,"Mật khẩu tối thiểu 8 ký tự.");
+        if(!automaticNearbyAllowed())addDiscoveryButton(content);
     }
 
     private EditText accountSecret(LinearLayout content, String hint) {
@@ -598,6 +624,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showDevices() {
+        endManualDiscovery();
         disconnectBle();
         if(accountId.isEmpty()){showAuth(false);return;}
         ++controlEpoch; ++setupEpoch; stopDashboard(); stopHome();
@@ -612,7 +639,7 @@ public final class MainActivity extends Activity {
         deviceLabels.clear();
         if (devices.isEmpty()) {
             TextView empty = valueText("Chưa có thiết bị"); empty.setTextSize(19); content.addView(empty);
-            addHelp(content,"Nhấn Thêm thiết bị để bắt đầu kết nối.");
+            addHelp(content,"Nhấn Dò thiết bị để tìm hộp ở gần.");
         } else {
             addSectionTitle(content,"Thiết bị đã ghép");
             for (DeviceStore.Device device : devices) {
@@ -634,9 +661,7 @@ public final class MainActivity extends Activity {
             addHelp(content,"Chạm để mở · Giữ để đổi tên hoặc bỏ ghép nối.");
 
         }
-        Button add=primaryButton("+  Thêm thiết bị");
-        add.setOnClickListener(v -> chooseBleDevice());
-        content.addView(add,fullParams(0,20,0,0));
+        addDiscoveryButton(content);
         mainHandler.post(homeRefresh);
     }
 
@@ -789,6 +814,7 @@ public final class MainActivity extends Activity {
     private String selectedSsid = "", selectedAuth = "";
 
     private void newSetupPage(Screen next) {
+        endManualDiscovery();
         stopNearby();
         ++setupEpoch;
         setupBusy = false;
@@ -1241,7 +1267,8 @@ public final class MainActivity extends Activity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if(requestCode==BLE_PERMISSION_REQUEST){
             blePromptPending=false;
-            for(int result:grantResults)if(result!=PackageManager.PERMISSION_GRANTED)return;
+            for(int result:grantResults)if(result!=PackageManager.PERMISSION_GRANTED){endManualDiscovery();nearbySuppressed=true;return;}
+            if(grantResults.length==0){endManualDiscovery();nearbySuppressed=true;return;}
             if(grantResults.length>0){blePromptAttempted=false;mainHandler.postDelayed(()->discoverNearby(false),300);}
             return;
         }
@@ -3173,6 +3200,7 @@ public final class MainActivity extends Activity {
         if(requestCode==BLE_ENABLE_REQUEST){
             blePromptPending=false;
             if(resultCode==RESULT_OK)mainHandler.postDelayed(()->discoverNearby(false),400);
+            else {endManualDiscovery();nearbySuppressed=true;}
             return;
         }
         if (requestCode == WIFI_SETTINGS_REQUEST) {
@@ -3209,6 +3237,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         foreground = false;
+        if(!blePromptPending)endManualDiscovery();
         mainHandler.removeCallbacks(nearbyRefresh);stopNearby();
         for(EditText input:configInputs.values()) if(input.getParent() instanceof NumberStepper) ((NumberStepper)input.getParent()).stopRepeating();
         for(EditText input:new EditText[]{triggerThreshold,defrostThreshold}) if(input!=null && input.getParent() instanceof NumberStepper) ((NumberStepper)input.getParent()).stopRepeating();

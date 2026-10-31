@@ -34,6 +34,7 @@ final class NearbyChecks {
                 }catch(Throwable e){failure.set(e);}});
             }
             test.runOnMainSync(()->{try{
+                checkDiscoveryPolicy(a,autoChecked);
                 ManagedChecks.set(a,"nearbySuppressed",true);
                 check(!ManagedChecks.texts(a.getWindow().getDecorView()).contains("Dùng Bluetooth"),"No manual Bluetooth entry button");
                 sheet.set(new NearbyDeviceSheet(a,dismissed::incrementAndGet));
@@ -150,9 +151,68 @@ final class NearbyChecks {
             test.waitForIdleSync();SystemClock.sleep(700);
             android.graphics.Bitmap choicesShot=test.getUiAutomation().takeScreenshot();
             try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,"03-chon-thiet-bi.png"))){choicesShot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}choicesShot.recycle();
-            report.putString("stream","PASS: silent discovery popup, GIF rotation, deduplication, explicit multiple-device selection, unpair and reselect, no reconnect to forgotten box, remembered/bonded reconnect policy, upgrade migration, progress cancellation; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
+            report.putString("stream","PASS: Wi-Fi pairing suppresses automatic discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(()->{if(sheet.get()!=null)sheet.get().close();a.finish();});}}
+    }
+    private static void checkDiscoveryPolicy(MainActivity a,boolean radio)throws Exception{
+        android.content.SharedPreferences prefs=a.getSharedPreferences("paired_devices_v1",0);
+        java.util.Map<String,?> before=prefs.getAll();String owner=(String)ManagedChecks.get(a,"accountId");
+        DeviceStore store=(DeviceStore)ManagedChecks.get(a,"deviceStore");
+        try {
+            ManagedChecks.invoke(a,"endManualDiscovery",new Class[]{});
+            prefs.edit().clear().commit();ManagedChecks.set(a,"accountId","");
+            check(a.automaticNearbyAllowed(),"No Wi-Fi-linked device keeps automatic offline discovery");
+            ManagedChecks.set(a,"accountId","discovery-test");
+            check(!a.automaticNearbyAllowed(),"Unknown account list must not be treated as empty before server response");
+            store.replace("discovery-test",new org.json.JSONArray());
+            check(a.automaticNearbyAllowed(),"Confirmed empty account can automatically discover");
+            store.save("discovery-test",new DeviceStore.Device("ms51-3844be1fe4e0","MS51 1FE4E0","","",""));
+            check(!a.automaticNearbyAllowed(),"Paired device suppresses auto discovery even with missing SSID or offline");
+            ManagedChecks.invoke(a,"showDevices",new Class[]{});ManagedChecks.invoke(a,"stopHome",new Class[]{});
+            ManagedChecks.set(a,"nearbySuppressed",false);
+            ManagedChecks.invoke(a,"discoverNearby",new Class[]{boolean.class},false);
+            check(ManagedChecks.get(a,"blePicker")==null && !(Boolean)ManagedChecks.get(a,"blePromptPending"),"Paired home never scans or prompts Bluetooth automatically");
+            Button scan=findButton(a.getWindow().getDecorView(),"Dò thiết bị");check(scan!=null,"Home offers explicit discovery button");
+            if(radio){
+                scan.performClick();BlePicker picker=(BlePicker)ManagedChecks.get(a,"blePicker");
+                check(picker!=null && (Boolean)ManagedChecks.get(a,"bleManualDiscovery"),"Tap starts manual discovery with a paired Wi-Fi device");
+                check(scan.getText().toString().contains("Dừng dò"),"Manual scan offers visible progress and stop");
+                NearbyDeviceSheet choices=(NearbyDeviceSheet)field(picker,"sheet");
+                check(!dialog(choices).isShowing(),"Manual scan does not open popup before discovery");
+                android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)a.getSystemService(android.content.Context.BLUETOOTH_SERVICE);
+                java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
+                add.invoke(picker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"),null,-50,System.nanoTime()));
+                check(dialog(choices).isShowing(),"Manual scan opens popup only after advertisement");
+                // Dialog cancellation posts its listener; exercise the callback here
+                // without racing later actions in this single UI-thread test block.
+                ((Runnable)field(picker,"dismissed")).run();
+                check(!(Boolean)ManagedChecks.get(a,"bleManualDiscovery") && scan.getText().toString().equals("Dò thiết bị"),"Dismiss ends manual discovery");
+                scan.performClick();scan.performClick();
+                check(ManagedChecks.get(a,"blePicker")==null,"Stop button closes scanner");
+                scan.performClick();a.onPause();a.onResume();ManagedChecks.invoke(a,"stopHome",new Class[]{});
+                ManagedChecks.invoke(a,"discoverNearby",new Class[]{boolean.class},false);
+                check(!(Boolean)ManagedChecks.get(a,"bleManualDiscovery") && ManagedChecks.get(a,"blePicker")==null,"Returning from background does not restart manual scan");
+                ManagedChecks.set(a,"bleManualDiscovery",true);ManagedChecks.set(a,"blePromptPending",true);
+                a.onPause();check((Boolean)ManagedChecks.get(a,"bleManualDiscovery"),"System permission dialog preserves manual intent");
+                a.onResume();ManagedChecks.invoke(a,"stopHome",new Class[]{});
+                a.onActivityResult(92,Activity.RESULT_CANCELED,null);
+                check(!(Boolean)ManagedChecks.get(a,"bleManualDiscovery"),"Cancel Bluetooth enable clears manual intent");
+                ManagedChecks.set(a,"bleManualDiscovery",true);ManagedChecks.set(a,"blePromptPending",true);
+                a.onRequestPermissionsResult(91,new String[]{"android.permission.BLUETOOTH_SCAN"},new int[]{android.content.pm.PackageManager.PERMISSION_DENIED});
+                check(!(Boolean)ManagedChecks.get(a,"bleManualDiscovery"),"Denied scan permission ends manual intent");
+            }
+            ManagedChecks.set(a,"accountId","");
+            check(!a.automaticNearbyAllowed(),"Signing out retains suppression for saved Wi-Fi pairings");
+            store.remove("discovery-test","ms51-3844be1fe4e0");
+            check(a.automaticNearbyAllowed(),"Removing last Wi-Fi pairing allows automatic discovery again");
+        } finally {
+            android.content.SharedPreferences.Editor restore=prefs.edit().clear();
+            for(java.util.Map.Entry<String,?> entry:before.entrySet())restore.putString(entry.getKey(),(String)entry.getValue());
+            restore.commit();ManagedChecks.set(a,"accountId",owner);
+            ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
+            ManagedChecks.set(a,"nearbySuppressed",true);
+        }
     }
     private static Object field(Object object,String name)throws Exception{java.lang.reflect.Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);}
     private static android.graphics.Bitmap drawSpin(NearbyDeviceSheet sheet)throws Exception{

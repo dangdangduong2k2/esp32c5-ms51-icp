@@ -19,6 +19,11 @@ final class DeviceStore {
     }
     private final SharedPreferences prefs;
     DeviceStore(Context context) { prefs=context.getSharedPreferences("paired_devices_v1",Context.MODE_PRIVATE); }
+    boolean hasKnownList(String user) { return prefs.contains(user); }
+    synchronized boolean hasAnyDevices() {
+        for(String user:prefs.getAll().keySet()) if(!list(user).isEmpty())return true;
+        return false;
+    }
     synchronized List<Device> list(String user) {
         ArrayList<Device> result=new ArrayList<>();
         try {
@@ -46,7 +51,7 @@ final class DeviceStore {
             devices.add(d); canonical.put(d.json());
         }
         boolean changed=!canonical.toString().equals(prefs.getString(user,"[]"));
-        if(changed) write(user,devices);
+        if(changed || !prefs.contains(user)) write(user,devices);
         return changed;
     }
     private void write(String user,List<Device> devices) {
