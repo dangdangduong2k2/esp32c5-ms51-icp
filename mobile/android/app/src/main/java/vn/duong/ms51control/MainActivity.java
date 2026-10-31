@@ -343,12 +343,16 @@ public final class MainActivity extends Activity {
             blePromptAttempted=false;
             blePicker=new BlePicker(this,adapter,this::nearbyEligible,
                     device->!bleChooseManually && shouldReconnectBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
+                    device->isPairedBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
                     this::connectBleDevice,()->{nearbySuppressed=true;endManualDiscovery();});
-            if(manual)showMessage("Đang tìm thiết bị gần bạn…");
+            if(manual)showMessage("Đưa điện thoại sát hộp mới để ghép nối…");
         }catch(SecurityException|IllegalStateException|ActivityNotFoundException error){
             blePromptPending=false;nearbySuppressed=true;endManualDiscovery();
             if(manual)showMessage("Hãy bật Bluetooth và cấp quyền Thiết bị ở gần rồi thử lại.");
         }
+    }
+    boolean isPairedBle(String address,boolean bonded) {
+        return bonded && !getSharedPreferences("ble_devices_v1",MODE_PRIVATE).getString(address,"").isEmpty();
     }
     boolean shouldReconnectBle(String address,boolean bonded) {
         android.content.SharedPreferences saved=getSharedPreferences("ble_devices_v1",MODE_PRIVATE);
@@ -528,6 +532,7 @@ public final class MainActivity extends Activity {
         screen = Screen.AUTH; setupBusy = false; authBusy = false; registerMode = register;
         lastUiMessage = "";
         LinearLayout content = createPage("", register ? "Tạo tài khoản" : "Đăng nhập", "");
+        if(!register)addHelp(content,"Đưa điện thoại sát hộp mới để ghép Bluetooth.");
         LinearLayout form=card();content.addView(form);content=form;
         TextView loginLabel=mutedText("Tên đăng nhập");content.addView(loginLabel,fullParams(0,0,0,6));
         accountName = textInput("Tên đăng nhập", false);loginLabel.setLabelFor(View.generateViewId());accountName.setId(loginLabel.getLabelFor()); accountName.setSingleLine(true);
@@ -639,7 +644,7 @@ public final class MainActivity extends Activity {
         deviceLabels.clear();
         if (devices.isEmpty()) {
             TextView empty = valueText("Chưa có thiết bị"); empty.setTextSize(19); content.addView(empty);
-            addHelp(content,"Nhấn Dò thiết bị để tìm hộp ở gần.");
+            addHelp(content,"Nhấn Dò thiết bị và đưa điện thoại sát hộp mới để ghép nối.");
         } else {
             addSectionTitle(content,"Thiết bị đã ghép");
             for (DeviceStore.Device device : devices) {

@@ -34,6 +34,7 @@ final class NearbyChecks {
                 }catch(Throwable e){failure.set(e);}});
             }
             test.runOnMainSync(()->{try{
+                checkProximity();
                 checkDiscoveryPolicy(a,autoChecked);
                 ManagedChecks.set(a,"nearbySuppressed",true);
                 check(!ManagedChecks.texts(a.getWindow().getDecorView()).contains("Dùng Bluetooth"),"No manual Bluetooth entry button");
@@ -90,8 +91,10 @@ final class NearbyChecks {
                 try {
                     prefs.edit().clear().commit();
                     check(!a.shouldReconnectBle(first,true),"System bond alone cannot automatically open an unknown box");
+                    check(!a.isPairedBle(first,true),"System bond alone does not bypass proximity");
                     prefs.edit().putString(first,"ms51-test1").commit();
                     check(a.shouldReconnectBle(first,true),"One saved 3.7.1 box automatically reconnects after upgrade");
+                    check(a.isPairedBle(first,true) && !a.isPairedBle(first,false),"Only verified app pairing with live bond bypasses proximity");
                     check(!a.shouldReconnectBle(first,false),"Removed bond requires explicit pairing again");
                     prefs.edit().putString(second,"ms51-test2").commit();
                     check(!a.shouldReconnectBle(first,true),"Ambiguous old pairings require selection once");
@@ -99,23 +102,24 @@ final class NearbyChecks {
                     check(a.shouldReconnectBle(second,true) && !a.shouldReconnectBle(first,true),"Reconnect only last verified box, not another nearby box");
                     if(autoChecked){
                         AtomicInteger connections=new AtomicInteger();
-                        BlePicker picker=new BlePicker(a,manager.getAdapter(),()->true,d->a.shouldReconnectBle(d.getAddress(),true),d->connections.incrementAndGet(),()->{});
+                        BlePicker picker=new BlePicker(a,manager.getAdapter(),()->true,d->a.shouldReconnectBle(d.getAddress(),true),d->a.isPairedBle(d.getAddress(),true),d->connections.incrementAndGet(),()->{});
                         java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
-                        android.bluetooth.le.ScanResult result=new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice(second),null,-50,System.nanoTime());
+                        android.bluetooth.le.ScanResult result=new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice(second),null,-90,SystemClock.elapsedRealtimeNanos());
                         add.invoke(picker,result);add.invoke(picker,result);
                         check(connections.get()==1 && (Boolean)field(picker,"closed"),"Remembered advertisement connects without tapping, stops scanning and ignores queued duplicates");
                         picker.close();
                     }
                     ManagedChecks.invoke(a,"forgetBleDevice",new Class[]{String.class},second);
                     check(!prefs.contains(second) && prefs.contains(first),"Unpair forgets only the selected box");
+                    check(!a.isPairedBle(second,true),"Forgotten box requires close proximity again");
                     check(!a.shouldReconnectBle(second,true) && !a.shouldReconnectBle(first,true),"Unpair requires manual selection even when another box was remembered");
                     check((Boolean)ManagedChecks.get(a,"bleChooseManually"),"Unpair opens explicit device selection");
                     if(autoChecked){
                         BlePicker picker=(BlePicker)ManagedChecks.get(a,"blePicker");
                         check(picker!=null,"Unpair starts discovery immediately");
                         java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
-                        add.invoke(picker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice(first),null,-50,System.nanoTime()));
-                        add.invoke(picker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice(second),null,-55,System.nanoTime()));
+                        emitClose(add,picker,manager.getAdapter().getRemoteDevice(first));
+                        emitClose(add,picker,manager.getAdapter().getRemoteDevice(second));
                         check(!(Boolean)field(picker,"closed"),"Neither box auto-connects during explicit selection");
                         NearbyDeviceSheet choices=(NearbyDeviceSheet)field(picker,"sheet");
                         check(ManagedChecks.texts(dialog(choices).getWindow().getDecorView()).contains("Tìm thấy 2 hộp"),"Picker displays both advertisements after unpair");
@@ -151,7 +155,7 @@ final class NearbyChecks {
             test.waitForIdleSync();SystemClock.sleep(700);
             android.graphics.Bitmap choicesShot=test.getUiAutomation().takeScreenshot();
             try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,"03-chon-thiet-bi.png"))){choicesShot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}choicesShot.recycle();
-            report.putString("stream","PASS: login auto discovery despite saved Wi-Fi pairings, no login scan button, paired home requires manual discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
+            report.putString("stream","PASS: first-pair RSSI strength/stability, per-device isolation, stale/invalid samples, known weak reconnect; login auto discovery despite saved Wi-Fi pairings, no login scan button, paired home requires manual discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(()->{if(sheet.get()!=null)sheet.get().close();a.finish();});}}
     }
@@ -183,7 +187,7 @@ final class NearbyChecks {
                 check(!dialog(choices).isShowing(),"Manual scan does not open popup before discovery");
                 android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)a.getSystemService(android.content.Context.BLUETOOTH_SERVICE);
                 java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
-                add.invoke(picker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"),null,-50,System.nanoTime()));
+                emitClose(add,picker,manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"));
                 check(dialog(choices).isShowing(),"Manual scan opens popup only after advertisement");
                 // Dialog cancellation posts its listener; exercise the callback here
                 // without racing later actions in this single UI-thread test block.
@@ -216,7 +220,7 @@ final class NearbyChecks {
                 check(!dialog(popup).isShowing(),"Login popup waits until device is found");
                 android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)a.getSystemService(android.content.Context.BLUETOOTH_SERVICE);
                 java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
-                add.invoke(loginPicker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"),null,-50,System.nanoTime()));
+                emitClose(add,loginPicker,manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"));
                 check(dialog(popup).isShowing(),"Found device automatically opens login popup");
                 ManagedChecks.invoke(a,"stopNearby",new Class[]{});
             }
@@ -231,6 +235,36 @@ final class NearbyChecks {
             ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
             ManagedChecks.set(a,"nearbySuppressed",true);
         }
+    }
+    private static void emitClose(java.lang.reflect.Method add,BlePicker picker,android.bluetooth.BluetoothDevice device)throws Exception {
+        NearbyDeviceSheet popup=(NearbyDeviceSheet)field(picker,"sheet");
+        boolean visible=dialog(popup).isShowing();
+        long now=SystemClock.elapsedRealtimeNanos();
+        add.invoke(picker,new android.bluetooth.le.ScanResult(device,null,-80,now-900000000L));
+        check(dialog(popup).isShowing()==visible,"Distant unknown box cannot open popup");
+        add.invoke(picker,new android.bluetooth.le.ScanResult(device,null,-40,now-800000000L));
+        check(dialog(popup).isShowing()==visible,"One strong sample cannot open popup");
+        add.invoke(picker,new android.bluetooth.le.ScanResult(device,null,-42,now-400000000L));
+        add.invoke(picker,new android.bluetooth.le.ScanResult(device,null,-41,now));
+    }
+    private static void checkProximity() {
+        BleProximity p=new BleProximity();
+        check(!p.accept("a",-80,1000,1000),"Weak sample rejected");
+        check(!p.accept("a",-40,1100,1100),"Strong spike waits");
+        check(!p.accept("a",-41,1400,1400),"Two samples wait");
+        check(!p.accept("b",-40,1700,1700),"Separate devices cannot pool samples");
+        check(p.accept("a",-45,1700,1700),"Three strong samples spanning 600ms qualify");
+        check(!p.accept("a",-40,1700,1700),"Duplicate rejected");
+        check(!p.accept("a",-40,1800,5000),"Stale advertisement rejected");
+        check(!p.accept("a",127,5100,5100),"Unavailable RSSI rejected");
+        check(!p.accept("a",0,5200,5200),"Zero RSSI rejected");
+        check(!p.accept("a",-40,6000,6000),"New window after invalid starts fresh");
+        check(!p.accept("a",-80,6300,6300),"Weak sample clears strong streak");
+        check(!p.accept("a",-40,6600,6600),"Streak restarts after weak sample");
+        check(!p.accept("a",-40,6900,6900),"Still waits for third");
+        check(p.accept("a",-40,7200,7200),"Close again qualifies");
+        check(!p.accept("b",-40,8000,7900),"Future sample rejected");
+        check(!p.accept("b",-40,8000,8000),"Long scan gaps start new window");
     }
     private static Object field(Object object,String name)throws Exception{java.lang.reflect.Field f=object.getClass().getDeclaredField(name);f.setAccessible(true);return f.get(object);}
     private static android.graphics.Bitmap drawSpin(NearbyDeviceSheet sheet)throws Exception{
