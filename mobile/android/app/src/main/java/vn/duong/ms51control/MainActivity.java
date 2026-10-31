@@ -435,6 +435,7 @@ public final class MainActivity extends Activity {
             try {
                 JSONObject result=session.get("/api/runtime-config");
                 RuntimeConfigCodec.Config config=RuntimeConfigCodec.decode(result.getString("data"));
+                BleMenuAccess.apply(result,config);
                 onControl(token,()->{
                     if(viewToken!=accessViewEpoch)return;
                     content.removeView(loading);deviceAccess=result;runtimeConfig=config;configLoaded=true;
@@ -453,8 +454,11 @@ public final class MainActivity extends Activity {
         io.execute(()->{
             try{
                 if(!currentControl(token))return;
+                BleMenuAccess.requireAllowed(session.get("/api/runtime-config"),values);
+                if(!currentControl(token))return;
                 JSONObject result=session.post("/api/ble/settings",new JSONObject().put("values",values));
                 RuntimeConfigCodec.Config config=RuntimeConfigCodec.decode(result.getString("data"));
+                BleMenuAccess.apply(result,config);
                 onControl(token,()->{runtimeConfig=config;deviceAccess=result;showMessage("Đã lưu xuống mạch. Bộ điều khiển đang khởi động lại.");});
             }catch(Exception error){onControl(token,()->showMessage(errorMessage(error)));}
             finally{runOnUiThread(()->bleSaving=false);}
@@ -2042,6 +2046,7 @@ public final class MainActivity extends Activity {
         LinearLayout intro = card();
         addSectionTitle(intro, "Cài đặt vận hành");
         addHelp(intro, "Thiết bị sẽ khởi động lại khi lưu.");
+        if(bleMode)addHelp(intro,"Các mục hiển thị theo cấu hình được cho phép trên mạch.");
         LinearLayout topRow = new LinearLayout(this); topRow.setOrientation(LinearLayout.HORIZONTAL);
         Button read = neutralButton("Đọc cài đặt");
         read.setOnClickListener(v -> loadRuntimeConfig());
@@ -2350,6 +2355,7 @@ public final class MainActivity extends Activity {
             try {
                 JSONObject response = session.get("/api/runtime-config");
                 RuntimeConfigCodec.Config decoded = RuntimeConfigCodec.decode(response.getString("data"));
+                if(bleMode)BleMenuAccess.apply(response,decoded);
                 onControl(controlToken, () -> {
                     runtimeConfig = decoded;
                     configLoaded = true;

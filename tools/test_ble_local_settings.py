@@ -42,7 +42,7 @@ static void reset(void){
 int main(void){
  uint8_t before[217];reset();memcpy(before,eData,217);
  put32(telemetry_rx_payload,1,7);memset(telemetry_rx_payload+0xc5,0,20);
- telemetry_rx_payload[0x18]=9;telemetry_rx_payload[0x17]=1; /* hidden/admin fields */
+ telemetry_rx_payload[0x18]=9; /* admin field stays unchanged */
  assert(telemetry_apply_local_settings());assert(commits==1);assert(telemetry_read_u32_be(eData+1)==7);
  for(int i=0;i<217;i++)if(!(i>=1&&i<=4))assert(eData[i]==before[i]);
  reset();gate=1;memcpy(before,eData,217);put32(telemetry_rx_payload,1,7);
@@ -53,7 +53,22 @@ int main(void){
  assert(!telemetry_apply_local_settings());assert(!commits && !memcmp(before,eData,217));
  reset();eData[0x29]=eData[0x2a]=1;telemetry_rx_payload[0x17]=telemetry_rx_payload[0x1c]=1;
  assert(telemetry_apply_local_settings());assert(eData[0x17]==1 && eData[0x1c]==1);
- reset();telemetry_rx_payload[0x1d]=1;assert(telemetry_apply_local_settings());assert(eData[0x1d]==1);
+ reset();telemetry_rx_payload[0x1d]=1;assert(!telemetry_apply_local_settings());assert(!commits);
+ reset();eData[0x2b]=1;telemetry_rx_payload[0x1d]=1;assert(telemetry_apply_local_settings());assert(eData[0x1d]==1);
+ for(int flags=0;flags<64;flags++)for(int mode=0;mode<2;mode++){
+  reset();for(int i=0;i<5;i++)eData[0x27+i]=(flags>>i)&1;
+  eData[0xc3]=(flags>>5)&1;eData[0x17]=mode;
+  assert(telemetry_local_editable(0x13)==((flags&1)!=0));
+  assert(telemetry_local_editable(0x14)==((flags&2)!=0));
+  assert(telemetry_local_editable(0x17)==((flags&4)!=0));
+  assert(telemetry_local_editable(0x1c)==((flags&8)!=0));
+  assert(telemetry_local_editable(0x1d)==((flags&16)!=0));
+  assert(telemetry_local_editable(0x12)==((flags&32)!=0 && ((flags&4)!=0 || mode==1)));
+  assert(telemetry_local_editable(0xc4)==((flags&32)!=0 && ((flags&4)!=0 || mode==0)));
+  assert(!telemetry_local_editable(0x27) && !telemetry_local_editable(0xc5));
+ }
+ reset();telemetry_rx_payload[0x13]=1;put32(telemetry_rx_payload,1,7);memcpy(before,eData,217);
+ assert(!telemetry_apply_local_settings());assert(!commits && !memcmp(before,eData,217));
  reset();telemetry_rx_payload[0x12]=91;assert(!telemetry_apply_local_settings());assert(!commits);
  puts("PASS: actual MS51 handlers preserve passwords/counters, enforce PIN gate, physical flags and limits, reject atomically.");return 0;
 }

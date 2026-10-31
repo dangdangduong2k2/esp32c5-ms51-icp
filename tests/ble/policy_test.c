@@ -10,7 +10,7 @@ int64_t esp_timer_get_time(void){return 9000000;}
 esp_err_t ms51_operation_lock(TickType_t timeout){assert(!held);held=1;return 0;}
 void ms51_operation_unlock(void){assert(held);held=0;}
 esp_err_t ms51_debug_uart_get_snapshot(ms51_debug_uart_snapshot_t *s){memset(s,0,sizeof(*s));s->variable_count=1;
- strcpy(s->variables[0].name,"local_settings");strcpy(s->variables[0].value,supported?"1":"0");s->variables[0].updated_us=stale?1:8999999;return 0;}
+ strcpy(s->variables[0].name,"local_settings");sprintf(s->variables[0].value,"%d",supported);s->variables[0].updated_us=stale?1:8999999;return 0;}
 esp_err_t ms51_debug_uart_get_runtime_config(uint8_t *out,uint8_t *status){assert(held);memcpy(out,current,217);*status=0;return 0;}
 esp_err_t ms51_debug_uart_set_local_config(const uint8_t *in,uint8_t *status){assert(held);memcpy(written,in,217);writes++;*status=0;return 0;}
 /* Legacy full-image write must never be called. */
@@ -18,8 +18,10 @@ esp_err_t ms51_debug_uart_set_runtime_config(const uint8_t *in,uint8_t *status){
 cJSON *ms51_local_request(const char *method,const char *path,const cJSON *body){return cJSON_Parse("{\"ok\":true}");}
 static cJSON *set(const char *text){cJSON *b=cJSON_Parse(text);cJSON *r=ms51_ble_request("POST","/api/ble/settings",b);cJSON_Delete(b);return r;}
 static int ok(cJSON *r){int value=cJSON_IsTrue(cJSON_GetObjectItem(r,"ok"));cJSON_Delete(r);return value;}
+static int visible(cJSON *r,const char *key){cJSON *v; cJSON_ArrayForEach(v,cJSON_GetObjectItem(r,"visible"))if(!strcmp(v->valuestring,key))return 1;return 0;}
 int main(void){
  memset(current,0x5a,sizeof(current));current[0]=2;current[0x29]=current[0x2a]=0;
+ current[0xc3]=current[0x17]=1;
  assert(ok(set("{\"values\":{\"coolCl\":7,\"stLed\":50}}")));assert(writes==1);
  assert(written[1]==0 && written[2]==0 && written[3]==0 && written[4]==7 && written[0x12]==50);
  for(int i=0;i<217;i++)if(!(i>=1&&i<=4)&&i!=0x12)assert(written[i]==current[i]);
@@ -35,6 +37,22 @@ int main(void){
  for(int i=0xc5*2;i<217*2;i++)assert(hex[i]=='0');cJSON_Delete(read);
  supported=0;assert(!ok(set("{\"values\":{\"coolCl\":8}}")));supported=1;stale=1;
  assert(!ok(set("{\"values\":{\"coolCl\":8}}")));assert(writes==2);
+ stale=0;supported=2;assert(ok(set("{\"values\":{\"coolCl\":8}}")));
+ for(int flags=0;flags<64;flags++)for(int mode=0;mode<2;mode++){
+  for(int i=0;i<5;i++)current[0x27+i]=(flags>>i)&1;
+  current[0xc3]=(flags>>5)&1;current[0x17]=mode;
+  cJSON *r=ms51_ble_request("GET","/api/runtime-config",NULL);
+  assert(visible(r,"df")==((flags&1)!=0));assert(visible(r,"end")==((flags&2)!=0));
+  assert(visible(r,"displayMode")==((flags&4)!=0));assert(visible(r,"hcfMode")==((flags&8)!=0));assert(visible(r,"hdf")==((flags&16)!=0));
+  assert(visible(r,"stLed")==((flags&32)!=0 && ((flags&4)!=0 || mode==1)));
+  assert(visible(r,"stLcd")==((flags&32)!=0 && ((flags&4)!=0 || mode==0)));
+  assert(visible(r,"coolCl") && !visible(r,"showDf") && !visible(r,"pinPassword"));cJSON_Delete(r);
+  int before=writes;
+  assert(ok(set("{\"values\":{\"df\":1}}"))==((flags&1)!=0));
+  assert(writes==before+((flags&1)!=0));
+ }
+ current[0x27]=0;int before=writes;
+ assert(!ok(set("{\"values\":{\"coolCl\":9,\"df\":1}}")));assert(writes==before);
  assert(!ok(ms51_ble_request("POST","/api/runtime-config",NULL)));
  assert(!ok(ms51_ble_request("POST","/api/program",NULL)));
  assert(!ok(ms51_ble_request("POST","/api/thermal",NULL)));

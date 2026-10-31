@@ -13,12 +13,20 @@ typedef struct { const char *name; unsigned offset, bytes, maximum, flag; } fiel
 static const field_t fields[] = {
     {"coolCl",1,4,999,0}, {"coolOp",5,4,999,0},
     {"defrostCl",9,4,999,0}, {"defrostOp",13,4,999,0},
-    {"stLed",0x12,1,90,0}, {"stLcd",0xc4,1,90,0},
-    {"df",0x13,1,1,0}, {"end",0x14,1,1,0},
+    {"stLed",0x12,1,90,0xc3}, {"stLcd",0xc4,1,90,0xc3},
+    {"df",0x13,1,1,0x27}, {"end",0x14,1,1,0x28},
     {"coolStart",0x15,1,1,0}, {"defrostStart",0x16,1,1,0},
-    {"hdf",0x1d,1,1,0}, {"hcfMode",0x1c,1,1,0x2a},
+    {"hdf",0x1d,1,1,0x2b}, {"hcfMode",0x1c,1,1,0x2a},
     {"displayMode",0x17,1,1,0x29}
 };
+static bool field_enabled(const field_t *f,const uint8_t *raw) {
+    if(f->flag && raw[f->flag]!=1)return false;
+    /* A fixed LCD/LED board exposes only its own ST. If the physical screen
+     * selector is available, both ST values can be configured. */
+    if(f->offset==0x12)return raw[0x29]==1 || raw[0x17]==1;
+    if(f->offset==0xc4)return raw[0x29]==1 || raw[0x17]==0;
+    return true;
+}
 static cJSON *failure(const char *message) {
     cJSON *r=cJSON_CreateObject(); cJSON_AddBoolToObject(r,"ok",false);
     cJSON_AddStringToObject(r,"message",message); return r;
@@ -27,7 +35,8 @@ static bool local_settings_supported(void) {
     ms51_debug_uart_snapshot_t *s=malloc(sizeof(*s)); if(!s)return false;
     bool supported=false;
     if(ms51_debug_uart_get_snapshot(s)==ESP_OK) for(size_t i=0;i<s->variable_count;i++)
-        if(!strcmp(s->variables[i].name,"local_settings") && !strcmp(s->variables[i].value,"1") &&
+        if(!strcmp(s->variables[i].name,"local_settings") &&
+           (!strcmp(s->variables[i].value,"1") || !strcmp(s->variables[i].value,"2")) &&
            esp_timer_get_time()-(int64_t)s->variables[i].updated_us<5000000) supported=true;
     free(s); return supported;
 }
@@ -49,7 +58,7 @@ static cJSON *settings(const cJSON *body) {
             const field_t *f=NULL;
             for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);i++)
                 if(v->string && !strcmp(v->string,fields[i].name)) { f=&fields[i]; break; }
-            if(!f || (f->flag && raw[f->flag]!=1)) { error="Mục này không được chỉnh qua Bluetooth."; break; }
+            if(!f || !field_enabled(f,raw)) { error="Mục này chưa được bật trên mạch. Hãy đọc lại cài đặt."; break; }
             if(!cJSON_IsNumber(v) || !isfinite(v->valuedouble) || v->valuedouble<0 ||
                v->valuedouble>f->maximum || floor(v->valuedouble)!=v->valuedouble) {
                 error="Giá trị cài đặt ngoài giới hạn."; break;
@@ -68,9 +77,10 @@ static cJSON *settings(const cJSON *body) {
     if(error) return failure(error);
     cJSON *r=cJSON_CreateObject(); cJSON_AddBoolToObject(r,"ok",true);
     cJSON_AddBoolToObject(r,"settings_write_supported",supported);
+    cJSON_AddStringToObject(r,"policy_source","controller_menu");
     cJSON *visible=cJSON_AddArrayToObject(r,"visible");
     for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);i++)
-        if(!fields[i].flag || raw[fields[i].flag]==1)
+        if(field_enabled(&fields[i],raw))
             cJSON_AddItemToArray(visible,cJSON_CreateString(fields[i].name));
     /* Never disclose controller passwords, limits on attempts, or elapsed counters. */
     memset(raw+0xc5,0,MS51_RUNTIME_CONFIG_SIZE-0xc5);

@@ -18,6 +18,26 @@ final class BleChecks {
     static void run(Instrumentation test){
         Bundle report=new Bundle();MainActivity activity=null;
         try{
+            for(int mask=0;mask<64;mask++)for(int mode=0;mode<2;mode++){
+                byte[] raw=RuntimeConfigCodec.defaults().raw.clone();
+                for(int i=0;i<5;i++)raw[0x27+i]=(byte)((mask>>i)&1);
+                raw[0xc3]=(byte)((mask>>5)&1);raw[0x17]=(byte)mode;
+                RuntimeConfigCodec.Config config=RuntimeConfigCodec.decode(RuntimeConfigCodec.toHex(raw));
+                JSONArray fields=new JSONArray(Arrays.asList(BASIC));fields.put("hcfMode").put("displayMode");
+                JSONObject access=BleMenuAccess.apply(new JSONObject().put("visible",fields),config);
+                String visible=access.getJSONArray("visible").toString();
+                String[] modes={"df","end","displayMode","hcfMode","hdf"};
+                for(int i=0;i<5;i++)check(visible.contains("\""+modes[i]+"\"")==((mask&(1<<i))!=0),"Menu flag "+modes[i]);
+                check(visible.contains("\"stLed\"")==((mask&32)!=0 && ((mask&4)!=0 || mode==1)),"ST LED follows available display");
+                check(visible.contains("\"stLcd\"")==((mask&32)!=0 && ((mask&4)!=0 || mode==0)),"ST LCD follows available display");
+                check(!visible.contains("pinPassword") && !visible.contains("showSt"),"Do not grant factory settings");
+            }
+            check(BleMenuAccess.apply(new JSONObject(),RuntimeConfigCodec.defaults()).getJSONArray("visible").length()==0,"Missing capabilities never unlock all fields");
+            JSONObject staleAccess=new JSONObject().put("visible",new JSONArray(Arrays.asList(BASIC)))
+                    .put("settings_write_supported",true).put("data",RuntimeConfigCodec.toHex(RuntimeConfigCodec.defaults().raw));
+            boolean hiddenRejected=false;
+            try{BleMenuAccess.requireAllowed(staleAccess,new JSONObject().put("coolCl",7).put("df",1));}catch(IOException expected){hiddenRejected=true;}
+            check(hiddenRejected,"Preflight rejects whole save when the board has hidden a formerly editable menu");
             String sample=new JSONObject().put("id",9).put("result",new JSONObject().put("ok",true).put("message","Nhiệt độ động cơ · Đã lưu\nXả đá")).toString()+"\n";
             byte[] bytes=sample.getBytes(StandardCharsets.UTF_8);
             for(int size:new int[]{1,20,244,500}){
@@ -58,7 +78,7 @@ final class BleChecks {
                 try{
                     Map<String,EditText> inputs=(Map<String,EditText>)ManagedChecks.get(a,"configInputs");
                     Map<?,?> choices=(Map<?,?>)ManagedChecks.get(a,"configChoices");
-                    check(inputs.size()==6 && !inputs.containsKey("pinPassword"),"Only six basic numeric fields");
+                    check(inputs.size()==5 && inputs.containsKey("stLcd") && !inputs.containsKey("stLed") && !inputs.containsKey("pinPassword"),"Fixed LCD board offers its enabled ST only");
                     check(choices.containsKey("hdf") && !choices.containsKey("hcfMode") && !choices.containsKey("displayMode"),"Physical menu flags control conditional fields");
                     check(!ManagedChecks.texts(a.getWindow().getDecorView()).contains("Cập nhật"),"Offline navigation hides managed updates");
                     inputs.get("coolCl").setText("7");
@@ -113,7 +133,10 @@ final class BleChecks {
     private static final class Fake implements EspApi.LocalTransport{
         static final String ID="ms51-3844be1fe4e0";
         volatile JSONObject saved;
-        JSONObject config() throws Exception{return new JSONObject().put("ok",true).put("settings_write_supported",true).put("data",RuntimeConfigCodec.toHex(RuntimeConfigCodec.defaults().raw)).put("visible",new JSONArray(Arrays.asList(BASIC)));}
+        JSONObject config() throws Exception{
+            byte[] raw=RuntimeConfigCodec.defaults().raw.clone();raw[0xc3]=raw[0x27]=raw[0x28]=raw[0x2b]=1;
+            return new JSONObject().put("ok",true).put("settings_write_supported",true).put("data",RuntimeConfigCodec.toHex(raw)).put("visible",new JSONArray(Arrays.asList(BASIC)));
+        }
         public JSONObject request(String method,String path,JSONObject body)throws IOException{
             try{
                 if(path.equals("/api/status"))return new JSONObject().put("ok",true).put("device",new JSONObject().put("id",ID));

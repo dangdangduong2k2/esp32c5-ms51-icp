@@ -291,7 +291,7 @@ static void telemetry_build_snapshot(void)
 	EA = saved_ea;
 
 	telemetry_append_var_u16("unlock_v", 1);
-    telemetry_append_var_u16("local_settings", 1);
+    telemetry_append_var_u16("local_settings", 2);
     telemetry_append_var_u16("pin_state", password_remote_state());
 	telemetry_append_var_text("mode", telemetry_mode_text());
 	telemetry_append_var_text("mode_source", mode_from_app ? "APP" : "PHYSICAL");
@@ -478,8 +478,12 @@ static void telemetry_build_config_response(void)
 static uint8_t telemetry_local_editable(uint8_t index)
 {
     uint8_t xdata *current = (uint8_t xdata *)&eData;
-    return (index >= 1 && index <= 0x10) || (index >= 0x12 && index <= 0x16) ||
-        index == 0x1D || index == 0xC4 ||
+    return (index >= 1 && index <= 0x10) || index == 0x15 || index == 0x16 ||
+        (index == 0x12 && current[0xC3] == 1 && (current[0x29] == 1 || current[0x17] == 1)) ||
+        (index == 0xC4 && current[0xC3] == 1 && (current[0x29] == 1 || current[0x17] == 0)) ||
+        (index == 0x13 && current[0x27] == 1) ||
+        (index == 0x14 && current[0x28] == 1) ||
+        (index == 0x1D && current[0x2B] == 1) ||
         (index == 0x17 && current[0x29] == 1) ||
         (index == 0x1C && current[0x2A] == 1);
 }
@@ -492,8 +496,14 @@ static uint8_t telemetry_apply_local_settings(void)
     if (password_remote_state() != 0) return 0;
     /* Ignore every non-local byte from the client. Validate against current limits,
      * and never copy passwords, elapsed counters, menu permissions or relay setup. */
-    for (index = 0; index < TELEMETRY_CONFIG_SIZE; ++index)
-        if (!telemetry_local_editable(index)) telemetry_rx_payload[index] = current[index];
+    for (index = 0; index < TELEMETRY_CONFIG_SIZE; ++index) {
+        if (!telemetry_local_editable(index)) {
+            /* A stale client must not report success for a now-hidden menu. */
+            if (((index >= 0x12 && index <= 0x17) || index == 0x1C ||
+                 index == 0x1D || index == 0xC4) && telemetry_rx_payload[index] != current[index]) return 0;
+            telemetry_rx_payload[index] = current[index];
+        }
+    }
     /* Legacy validator expects cleared PIN state. Clear only the validation copy;
      * the protected live bytes are never assigned back to eData. */
     for (index = 0xC5; index < TELEMETRY_CONFIG_SIZE; ++index) telemetry_rx_payload[index] = 0;

@@ -1,5 +1,9 @@
 # MS51 Connect · ESP32-C5 / MS51
 
+## Hẹn Giờ Lạnh 3.7.4 — BLE theo menu được phép trên mạch
+
+[APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.4.apk) · [C5/MS51, bảng điều kiện và kiểm thử](docs/hen-gio-lanh-3.7.4/README.md). DF, END, HCF, HDF, kiểu màn hình và ST theo cờ menu của MS51. Không tự mở toàn bộ quyền. App kiểm tra lại trước lưu; đã xuất C5/MS51 mới, chưa nạp lên bo.
+
 ## Hẹn Giờ Lạnh 3.7.3 — Bỏ ghép nối và chọn hộp
 
 [Tải APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.3.apk) · [Thay đổi và kiểm thử](docs/hen-gio-lanh-3.7.3/README.md). Thêm Bỏ ghép nối trong app ở tab Thiết bị. Khi thêm mới/quên hộp, chọn rõ từng hộp tìm thấy; sau khi ghép thành công sẽ tự kết nối lại hộp đã chọn.
@@ -14,7 +18,7 @@
 
 ## Bản thử mới: Hẹn Giờ Lạnh 3.7.0 — Bluetooth
 
-[APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.0.apk) · [C5 r2](https://103-9-78-139.sslip.io/downloads/ESP32-C5-Bluetooth-3.7.0-r2.zip) · [Cách dùng và kiểm thử](docs/hen-gio-lanh-3.7.0/README.md). Thêm và điều khiển gần không cần Internet/tài khoản; thêm Wi-Fi để nhận quyền online. C5 r2 đã nạp và xác minh ngày 31/10, điện thoại kết nối lại ổn trong kiểm tra ngắn hạn; xem [ghi nhận trên bo](docs/hen-gio-lanh-3.7.0/hardware-check-2026-10-31.md). App mới nhất ở trên là 3.7.3.
+[APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.0.apk) · [C5 r2](https://103-9-78-139.sslip.io/downloads/ESP32-C5-Bluetooth-3.7.0-r2.zip) · [Cách dùng và kiểm thử](docs/hen-gio-lanh-3.7.0/README.md). Thêm và điều khiển gần không cần Internet/tài khoản; thêm Wi-Fi để nhận quyền online. C5 r2 đã nạp và xác minh ngày 31/10, điện thoại kết nối lại ổn trong kiểm tra ngắn hạn; xem [ghi nhận trên bo](docs/hen-gio-lanh-3.7.0/hardware-check-2026-10-31.md). App mới nhất ở trên là 3.7.4.
 
 ## Android 3.6.4
 
