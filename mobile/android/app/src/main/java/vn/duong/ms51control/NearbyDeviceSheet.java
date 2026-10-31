@@ -20,7 +20,7 @@ final class NearbyDeviceSheet implements AutoCloseable {
     private final Runnable dismissed;
     private boolean closed, selected;
     private DeviceSpinView discoverySpin;
-    private TextView discoveryTitle, discoveryDetail, discoveryHelp;
+    private TextView discoveryTitle, discoveryDetail;
     private Button firstChoice;
     private String firstLabel;
     NearbyDeviceSheet(Activity activity,Runnable dismissed) {
@@ -51,17 +51,15 @@ final class NearbyDeviceSheet implements AutoCloseable {
             discoveryTitle=title;
             TextView device=label(name+" · "+address.substring(Math.max(0,address.length()-8)),14,false);
             device.setTextColor(Design.MUTED);device.setGravity(Gravity.CENTER);content.addView(device,margin(0,6,0,14));
-            discoveryDetail=device;firstLabel=device.getText().toString();
+            discoveryDetail=device;firstLabel=device.getText().toString();device.setVisibility(View.GONE);
             Button button=action("Kết nối",true);button.setOnClickListener(v->select.run());content.addView(button,margin(0,0,0,8));
             firstChoice=button;button.setContentDescription("Kết nối "+name+" "+address);
-            TextView help=label("Chạm vào hộp để điều khiển ngay",14,false);help.setGravity(Gravity.CENTER);help.setTextColor(Design.MUTED);content.addView(help);
-            discoveryHelp=help;
             content.addView(others);
             show();
         } else {
             discoveryTitle.setText("Chọn thiết bị");
-            discoveryDetail.setText("Tìm thấy "+addresses.size()+" hộp · Chọn một hộp bên dưới");
-            discoveryHelp.setVisibility(View.GONE);
+            discoveryDetail.setText("Tìm thấy "+addresses.size()+" hộp");
+            discoveryDetail.setVisibility(View.VISIBLE);
             discoverySpin.setOnClickListener(null);discoverySpin.setClickable(false);discoverySpin.setFocusable(false);
             discoverySpin.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             firstChoice.setText(firstLabel);firstChoice.setTextColor(Design.TEAL);
@@ -76,13 +74,11 @@ final class NearbyDeviceSheet implements AutoCloseable {
         DeviceSpinView spin=new DeviceSpinView(activity);
         spin.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         content.addView(spin,new LinearLayout.LayoutParams(-1,dp(190)));
-        TextView device=label(name,20,true);device.setGravity(Gravity.CENTER);content.addView(device,margin(0,4,0,12));
         ProgressBar progress=new ProgressBar(activity);
         LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(dp(28),dp(28));size.gravity=Gravity.CENTER_HORIZONTAL;
         content.addView(progress,size);
         TextView status=label("Đang kết nối…",16,true);status.setGravity(Gravity.CENTER);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(status,margin(0,12,0,6));
-        TextView help=label("Kết nối xong sẽ tự mở Tổng quan",14,false);help.setGravity(Gravity.CENTER);help.setTextColor(Design.MUTED);content.addView(help);
         show();
     }
     private void show() {

@@ -94,7 +94,7 @@ final class ManagedChecks {
                     page.setPadding(32,32,32,32);page.setBackgroundColor(Design.BG);
                     invoke(a,"addNavigation",new Class[]{LinearLayout.class},page);
                     invoke(a,"buildOverview",new Class[]{LinearLayout.class},page);
-                    check(texts(page).contains("Bộ điều khiển MS51 1FE4E0"),"Device name belongs in hero heading");
+                    check(!texts(page).contains("Bộ điều khiển MS51 1FE4E0"),"Overview omits repeated device caption");
                     check(!texts(page).contains("Chế độ vận hành hiện tại"),"Removed redundant subtitle");
                     JSONObject uplink=sampleStatus.getJSONObject("wifi").getJSONObject("uplink");
                     int[] signals={-40,-55,-56,-67,-68,-75,-76,-100,0,-127};
@@ -191,7 +191,7 @@ final class ManagedChecks {
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(!safety.isChecked() && !threshold.isEnabled(),"Polling preserves disabled safety draft");
                     check(!safetyStepper.increase.isEnabled() && !safetyStepper.decrease.isEnabled(),"Safety toggle locks arrows");
-                    check(((TextView)get(a,"triggerState")).getText().toString().contains("Nhấn Lưu"),"Unsaved toggle is explicit");
+                    check(((TextView)get(a,"triggerState")).getText().toString().contains("Chưa lưu"),"Unsaved toggle is explicit");
                     safety.setChecked(true);
                     set(a,"safetyDraftPending",false);
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
@@ -210,11 +210,11 @@ final class ManagedChecks {
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(!defrostToggle.isChecked() && !defrostLimit.isEnabled() && safety.isChecked(),"Defrost draft independent from safety and survives polling");
                     check(!defrostStepper.increase.isEnabled() && !defrostStepper.decrease.isEnabled(),"Defrost toggle locks arrows");
-                    check(((TextView)get(a,"defrostState")).getText().toString().contains("Nhấn Lưu"),"Unsaved defrost switch is explicit");
+                    check(((TextView)get(a,"defrostState")).getText().toString().contains("Chưa lưu"),"Unsaved defrost switch is explicit");
                     set(a,"triggerLoaded",false);
                     sampleStatus.getJSONObject("trigger").put("defrost_enabled",false);
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
-                    check(!defrostToggle.isChecked() && ((TextView)get(a,"defrostState")).getText().toString().contains("theo mạch"),"Saved OFF restores machine control");
+                    check(!defrostToggle.isChecked() && ((TextView)get(a,"defrostState")).getVisibility()==View.GONE,"Saved OFF does not repeat cycle description");
                     sampleStatus.getJSONObject("trigger").remove("defrost_enabled");
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(!defrostToggle.isEnabled(),"Old C5 cannot change unsupported switch");
@@ -227,10 +227,10 @@ final class ManagedChecks {
                             && !texts(page).contains("Nguồn tín hiệu"),"Two thresholds replace source selector");
                     sampleStatus.getJSONObject("trigger").put("defrost_valid",false);
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
-                    check(((TextView)get(a,"defrostState")).getText().toString().contains("theo mạch"),"Sensor fault shows machine fallback");
+                    check(((TextView)get(a,"defrostState")).getText().toString().contains("Kiểm tra cảm biến"),"Sensor fault remains visible");
                     sampleStatus.getJSONObject("trigger").put("defrost_valid",true).put("defrost_active",true);
                     invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
-                    check(((TextView)get(a,"defrostState")).getText().toString().contains("bật"),"Below threshold shows relay on");
+                    check(((TextView)get(a,"defrostState")).getVisibility()==View.GONE,"Healthy threshold has no cycle caption");
                     defrostLimit.setText("8");
                     threshold.setText("35");invoke(a,"renderTrigger",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(threshold.getText().toString().equals("35"),"Polling preserves an edited threshold");

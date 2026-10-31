@@ -38,7 +38,6 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -103,7 +102,7 @@ public final class MainActivity extends Activity {
     private Screen screen = Screen.CONNECT_DEVICE;
     private Tab tab = Tab.OVERVIEW;
     private String lastUiMessage = "Sẵn sàng kết nối thiết bị.";
-    private TextView messageView;
+    private InAppNotice notice;
     private TextView dashboardConnection;
     private TextView dashboardMode;
     private TextView dashboardLogs;
@@ -255,11 +254,14 @@ public final class MainActivity extends Activity {
 
     private static final int BLE_PERMISSION_REQUEST=91;
     private BleTransport bleLink;
+    private final ExecutorService bleConnectIo=Executors.newSingleThreadExecutor();
+    private java.util.concurrent.Future<?> bleConnectTask;
     private BlePicker blePicker;
     private NearbyDeviceSheet bleConnectionSheet;
     private boolean bleMode, pendingBleWifi, bleSaving;
 
     private void disconnectBle() {
+        if(bleConnectTask!=null){bleConnectTask.cancel(true);bleConnectTask=null;}
         closeBleConnectionSheet();
         if(blePicker!=null){blePicker.close();blePicker=null;}
         if(bleLink!=null){bleLink.close();bleLink=null;}
@@ -384,10 +386,12 @@ public final class MainActivity extends Activity {
         String name=device.getName();
         bleConnectionSheet.showConnecting(name==null?"Hộp hẹn giờ máy lạnh":name);
         final int token=setupEpoch;
-        presenceIo.execute(()->{
+        bleConnectTask=bleConnectIo.submit(()->{
             BleTransport link=null;
             try {
+                if(!currentSetup(token) || Thread.currentThread().isInterrupted())return;
                 link=BleTransport.connect(this,device);
+                if(!currentSetup(token) || Thread.currentThread().isInterrupted()){link.close();return;}
                 EspApi session=new EspApi();session.setBle(link);
                 JSONObject status=session.get("/api/status");String id=DeviceStore.identity(status);
                 if(id.isEmpty())throw new IOException("Thiết bị chưa cung cấp định danh hợp lệ.");
@@ -408,7 +412,7 @@ public final class MainActivity extends Activity {
                 runOnUiThread(()->{if(currentSetup(token)){
                     closeBleConnectionSheet();setupBusy=false;nearbySuppressed=true;
                     LinearLayout content=createPage("","Chưa kết nối được","");
-                    addHelp(content,errorMessage(error));Button retry=primaryButton("Tìm lại thiết bị");content.addView(retry);
+                    showMessage(errorMessage(error));Button retry=primaryButton("Tìm lại thiết bị");content.addView(retry);
                     retry.setOnClickListener(v->chooseBleDevice());
                     Button back=neutralButton("Quay lại");content.addView(back);back.setOnClickListener(v->cancelBleConnection());
                 }});
@@ -471,7 +475,7 @@ public final class MainActivity extends Activity {
                     buildSettings(content);applyRuntimeConfigToViews();
                 });
             }catch(Exception error){onControl(token,()->{
-                if(viewToken!=accessViewEpoch)return;loading.setText(errorMessage(error));
+                if(viewToken!=accessViewEpoch)return;content.removeView(loading);showMessage(errorMessage(error));
                 Button retry=neutralButton("Đọc lại");content.addView(retry);retry.setOnClickListener(v->showControl(Tab.SETTINGS));
             });}
         });
@@ -495,7 +499,7 @@ public final class MainActivity extends Activity {
     }
     private void buildBleDevice(LinearLayout content) {
         LinearLayout box=card();content.addView(box);
-        addSectionTitle(box,"Kết nối Bluetooth");addHelp(box,"Đang dùng trực tiếp các chức năng trên bộ điều khiển. Không cần máy chủ.");
+        addSectionTitle(box,"Kết nối Bluetooth");
         Button wifi=primaryButton("Thêm Wi-Fi và liên kết tài khoản");box.addView(wifi,fullParams(0,16,0,8));wifi.setOnClickListener(v->beginBleWifi());
         Button leave=neutralButton("Ngắt kết nối");box.addView(leave);
         leave.setOnClickListener(v->{++controlEpoch;stopDashboard();nearbySuppressed=true;disconnectBle();if(accountId.isEmpty())showAuth(false);else showDevices();});
@@ -573,8 +577,7 @@ public final class MainActivity extends Activity {
         });
         alternate.setOnClickListener(v -> { if (!authBusy) showAuth(!register); });
         content.addView(submit,fullParams(0,20,0,8)); content.addView(alternate);
-        if(register) addHelp(content,"Mật khẩu tối thiểu 8 ký tự.");
-        else {
+        if(!register) {
             Button offline=neutralButton("Chế độ offline");
             offline.setTextSize(14);
             offline.setOnClickListener(v->{if(!authBusy && !pendingBleWifi)showOfflineDiscovery();});
@@ -588,14 +591,12 @@ public final class MainActivity extends Activity {
     private void showOfflineDiscovery(boolean forceSelection) {
         if(screen!=Screen.OFFLINE)offlineReturnHome=screen!=Screen.AUTH && !accountId.isEmpty();
         endManualDiscovery();stopHome();stopDashboard();++authEpoch;++setupEpoch;
-        authBusy=false;setupBusy=false;screen=Screen.OFFLINE;
+        authBusy=false;setupBusy=false;openingDevice=false;screen=Screen.OFFLINE;
         LinearLayout content=createPage("",forceSelection ? "Dò thiết bị mới" : "Chế độ offline","");
         LinearLayout box=card();content.addView(box);
         DeviceSpinView guide=new DeviceSpinView(this,"phone-near-device.gif");
         box.addView(guide,new LinearLayout.LayoutParams(-1,dp(150)));
         addSectionTitle(box,"Đưa điện thoại lại gần hộp");
-        addHelp(box,"Bật nguồn hộp và đưa điện thoại sát hộp mới. Chạm vào thiết bị tìm thấy để kết nối.");
-        addHelp(box,"Không cần Internet.");
         addDiscoveryButton(box);
         Button back=neutralButton(offlineReturnHome ? "Quay lại thiết bị" : "Quay lại đăng nhập");
         back.setOnClickListener(v->leaveOfflineDiscovery());content.addView(back,fullParams(0,16,0,0));
@@ -674,7 +675,6 @@ public final class MainActivity extends Activity {
         deviceLabels.clear();
         if (devices.isEmpty()) {
             TextView empty = valueText("Chưa có thiết bị"); empty.setTextSize(19); content.addView(empty);
-            addHelp(content,"Nhấn Dò thiết bị mới và đưa điện thoại sát hộp để ghép nối.");
         } else {
             addSectionTitle(content,"Thiết bị đã ghép");
             for (DeviceStore.Device device : devices) {
@@ -685,7 +685,7 @@ public final class MainActivity extends Activity {
                 TextView name = valueText(device.name); name.setTextSize(19);name.setPadding(dp(12),0,dp(8),0);
                 identity.addView(name,new LinearLayout.LayoutParams(0,-2,1));
                 identity.addView(icon("arrow",Design.INK,22),new LinearLayout.LayoutParams(dp(22),dp(22)));card.addView(identity);
-                TextView wifi = mutedText(device.ssid.isEmpty() ? device.id : device.ssid); card.addView(wifi,fullParams(0,5,0,10));
+                if(!device.ssid.isEmpty()) { TextView wifi = mutedText(device.ssid); card.addView(wifi,fullParams(0,5,0,10)); }
                 TextView state = bodyText(device.legacy() ? "Cần ghép lại để nhận diện bo" : "Đang kiểm tra kết nối…");
                 state.setTextColor(Design.MUTED); state.setTextSize(13); card.addView(state);
                 deviceLabels.put(device.id,state);
@@ -693,7 +693,6 @@ public final class MainActivity extends Activity {
                 card.setOnLongClickListener(v -> { deviceOptions(device); return true; });
                 content.addView(card,fullParams(0,12,0,0));
             }
-            addHelp(content,"Chạm để mở · Giữ để đổi tên hoặc bỏ ghép nối.");
 
         }
         Button findNew=primaryButton("Dò thiết bị mới");
@@ -872,7 +871,7 @@ public final class MainActivity extends Activity {
         setupBusy = true;
         int token = ++setupEpoch;
         lastUiMessage = "";
-        if (messageView != null) messageView.setVisibility(View.GONE);
+        if (notice != null) notice.dismiss();
         setSetupEnabled(false);
         if (setupAction != null) setupAction.setText(message);
         return token;
@@ -901,7 +900,7 @@ public final class MainActivity extends Activity {
         if (message != null && !message.isEmpty()) showMessage(message);
         else {
             lastUiMessage = "";
-            if (messageView != null) messageView.setVisibility(View.GONE);
+            if (notice != null) notice.dismiss();
         }
     }
 
@@ -925,7 +924,7 @@ public final class MainActivity extends Activity {
         uplinkSsid = ""; uplinkIp = ""; uplinkPasswordForPhone = "";
         selectedSsid = ""; selectedAuth = ""; scannedNetworks = null;
         LinearLayout content = createPage("BƯỚC 1 / 3", "Kết nối thiết bị",
-                "Bật nguồn và đặt thiết bị gần điện thoại.");
+                "");
         LinearLayout visual = card();
         visual.setGravity(Gravity.CENTER);
         visual.setPadding(dp(24), dp(48), dp(24), dp(48));
@@ -946,7 +945,7 @@ public final class MainActivity extends Activity {
         if (!localDeviceReady) return;
         newSetupPage(Screen.CONFIGURE_WIFI); rememberStatus(status);
         LinearLayout content = createPage("BƯỚC 2 / 3", "Chọn Wi-Fi",
-                "Chọn mạng 2.4 GHz hoặc 5 GHz của bạn.");
+                "");
         addSetupAction(content, "Quét Wi-Fi", this::scanNetworks);
         setupResults = new LinearLayout(this); setupResults.setOrientation(LinearLayout.VERTICAL);
         content.addView(setupResults, fullParams(0, 18, 0, 0));
@@ -1005,7 +1004,7 @@ public final class MainActivity extends Activity {
         if (!localDeviceReady) return;
         newSetupPage(Screen.WIFI_PASSWORD); selectedSsid = ssid; selectedAuth = auth;
         LinearLayout content = createPage("BƯỚC 3 / 3", "Nhập mật khẩu",
-                isOpenNetwork(auth) ? "Mạng này không yêu cầu mật khẩu." : "Nhập mật khẩu Wi-Fi để tiếp tục.");
+                isOpenNetwork(auth) ? "Mạng không có mật khẩu" : "");
         LinearLayout selectedNetwork=card();addValueLine(selectedNetwork,"Wi-Fi",ssid);
         content.addView(selectedNetwork,fullParams(0,0,0,16));
         if (!isOpenNetwork(auth)) addPasswordField(content, "Mật khẩu Wi-Fi");
@@ -1367,16 +1366,7 @@ public final class MainActivity extends Activity {
         tab = selectedTab;
         String title = tab == Tab.OVERVIEW ? "Tổng quan" : tab == Tab.SETTINGS ? "Cài đặt"
                 : tab == Tab.FIRMWARE ? "Cập nhật" : "Thiết bị";
-        LinearLayout content = createPage("", title,
-                tab == Tab.OVERVIEW ? ""
-                : tab == Tab.SETTINGS ? ""
-                : tab == Tab.FIRMWARE ? "Cập nhật phiên bản mới cho thiết bị."
-                : "Thông tin kết nối và bộ điều khiển.");
-        if (tab != Tab.OVERVIEW) {
-            TextView deviceName = mutedText(activeDevice == null ? "" : activeDevice.name);
-            deviceName.setTextColor(Design.TEAL); content.addView(deviceName, fullParams(0,0,0,12));
-        }
-        if(bleMode)addHelp(content,"Bluetooth · Không cần Internet");
+        LinearLayout content = createPage("", title, "");
         addNavigation(content);
         if(tab!=Tab.OVERVIEW) mainHandler.post(unlockPoll);
         switch (tab) {
@@ -1543,14 +1533,10 @@ public final class MainActivity extends Activity {
         pageRoot.requestFocus();
         LinearLayout hero = card(); hero.setBackground(new Design.Hero());
         hero.setPadding(dp(16), dp(14), dp(16), dp(14));
-        String deviceLabel = activeDevice == null ? "" : activeDevice.name.trim();
-        TextView caption = mutedText("Bộ điều khiển" + (deviceLabel.isEmpty() ? "" : " " + deviceLabel));
-        caption.setTextSize(14);caption.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        caption.setTextColor(0xFFD8E7EF);
         dashboardMode=valueText("Đang chờ dữ liệu");dashboardMode.setTextSize(24);
         dashboardMode.setTypeface(Typeface.DEFAULT_BOLD);dashboardMode.setTextColor(Color.WHITE);
         LinearLayout summary=new LinearLayout(this);summary.setOrientation(LinearLayout.VERTICAL);
-        summary.addView(caption);summary.addView(dashboardMode,fullParams(0,6,0,0));
+        summary.addView(dashboardMode);
         dashboardConnection=bodyText("Đang đọc trạng thái…");
         dashboardConnection.setTextSize(12);dashboardConnection.setTextColor(Design.MINT);
         if(compactSettings()) {
@@ -1599,7 +1585,6 @@ public final class MainActivity extends Activity {
         relayCard.addView(relays);
         content.addView(relayCard, fullParams(0, 0, 0, 16));
         LinearLayout logs = card(); addSectionTitle(logs,"Nhật ký thiết bị");
-        addHelp(logs, "Thời gian đã lưu");
         dashboardLogs=bodyText("Đang chờ dữ liệu…");dashboardLogs.setTextColor(Design.INK);dashboardLogs.setTextSize(15);
         dashboardLogs.setLineSpacing(dp(10), 1f);
         logs.addView(dashboardLogs,fullParams(0,8,0,0));
@@ -1650,7 +1635,7 @@ public final class MainActivity extends Activity {
         cutoff.addView(new NumberStepper(this,triggerThreshold,"Ngưỡng an toàn",() -> new int[]{-55,125},true),fullParams(0,8,0,8));
         defrost.addView(new NumberStepper(this,defrostThreshold,"Ngưỡng xả đá",() -> new int[]{-55,125},true),fullParams(0,8,0,8));
         triggerState=mutedText("Đang chờ dữ liệu…"); cutoff.addView(triggerState);
-        defrostState=mutedText("Thấp hơn ngưỡng: bật Xả đá."); defrost.addView(defrostState);
+        defrostState=mutedText(""); defrostState.setVisibility(View.GONE); defrost.addView(defrostState);
         boolean sideBySide=compactSettings();
         row.setOrientation(sideBySide?LinearLayout.HORIZONTAL:LinearLayout.VERTICAL);
         LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(sideBySide?0:-1,sideBySide?-1:-2,sideBySide?1:0);
@@ -1688,27 +1673,32 @@ public final class MainActivity extends Activity {
         triggerSave.setEnabled(canEdit && !status.optBoolean("busy",true));
         mainHandler.removeCallbacks(expireTriggerControls);
         if(triggerSave.isEnabled()) mainHandler.postDelayed(expireTriggerControls,5000);
-        if(triggerSaving) triggerState.setText("Đang lưu…");
-        else if(!transportSupported && status!=null) triggerState.setText("Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
-        else if(!supported) triggerState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
-        else if(safetyDraftPending) triggerState.setText("Nhấn Lưu để áp dụng thay đổi.");
-        else if(!safetySupported) triggerState.setText("Cần cập nhật thiết bị để dùng ngưỡng an toàn.");
-        else if(motorSelectionPending) triggerState.setText("Nhấn Lưu để dùng cảm biến "+(motorSensorIndex==0 ? "10k." : "20k."));
-        else if(!trigger.optBoolean("thermal_enabled")) triggerState.setText("Nhập hai ngưỡng rồi nhấn Lưu để áp dụng.");
-        else if(!trigger.optBoolean("safety_enabled")) triggerState.setText("Đã tắt · Chạy theo chu trình.");
-        else if(!trigger.optBoolean("synced")) triggerState.setText("Đang chờ bộ điều khiển xác nhận.");
-        else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến động cơ · Không chuyển bước.");
-        else triggerState.setText(trigger.optBoolean("active") ? "Vượt ngưỡng · Kết thúc OP1 khi đang chạy." : "Vượt ngưỡng sẽ kết thúc OP1.");
-        if(triggerSaving) defrostState.setText("Đang lưu…");
-        else if(!transportSupported && status!=null) defrostState.setText("Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
-        else if(!supported) defrostState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
-        else if(defrostDraftPending) defrostState.setText("Nhấn Lưu để áp dụng thay đổi.");
-        else if(!trigger.has("defrost_enabled")) defrostState.setText("Cần cập nhật thiết bị để bật/tắt ngưỡng.");
-        else if(!trigger.optBoolean("thermal_enabled")) defrostState.setText("Chưa áp dụng · Theo mạch.");
-        else if(!trigger.optBoolean("defrost_enabled")) defrostState.setText("Đã tắt · Xả đá theo mạch.");
-        else if(!trigger.optBoolean("synced")) defrostState.setText("Đang chờ bộ điều khiển xác nhận.");
-        else if(!trigger.optBoolean("defrost_valid")) defrostState.setText("Cảm biến lỗi · Xả đá theo mạch.");
-        else defrostState.setText(trigger.optBoolean("defrost_active") ? "Dưới ngưỡng · Xả đá bật." : "Từ ngưỡng trở lên · Xả đá tắt.");
+        if(triggerSaving) setInlineStatus(triggerState,"Đang lưu…");
+        else if(!transportSupported && status!=null) setInlineStatus(triggerState,"Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
+        else if(!supported) setInlineStatus(triggerState,"Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        else if(safetyDraftPending) setInlineStatus(triggerState,"Chưa lưu");
+        else if(!safetySupported) setInlineStatus(triggerState,"Cần cập nhật thiết bị để dùng ngưỡng an toàn.");
+        else if(motorSelectionPending) setInlineStatus(triggerState,"Chưa lưu");
+        else if(!trigger.optBoolean("thermal_enabled")) setInlineStatus(triggerState,"Chưa lưu");
+        else if(!trigger.optBoolean("safety_enabled")) setInlineStatus(triggerState,"");
+        else if(!trigger.optBoolean("synced")) setInlineStatus(triggerState,"Đang chờ bộ điều khiển xác nhận.");
+        else if(!trigger.optBoolean("sensor_valid")) setInlineStatus(triggerState,"Kiểm tra cảm biến động cơ");
+        else setInlineStatus(triggerState,"");
+        if(triggerSaving) setInlineStatus(defrostState,"Đang lưu…");
+        else if(!transportSupported && status!=null) setInlineStatus(defrostState,"Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
+        else if(!supported) setInlineStatus(defrostState,"Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
+        else if(defrostDraftPending) setInlineStatus(defrostState,"Chưa lưu");
+        else if(!trigger.has("defrost_enabled")) setInlineStatus(defrostState,"Cần cập nhật thiết bị để bật/tắt ngưỡng.");
+        else if(!trigger.optBoolean("thermal_enabled")) setInlineStatus(defrostState,"Chưa lưu");
+        else if(!trigger.optBoolean("defrost_enabled")) setInlineStatus(defrostState,"");
+        else if(!trigger.optBoolean("synced")) setInlineStatus(defrostState,"Đang chờ bộ điều khiển xác nhận.");
+        else if(!trigger.optBoolean("defrost_valid")) setInlineStatus(defrostState,"Kiểm tra cảm biến giám sát");
+        else setInlineStatus(defrostState,"");
+    }
+
+    private void setInlineStatus(TextView view, String text) {
+        view.setText(text);
+        view.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     private int readTemperatureLimit(EditText field) {
@@ -1775,7 +1765,7 @@ public final class MainActivity extends Activity {
                 if(triggerSaving || modeChanging || pendingMode!=null || managedUpdateStarting) return;
                 motorSensorIndex = motorSensorIndex==0 ? 1 : 0;
                 motorSelectionPending=true;
-                if(triggerState!=null) triggerState.setText("Nhấn Lưu để áp dụng cảm biến "+(motorSensorIndex==0 ? "10k." : "20k."));
+                if(triggerState!=null) setInlineStatus(triggerState,"Chưa lưu");
                 getSharedPreferences("temperature_display",MODE_PRIVATE).edit()
                         .putBoolean(motorSensorPreferenceKey(),motorSensorIndex==1).apply();
                 renderTemperatureCards();
@@ -2121,8 +2111,6 @@ public final class MainActivity extends Activity {
         pinDependentViews.clear();
         LinearLayout intro = card();
         addSectionTitle(intro, "Cài đặt vận hành");
-        addHelp(intro, "Thiết bị sẽ khởi động lại khi lưu.");
-        if(bleMode)addHelp(intro,"Các mục hiển thị theo cấu hình được cho phép trên mạch.");
         LinearLayout topRow = new LinearLayout(this); topRow.setOrientation(LinearLayout.HORIZONTAL);
         Button read = neutralButton("Đọc cài đặt");
         read.setOnClickListener(v -> loadRuntimeConfig());
@@ -2217,7 +2205,6 @@ public final class MainActivity extends Activity {
         }
         finishSettingsRow(pin);
         pinEnable.setOnCheckedChangeListener((buttonView, isChecked) -> syncPinControls());
-        addHelp(pin, "Chỉ các mục được người quản lý cấp quyền mới có thể chỉnh sửa.");
         addSettingsSubgroup(advanced,"Mật khẩu bảo vệ",pin);
         content.addView(advanced,fullParams(0,12,0,0));
         for (LinearLayout section : new LinearLayout[]{timing, advanced}) {
@@ -2571,7 +2558,7 @@ public final class MainActivity extends Activity {
                 });
             } catch(Exception error) { onControl(controlToken, () -> {
                 if (viewToken!=accessViewEpoch) return;
-                loading.setText(errorMessage(error));
+                content.removeView(loading);showMessage(errorMessage(error));
                 Button retry=neutralButton("Thử lại"); retry.setOnClickListener(v -> showControl(selected)); content.addView(retry);
             }); }
         });
@@ -2821,7 +2808,7 @@ public final class MainActivity extends Activity {
 
         LinearLayout chipCard = card();
         addSectionTitle(chipCard, "Kiểm tra thiết bị");
-        deviceInfo = monospaceText("Kiểm tra kết nối với bộ điều khiển.");
+        deviceInfo = monospaceText("");
         chipCard.addView(deviceInfo, fullParams(0, 2, 0, 0));
         Button info = neutralButton("Kiểm tra kết nối");
         info.setOnClickListener(v -> readChipInfo());
@@ -2910,13 +2897,6 @@ public final class MainActivity extends Activity {
         if(Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);
         content.addView(heading,fullParams(0,0,0,subtitle.isEmpty() ? 10 : 5));
         if (!subtitle.isEmpty()) content.addView(bodyText(subtitle),fullParams(0,0,0,22));
-        messageView=bodyText(lastUiMessage); messageView.setTextSize(12);
-        messageView.setPadding(dp(14),dp(12),dp(14),dp(12));
-        messageView.setBackground(rounded(Design.SOFT,dp(12)));
-        messageView.setTextColor(Design.TEAL);
-        messageView.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        messageView.setVisibility(lastUiMessage.isEmpty() || demoMode ? View.GONE : View.VISIBLE);
-        content.addView(messageView,fullParams(0,0,0,16));
         scroll.addView(content,new ScrollView.LayoutParams(-1,-2));
         pageRoot.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         setContentView(pageRoot); pageRoot.requestApplyInsets();
@@ -3085,10 +3065,9 @@ public final class MainActivity extends Activity {
 
     private void showMessage(String message) {
         lastUiMessage = message == null || message.trim().isEmpty() ? "Đã xong." : message;
-        if (messageView != null) {
-            messageView.setText(lastUiMessage); messageView.setVisibility(View.VISIBLE);
-            if (screen == Screen.CONTROL) Toast.makeText(this,lastUiMessage,Toast.LENGTH_SHORT).show();
-        }
+        if (!foreground || isFinishing() || isDestroyed()) return;
+        if (notice == null) notice = new InAppNotice(this);
+        notice.show(lastUiMessage);
     }
 
     private void rememberStatus(JSONObject status) {
@@ -3286,6 +3265,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         foreground = false;
+        if(notice!=null)notice.dismiss();
         if(!blePromptPending)endManualDiscovery();
         mainHandler.removeCallbacks(nearbyRefresh);stopNearby();
         for(EditText input:configInputs.values()) if(input.getParent() instanceof NumberStepper) ((NumberStepper)input.getParent()).stopRepeating();
@@ -3336,12 +3316,13 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if(notice!=null)notice.dismiss();
         mainHandler.removeCallbacks(nearbyRefresh);
         disconnectBle();
         mainHandler.removeCallbacks(internetChanged);
         if(internetCallback!=null)connectivityManager.unregisterNetworkCallback(internetCallback);
         ++setupEpoch; ++authEpoch; ++controlEpoch; stopHome();
-        presenceIo.shutdownNow();
+        presenceIo.shutdownNow();bleConnectIo.shutdownNow();
         stopDashboard();
         releaseRequestedNetwork();
         io.shutdownNow();

@@ -95,7 +95,7 @@ public final class AccountsDevicesTestRunner extends Instrumentation {
             awaitCount("scans",1);
             awaitIdle();
             check(stats().getInt("scans")==1, "Repeated scan clicks must coalesce");
-            check(((View)get("messageView")).getVisibility()==View.GONE, "Old busy message cleared when scan completes");
+            check(get("notice")==null || !((InAppNotice)get("notice")).isShowing(), "Old busy message cleared when scan completes");
             check(hasButton("Home 5G\n5 GHz") && hasButton("Home 2G\n2.4 GHz"), "Both bands shown");
             shot("03-chon-wifi.png");
             pass("Repeated scans issue one request; 2.4 and 5 GHz choices are shown");

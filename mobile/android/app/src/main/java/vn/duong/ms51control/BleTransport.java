@@ -31,6 +31,9 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
     private volatile CountDownLatch writeDone, responseDone;
     private volatile JSONObject response;
     private boolean registered;
+    private final BleSetupState setup=new BleSetupState();
+    private final android.os.Handler timers=new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable mtuFallback;
     private BleTransport(Context context,BluetoothDevice device) { this.context=context.getApplicationContext();this.device=device; }
     static BleTransport connect(Context context,BluetoothDevice device) throws IOException {
         BleTransport link=new BleTransport(context,device);
@@ -46,13 +49,13 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
         } catch(Exception error) { link.close(); throw error instanceof IOException?(IOException)error:new IOException(error.getMessage(),error); }
     }
     String address() { return device.getAddress(); }
-    boolean connected() { return !closed && failure==null && rx!=null; }
+    boolean connected() { return !closed && failure==null && rx!=null && setup.isReady(); }
     private final BroadcastReceiver bond=new BroadcastReceiver() {
         @Override public void onReceive(Context c,Intent i) {
             BluetoothDevice peer=i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
             if(!device.equals(peer) || closed || gatt==null) return;
             int state=i.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE,BluetoothDevice.BOND_NONE);
-            if(state==BluetoothDevice.BOND_BONDED) discover(gatt);
+            if(state==BluetoothDevice.BOND_BONDED && setup.bonded()) discover(gatt);
             else if(state==BluetoothDevice.BOND_NONE) fail("Chưa ghép Bluetooth. Hãy thử kết nối lại.");
         }
     };
@@ -62,21 +65,28 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
             if(closed) return;
             if(status!=BluetoothGatt.GATT_SUCCESS || state==BluetoothProfile.STATE_DISCONNECTED) { fail("Đã mất kết nối Bluetooth. Đặt điện thoại gần thiết bị rồi kết nối lại."); return; }
             if(state==BluetoothProfile.STATE_CONNECTED) {
-                if(device.getBondState()==BluetoothDevice.BOND_BONDED) discover(g);
-                else if(device.getBondState()==BluetoothDevice.BOND_NONE && !device.createBond()) fail("Không bắt đầu được ghép Bluetooth.");
+                if(setup.stage()!=BleSetupState.Stage.CONNECTING)return;
+                if(setup.connected(device.getBondState()==BluetoothDevice.BOND_BONDED)) discover(g);
+                else if(setup.stage()==BleSetupState.Stage.BONDING && device.getBondState()==BluetoothDevice.BOND_NONE && !device.createBond()) fail("Không bắt đầu được ghép Bluetooth.");
             }
         }
         @Override public void onServicesDiscovered(BluetoothGatt g,int status) {
+            if(closed || !setup.services())return;
             BluetoothGattService service=g.getService(SERVICE);
             if(status!=BluetoothGatt.GATT_SUCCESS || service==null || service.getCharacteristic(RX)==null || service.getCharacteristic(TX)==null) {
                 fail("Thiết bị chưa có bản cập nhật hỗ trợ Bluetooth."); return;
             }
             rx=service.getCharacteristic(RX);
+            // Android may suppress repeated MTU requests on an existing ACL link.
+            // MTU is an optimization; a missing callback must not block subscription.
+            mtuFallback=()->subscribe(g);
+            timers.postDelayed(mtuFallback,2000);
             if(!g.requestMtu(247)) subscribe(g);
         }
-        @Override public void onMtuChanged(BluetoothGatt g,int value,int status) { if(status==0) mtu=Math.max(23,value); subscribe(g); }
+        @Override public void onMtuChanged(BluetoothGatt g,int value,int status) { if(closed)return; if(status==0) mtu=Math.max(23,value); subscribe(g); }
         @Override public void onDescriptorWrite(BluetoothGatt g,BluetoothGattDescriptor d,int status) {
-            if(status==0) ready.countDown(); else fail("Không nhận được dữ liệu Bluetooth. Hãy ghép lại thiết bị.");
+            if(closed || !CCCD.equals(d.getUuid()))return;
+            if(status==0){if(setup.ready())ready.countDown();} else fail("Không nhận được dữ liệu Bluetooth. Hãy ghép lại thiết bị.");
         }
         @Override public void onCharacteristicWrite(BluetoothGatt g,BluetoothGattCharacteristic c,int status) {
             if(status!=0) fail("Thiết bị chưa nhận được lệnh Bluetooth. Hãy đọc lại trạng thái.");
@@ -86,7 +96,8 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
         @Override public void onCharacteristicChanged(BluetoothGatt g,BluetoothGattCharacteristic c,byte[] value) { if(TX.equals(c.getUuid())) receive(value); }
     };
     private void subscribe(BluetoothGatt g) {
-        if(closed) return;
+        if(closed || !setup.subscribe()) return;
+        if(mtuFallback!=null)timers.removeCallbacks(mtuFallback);
         BluetoothGattCharacteristic tx=g.getService(SERVICE).getCharacteristic(TX);
         BluetoothGattDescriptor descriptor=tx.getDescriptor(CCCD);
         if(descriptor==null || !g.setCharacteristicNotification(tx,true)) { fail("Không đăng ký được dữ liệu Bluetooth.");return; }
@@ -125,12 +136,16 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
         }
     }
     private void await(CountDownLatch latch,int timeout,String message) throws IOException {
-        try { if(!latch.await(timeout,TimeUnit.MILLISECONDS)) throw new IOException(message); }
+        try { if(!latch.await(timeout,TimeUnit.MILLISECONDS)){
+            if(latch==ready)android.util.Log.w("MS51-BLE","Connection timed out at "+setup.stage());
+            throw new IOException(message);
+        } }
         catch(InterruptedException e) { Thread.currentThread().interrupt();throw new IOException("Đã dừng kết nối.",e); }
         if(failure!=null) throw failure;
         if(closed) throw new IOException("Bluetooth đã ngắt kết nối.");
     }
     private void fail(String message) {
+        setup.close();timers.removeCallbacksAndMessages(null);
         failure=new IOException(message);ready.countDown();
         CountDownLatch write=writeDone,reply=responseDone;if(write!=null)write.countDown();if(reply!=null)reply.countDown();
     }

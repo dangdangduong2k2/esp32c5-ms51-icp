@@ -18,6 +18,7 @@ final class BleChecks {
     static void run(Instrumentation test){
         Bundle report=new Bundle();MainActivity activity=null;
         try{
+            checkSetupState();
             for(int mask=0;mask<64;mask++)for(int mode=0;mode<2;mode++){
                 byte[] raw=RuntimeConfigCodec.defaults().raw.clone();
                 for(int i=0;i<5;i++)raw[0x27+i]=(byte)((mask>>i)&1);
@@ -58,7 +59,8 @@ final class BleChecks {
             rejected=false;try{frozen.upload("x.hex",new byte[0]);}catch(IOException expected){rejected=true;}check(rejected,"No firmware upload through offline transport");
 
             activity=(MainActivity)test.startActivitySync(new Intent(test.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            final MainActivity a=activity;AtomicReference<Throwable> uiFailure=new AtomicReference<>();
+            final MainActivity a=activity;
+            checkConnectionIsolation(test,a);AtomicReference<Throwable> uiFailure=new AtomicReference<>();
             test.runOnMainSync(()->{
                 try{
                     ManagedChecks.set(a,"demoMode",false);ManagedChecks.set(a,"bleMode",true);
@@ -117,7 +119,7 @@ final class BleChecks {
             test.runOnMainSync(()->a.onBackPressed());
             check(!(Boolean)ManagedChecks.get(a,"bleMode") && ManagedChecks.get(a,"screen").toString().equals("AUTH"),"Back exits Bluetooth without an account");
             test.waitForIdleSync();test.runOnMainSync(()->shot(a,"01-bluetooth-khong-tai-khoan.png"));
-            report.putString("stream","PASS: BLE framing, identity, offline menu permissions, delta-only save; three temperatures, source selection, both threshold toggles, offline thermal save/readback, old C5 read-only guard, invalid/stale sensors and rejected saves; no account/server required.\n");
+            report.putString("stream","PASS: BLE independent of blocked network workers, cancellable pending connection, ordered bond/service/MTU subscription and fallback; BLE framing, identity, offline menu permissions, delta-only save; three temperatures, source selection, both threshold toggles, offline thermal save/readback, old C5 read-only guard, invalid/stale sensors and rejected saves; no account/server required.\n");
             test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(a::finish);}}
@@ -126,6 +128,37 @@ final class BleChecks {
         AtomicReference<Throwable> failure=new AtomicReference<>();
         test.runOnMainSync(()->{try{task.run();}catch(Throwable e){failure.set(e);}});
         if(failure.get()!=null)throw new AssertionError(failure.get());
+    }
+    private static void checkSetupState(){
+        BleSetupState state=new BleSetupState();
+        check(!state.bonded(),"Early bond event cannot discover before connection");
+        check(!state.connected(false),"Unbonded connection waits for bonding");
+        check(state.bonded() && !state.bonded(),"Bond completion discovers once");
+        check(!state.connected(true),"Repeated connected callback cannot rediscover");
+        check(!state.subscribe(),"Early MTU callback cannot subscribe before services");
+        check(state.services() && !state.services(),"Service callback starts MTU once");
+        check(state.subscribe(),"Missing MTU callback can proceed through fallback");
+        check(!state.subscribe(),"Late MTU callback cannot duplicate CCCD write");
+        check(!state.isReady(),"Connection is not usable before CCCD acknowledgment");
+        check(state.ready() && state.isReady(),"CCCD acknowledgment marks connection usable");
+        state.close();check(!state.ready() && !state.services() && !state.subscribe(),"Cancelled setup ignores late callbacks");
+        BleSetupState known=new BleSetupState();check(known.connected(true),"Existing bond discovers immediately");
+    }
+    private static void checkConnectionIsolation(Instrumentation test,MainActivity a)throws Exception{
+        java.util.concurrent.ExecutorService cloud=(java.util.concurrent.ExecutorService)ManagedChecks.get(a,"presenceIo");
+        java.util.concurrent.ExecutorService ble=(java.util.concurrent.ExecutorService)ManagedChecks.get(a,"bleConnectIo");
+        java.util.concurrent.CountDownLatch busy=new java.util.concurrent.CountDownLatch(3),release=new java.util.concurrent.CountDownLatch(1);
+        try{
+            for(int i=0;i<3;i++)cloud.submit(()->{busy.countDown();try{release.await();}catch(InterruptedException e){Thread.currentThread().interrupt();}});
+            check(busy.await(2,java.util.concurrent.TimeUnit.SECONDS),"Simulated network requests occupy all cloud workers");
+            check(ble.submit(()->true).get(2,java.util.concurrent.TimeUnit.SECONDS),"BLE starts even while cloud requests are blocked");
+            java.util.concurrent.CountDownLatch started=new java.util.concurrent.CountDownLatch(1),cancelled=new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.Future<?> pending=ble.submit(()->{started.countDown();try{release.await();}catch(InterruptedException e){cancelled.countDown();Thread.currentThread().interrupt();}});
+            check(started.await(2,java.util.concurrent.TimeUnit.SECONDS),"Pending BLE attempt started");
+            ui(test,()->{try{ManagedChecks.set(a,"bleConnectTask",pending);ManagedChecks.invoke(a,"disconnectBle",new Class[]{});}catch(Exception e){throw new RuntimeException(e);}});
+            check(cancelled.await(2,java.util.concurrent.TimeUnit.SECONDS),"Cancel interrupts pending BLE attempt without waiting for timeout");
+            check(ble.submit(()->true).get(2,java.util.concurrent.TimeUnit.SECONDS),"Retry is not queued behind cancelled connection");
+        }finally{release.countDown();}
     }
     private static void checkThermal(Instrumentation test,MainActivity a,Fake device)throws Exception{
         ui(test,()->{try{

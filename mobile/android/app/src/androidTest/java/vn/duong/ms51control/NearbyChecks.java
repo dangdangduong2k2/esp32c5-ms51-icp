@@ -206,7 +206,10 @@ final class NearbyChecks {
             Button scan=findButton(a.getWindow().getDecorView(),"Dò thiết bị mới");check(scan!=null,"Home offers new device entry");
             check(findButton(a.getWindow().getDecorView(),"Chế độ offline")!=null,"Home offers offline entry too");
             if(radio){
-                scan.performClick();BlePicker picker=(BlePicker)ManagedChecks.get(a,"blePicker");
+                ManagedChecks.set(a,"openingDevice",true);
+                scan.performClick();
+                check(!(Boolean)ManagedChecks.get(a,"openingDevice"),"Offline entry clears stale cloud opening flag");
+                BlePicker picker=(BlePicker)ManagedChecks.get(a,"blePicker");
                 check((Boolean)ManagedChecks.get(a,"bleChooseManually"),"New device entry requires explicit selection");
                 check(find(a.getWindow().getDecorView(),DeviceSpinView.class)!=null,"New device entry shows GIF guide");
                 scan=findButton(a.getWindow().getDecorView(),"Đang dò");
