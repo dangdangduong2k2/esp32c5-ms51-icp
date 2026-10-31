@@ -256,9 +256,11 @@ public final class MainActivity extends Activity {
     private static final int BLE_PERMISSION_REQUEST=91;
     private BleTransport bleLink;
     private BlePicker blePicker;
+    private NearbyDeviceSheet bleConnectionSheet;
     private boolean bleMode, pendingBleWifi, bleSaving;
 
     private void disconnectBle() {
+        closeBleConnectionSheet();
         if(blePicker!=null){blePicker.close();blePicker=null;}
         if(bleLink!=null){bleLink.close();bleLink=null;}
         api.setBle(null);bleMode=false;pendingBleWifi=false;bleSaving=false;
@@ -313,21 +315,39 @@ public final class MainActivity extends Activity {
                 }
             }
             blePromptAttempted=false;
-            blePicker=new BlePicker(this,adapter,this::nearbyEligible,this::connectBleDevice,()->nearbySuppressed=true);
+            blePicker=new BlePicker(this,adapter,this::nearbyEligible,
+                    device->shouldReconnectBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
+                    this::connectBleDevice,()->nearbySuppressed=true);
             if(manual)showMessage("Đang tìm thiết bị gần bạn…");
         }catch(SecurityException|IllegalStateException|ActivityNotFoundException error){
             blePromptPending=false;nearbySuppressed=true;
             if(manual)showMessage("Hãy bật Bluetooth và cấp quyền Thiết bị ở gần rồi thử lại.");
         }
     }
+    boolean shouldReconnectBle(String address,boolean bonded) {
+        android.content.SharedPreferences saved=getSharedPreferences("ble_devices_v1",MODE_PRIVATE);
+        if(!bonded || saved.getString(address,"").isEmpty())return false;
+        String last=saved.getString("last_connected_address","");
+        if(!last.isEmpty())return last.equals(address);
+        // Migrate 3.7.1: auto-select only when there is one previously verified box.
+        int known=0;
+        for(String key:saved.getAll().keySet())if(key.matches("(?i)([0-9a-f]{2}:){5}[0-9a-f]{2}"))known++;
+        return known==1;
+    }
+    private void closeBleConnectionSheet(){if(bleConnectionSheet!=null){bleConnectionSheet.close();bleConnectionSheet=null;}}
+    private void cancelBleConnection(){
+        ++setupEpoch;setupBusy=false;nearbySuppressed=true;disconnectBle();
+        if(accountId.isEmpty())showAuth(false);else showDevices();
+    }
+    @android.annotation.SuppressLint("MissingPermission")
     private void connectBleDevice(android.bluetooth.BluetoothDevice device) {
         disconnectBle();stopHome();stopDashboard();++controlEpoch;++authEpoch;
         newSetupPage(Screen.CONNECT_DEVICE);setupBusy=true;
-        LinearLayout content=createPage("","Kết nối Bluetooth","");
-        addHelp(content,"Đang ghép thiết bị. Xác nhận yêu cầu Bluetooth trên điện thoại nếu được hỏi.");
+        nearbySuppressed=true;
+        bleConnectionSheet=new NearbyDeviceSheet(this,this::cancelBleConnection);
+        String name=device.getName();
+        bleConnectionSheet.showConnecting(name==null?"Hộp hẹn giờ máy lạnh":name);
         final int token=setupEpoch;
-        Button cancel=neutralButton("Hủy");content.addView(cancel);
-        cancel.setOnClickListener(v->{++setupEpoch;setupBusy=false;nearbySuppressed=true;disconnectBle();if(accountId.isEmpty())showAuth(false);else showDevices();});
         presenceIo.execute(()->{
             BleTransport link=null;
             try {
@@ -344,16 +364,24 @@ public final class MainActivity extends Activity {
                     releaseRequestedNetwork();clearDeviceState();api.setBle(connected);api.setExpectedDeviceId(id);
                     pairingDeviceId=id;pairingHostname=id+".local";localDeviceReady=true;
                     activeDevice=new DeviceStore.Device(id,"Hộp hẹn giờ "+id.substring(id.length()-6).toUpperCase(Locale.ROOT),"",pairingHostname,"");
-                    getSharedPreferences("ble_devices_v1",MODE_PRIVATE).edit().putString(device.getAddress(),id).apply();
+                    getSharedPreferences("ble_devices_v1",MODE_PRIVATE).edit().putString(device.getAddress(),id)
+                            .putString("last_connected_address",device.getAddress()).apply();
                     rememberStatus(status);showBleConnected();
                 });
             } catch(Exception error) {
                 if(link!=null)link.close();
-                runOnUiThread(()->{if(currentSetup(token)){setupBusy=false;addHelp(content,errorMessage(error));Button retry=primaryButton("Tìm lại thiết bị");content.addView(retry);retry.setOnClickListener(v->chooseBleDevice());}});
+                runOnUiThread(()->{if(currentSetup(token)){
+                    closeBleConnectionSheet();setupBusy=false;nearbySuppressed=true;
+                    LinearLayout content=createPage("","Chưa kết nối được","");
+                    addHelp(content,errorMessage(error));Button retry=primaryButton("Tìm lại thiết bị");content.addView(retry);
+                    retry.setOnClickListener(v->chooseBleDevice());
+                    Button back=neutralButton("Quay lại");content.addView(back);back.setOnClickListener(v->cancelBleConnection());
+                }});
             }
         });
     }
     private void showBleConnected() {
+        closeBleConnectionSheet();
         setupBusy=false;++controlEpoch;showControl(Tab.OVERVIEW);
     }
     private void beginBleWifi() {

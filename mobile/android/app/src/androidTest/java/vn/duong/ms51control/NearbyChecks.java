@@ -77,7 +77,46 @@ final class NearbyChecks {
                 dialog(sheet.get()).cancel();
             }catch(Throwable e){failure.set(e);}});
             test.waitForIdleSync();check(failure.get()==null,String.valueOf(failure.get()));check(dismissed.get()==1,"User dismissal suppresses rediscovery popup");
-            report.putString("stream","PASS: silent discovery popup, GIF rotation, deduplication, one-tap connection, double-tap guard, multiple devices, dismiss; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
+            test.runOnMainSync(()->{try{
+                android.content.SharedPreferences prefs=a.getSharedPreferences("ble_devices_v1",0);
+                java.util.Map<String,?> before=prefs.getAll();
+                String first="AA:00:00:00:00:01",second="AA:00:00:00:00:02";
+                try {
+                    prefs.edit().clear().commit();
+                    check(!a.shouldReconnectBle(first,true),"System bond alone cannot automatically open an unknown box");
+                    prefs.edit().putString(first,"ms51-test1").commit();
+                    check(a.shouldReconnectBle(first,true),"One saved 3.7.1 box automatically reconnects after upgrade");
+                    check(!a.shouldReconnectBle(first,false),"Removed bond requires explicit pairing again");
+                    prefs.edit().putString(second,"ms51-test2").commit();
+                    check(!a.shouldReconnectBle(first,true),"Ambiguous old pairings require selection once");
+                    prefs.edit().putString("last_connected_address",second).commit();
+                    check(a.shouldReconnectBle(second,true) && !a.shouldReconnectBle(first,true),"Reconnect only last verified box, not another nearby box");
+                    if(autoChecked){
+                        AtomicInteger connections=new AtomicInteger();
+                        BlePicker picker=new BlePicker(a,manager.getAdapter(),()->true,d->a.shouldReconnectBle(d.getAddress(),true),d->connections.incrementAndGet(),()->{});
+                        java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
+                        android.bluetooth.le.ScanResult result=new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice(second),null,-50,System.nanoTime());
+                        add.invoke(picker,result);add.invoke(picker,result);
+                        check(connections.get()==1 && (Boolean)field(picker,"closed"),"Remembered advertisement connects without tapping, stops scanning and ignores queued duplicates");
+                        picker.close();
+                    }
+                } finally {
+                    android.content.SharedPreferences.Editor restore=prefs.edit().clear();
+                    for(java.util.Map.Entry<String,?> entry:before.entrySet())restore.putString(entry.getKey(),(String)entry.getValue());
+                    restore.commit();
+                }
+                sheet.set(new NearbyDeviceSheet(a,dismissed::incrementAndGet));sheet.get().showConnecting("Hộp đã ghép");
+                check(findButton(dialog(sheet.get()).getWindow().getDecorView(),"Kết nối")==null,"Reconnect popup has no second Connect button");
+                check(ManagedChecks.texts(dialog(sheet.get()).getWindow().getDecorView()).contains("Đang kết nối"),"Automatic connection exposes progress");
+            }catch(Throwable e){failure.set(e);}});
+            test.waitForIdleSync();SystemClock.sleep(700);
+            android.graphics.Bitmap connectingShot=test.getUiAutomation().takeScreenshot();
+            try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,"02-tu-ket-noi.png"))){connectingShot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}connectingShot.recycle();
+            test.runOnMainSync(()->{try{dialog(sheet.get()).cancel();}catch(Throwable e){failure.set(e);}});
+            test.waitForIdleSync();
+            check(failure.get()==null,String.valueOf(failure.get()));
+            check(dismissed.get()==2,"Automatic connection can be cancelled");
+            report.putString("stream","PASS: silent discovery popup, GIF rotation, deduplication, one-tap new pairing, remembered/bonded reconnect policy, upgrade migration, duplicate automatic callbacks, progress popup cancellation; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(()->{if(sheet.get()!=null)sheet.get().close();a.finish();});}}
     }

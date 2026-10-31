@@ -7,6 +7,7 @@ import android.bluetooth.le.*;
 import android.os.*;
 import java.util.*;
 import java.util.function.BooleanSupplier;
+import java.util.function.Predicate;
 
 /** Foreground discovery: silent until found, bounded scan windows, no server. */
 @SuppressLint("MissingPermission")
@@ -18,9 +19,11 @@ final class BlePicker implements AutoCloseable {
     private final BooleanSupplier eligible;
     private final Selected selected;
     private final Runnable dismissed;
+    private final Predicate<BluetoothDevice> remembered;
     private boolean closed, scanning;
-    BlePicker(Activity activity,BluetoothAdapter adapter,BooleanSupplier eligible,Selected selected,Runnable dismissed) {
+    BlePicker(Activity activity,BluetoothAdapter adapter,BooleanSupplier eligible,Predicate<BluetoothDevice> remembered,Selected selected,Runnable dismissed) {
         scanner=adapter.getBluetoothLeScanner();this.eligible=eligible;this.selected=selected;this.dismissed=dismissed;
+        this.remembered=remembered;
         sheet=new NearbyDeviceSheet(activity,()->{close();dismissed.run();});scan();
     }
     private final ScanCallback callback=new ScanCallback() {
@@ -31,6 +34,9 @@ final class BlePicker implements AutoCloseable {
     private void add(ScanResult result) {
         if(closed || !eligible.getAsBoolean())return;
         BluetoothDevice device=result.getDevice();
+        if(remembered.test(device)){
+            close();selected.select(device);return;
+        }
         String name=result.getScanRecord()==null?null:result.getScanRecord().getDeviceName();
         sheet.addDevice(device.getAddress(),name==null?"Hẹn Giờ Lạnh":name,()->{
             if(closed || !eligible.getAsBoolean())return;

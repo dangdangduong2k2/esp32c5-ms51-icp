@@ -48,17 +48,35 @@ final class NearbyDeviceSheet implements AutoCloseable {
             Button button=action("Kết nối",true);button.setOnClickListener(v->select.run());content.addView(button,margin(0,0,0,8));
             TextView help=label("Chạm vào hộp để điều khiển ngay",14,false);help.setGravity(Gravity.CENTER);help.setTextColor(Design.MUTED);content.addView(help);
             content.addView(others);
-            dialog.show();
-            Window window=dialog.getWindow();
-            if(window!=null){
-                window.setBackgroundDrawableResource(android.R.color.transparent);window.setGravity(Gravity.BOTTOM);
-                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-                WindowManager.LayoutParams params=window.getAttributes();params.dimAmount=.32f;params.y=dp(16);window.setAttributes(params);resize();
-            }
+            show();
         } else {
             if(addresses.size()==2){TextView more=label("Thiết bị khác ở gần",14,true);others.addView(more,margin(0,18,0,4));}
             Button row=action(name+" · "+address.substring(Math.max(0,address.length()-8)),false);
             row.setContentDescription("Kết nối "+name+" "+address);row.setOnClickListener(v->select.run());others.addView(row,margin(0,6,0,0));resize();
+        }
+    }
+    void showConnecting(String name) {
+        if(closed)return;
+        selected=true;
+        DeviceSpinView spin=new DeviceSpinView(activity);
+        spin.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        content.addView(spin,new LinearLayout.LayoutParams(-1,dp(190)));
+        TextView device=label(name,20,true);device.setGravity(Gravity.CENTER);content.addView(device,margin(0,4,0,12));
+        ProgressBar progress=new ProgressBar(activity);
+        LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(dp(28),dp(28));size.gravity=Gravity.CENTER_HORIZONTAL;
+        content.addView(progress,size);
+        TextView status=label("Đang kết nối…",16,true);status.setGravity(Gravity.CENTER);
+        status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);content.addView(status,margin(0,12,0,6));
+        TextView help=label("Kết nối xong sẽ tự mở Tổng quan",14,false);help.setGravity(Gravity.CENTER);help.setTextColor(Design.MUTED);content.addView(help);
+        show();
+    }
+    private void show() {
+        dialog.show();
+        Window window=dialog.getWindow();
+        if(window!=null){
+            window.setBackgroundDrawableResource(android.R.color.transparent);window.setGravity(Gravity.BOTTOM);
+            window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            WindowManager.LayoutParams params=window.getAttributes();params.dimAmount=.32f;params.y=dp(16);window.setAttributes(params);resize();
         }
     }
     private void resize() {
