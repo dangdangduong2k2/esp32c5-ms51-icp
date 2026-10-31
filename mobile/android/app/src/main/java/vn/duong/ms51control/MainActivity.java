@@ -267,11 +267,11 @@ public final class MainActivity extends Activity {
     }
     private static final int BLE_ENABLE_REQUEST=92;
     private boolean nearbySuppressed, blePromptAttempted, blePromptPending, bleChooseManually;
-    private boolean bleManualDiscovery;
+    private boolean bleManualDiscovery, offlineReturnHome;
     private Button bleDiscoveryButton;
     boolean automaticNearbyAllowed(){
         // Authentication never scans or prompts for Bluetooth.
-        if(screen==Screen.AUTH || screen==Screen.OFFLINE)return false;
+        if(screen==Screen.AUTH || screen==Screen.OFFLINE || screen==Screen.HOME)return false;
         if(deviceStore==null)return false;
         // A new login waits for its first device-list response before deciding.
         if(accountId.isEmpty())return true;
@@ -522,7 +522,7 @@ public final class MainActivity extends Activity {
         if(address.equals(saved.getString("last_connected_address","")))change.remove("last_connected_address");
         change.apply();
         ++controlEpoch;++setupEpoch;stopHome();stopDashboard();disconnectBle();
-        if(accountId.isEmpty())showOfflineDiscovery(true);else {showDevices();chooseBleDevice();}
+        showOfflineDiscovery(true);
     }
 
     private void showAuth(boolean register) {
@@ -586,9 +586,10 @@ public final class MainActivity extends Activity {
 
     private void showOfflineDiscovery() {showOfflineDiscovery(false);}
     private void showOfflineDiscovery(boolean forceSelection) {
+        if(screen!=Screen.OFFLINE)offlineReturnHome=screen!=Screen.AUTH && !accountId.isEmpty();
         endManualDiscovery();stopHome();stopDashboard();++authEpoch;++setupEpoch;
         authBusy=false;setupBusy=false;screen=Screen.OFFLINE;
-        LinearLayout content=createPage("","Chế độ offline","");
+        LinearLayout content=createPage("",forceSelection ? "Dò thiết bị mới" : "Chế độ offline","");
         LinearLayout box=card();content.addView(box);
         DeviceSpinView guide=new DeviceSpinView(this,"phone-near-device.gif");
         box.addView(guide,new LinearLayout.LayoutParams(-1,dp(150)));
@@ -596,10 +597,14 @@ public final class MainActivity extends Activity {
         addHelp(box,"Bật nguồn hộp và đưa điện thoại sát hộp mới. Chạm vào thiết bị tìm thấy để kết nối.");
         addHelp(box,"Không cần Internet.");
         addDiscoveryButton(box);
-        Button back=neutralButton("Quay lại đăng nhập");
-        back.setOnClickListener(v->showAuth(false));content.addView(back,fullParams(0,16,0,0));
+        Button back=neutralButton(offlineReturnHome ? "Quay lại thiết bị" : "Quay lại đăng nhập");
+        back.setOnClickListener(v->leaveOfflineDiscovery());content.addView(back,fullParams(0,16,0,0));
         bleChooseManually=forceSelection;bleManualDiscovery=true;nearbySuppressed=false;blePromptAttempted=false;
         updateDiscoveryButton();discoverNearby(true);
+    }
+
+    private void leaveOfflineDiscovery(){
+        if(offlineReturnHome && !accountId.isEmpty())showDevices();else showAuth(false);
     }
 
     private EditText accountSecret(LinearLayout content, String hint) {
@@ -669,7 +674,7 @@ public final class MainActivity extends Activity {
         deviceLabels.clear();
         if (devices.isEmpty()) {
             TextView empty = valueText("Chưa có thiết bị"); empty.setTextSize(19); content.addView(empty);
-            addHelp(content,"Nhấn Dò thiết bị và đưa điện thoại sát hộp mới để ghép nối.");
+            addHelp(content,"Nhấn Dò thiết bị mới và đưa điện thoại sát hộp để ghép nối.");
         } else {
             addSectionTitle(content,"Thiết bị đã ghép");
             for (DeviceStore.Device device : devices) {
@@ -691,7 +696,14 @@ public final class MainActivity extends Activity {
             addHelp(content,"Chạm để mở · Giữ để đổi tên hoặc bỏ ghép nối.");
 
         }
-        addDiscoveryButton(content);
+        Button findNew=primaryButton("Dò thiết bị mới");
+        findNew.setOnClickListener(v->showOfflineDiscovery(true));
+        content.addView(findNew,fullParams(0,20,0,0));
+        Button offline=neutralButton("Chế độ offline");offline.setTextSize(14);
+        offline.setOnClickListener(v->showOfflineDiscovery());
+        LinearLayout.LayoutParams entry=new LinearLayout.LayoutParams(-2,dp(48));
+        entry.gravity=Gravity.CENTER_HORIZONTAL;entry.topMargin=dp(12);
+        content.addView(offline,entry);
         mainHandler.post(homeRefresh);
     }
 
@@ -3285,7 +3297,7 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if(screen==Screen.OFFLINE){showAuth(false);return;}
+        if(screen==Screen.OFFLINE){leaveOfflineDiscovery();return;}
         if(bleMode && screen==Screen.CONNECT_DEVICE){
             ++setupEpoch;setupBusy=false;disconnectBle();
             if(accountId.isEmpty())showAuth(false);else showDevices();return;

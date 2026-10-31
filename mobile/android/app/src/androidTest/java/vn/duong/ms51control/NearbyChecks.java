@@ -163,7 +163,24 @@ final class NearbyChecks {
             saveShot(test,folder,"05-offline-guide.png");
             test.runOnMainSync(()->a.onBackPressed());test.waitForIdleSync();
             check(failure.get()==null,String.valueOf(failure.get()));
-            report.putString("stream","PASS: first-pair RSSI strength/stability, per-device isolation, stale/invalid samples, known weak reconnect; quiet login, explicit offline entry starts scanner and GIF guide, back/return/background stop scanning, paired home requires manual discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
+            String previewOwner=(String)ManagedChecks.get(a,"accountId"),previewName=(String)ManagedChecks.get(a,"username");
+            DeviceStore previewStore=(DeviceStore)ManagedChecks.get(a,"deviceStore");
+            try {
+                test.runOnMainSync(()->{try{
+                    ManagedChecks.set(a,"accountId","entry-preview");ManagedChecks.set(a,"username","duongdd");
+                    previewStore.save("entry-preview",new DeviceStore.Device("ms51-preview","Hộp máy lạnh","Wi-Fi đã lưu","",""));
+                    ManagedChecks.invoke(a,"showDevices",new Class[]{});ManagedChecks.invoke(a,"stopHome",new Class[]{});
+                }catch(Exception e){failure.set(e);}});
+                test.waitForIdleSync();SystemClock.sleep(300);saveShot(test,folder,"06-home-entries.png");
+            }finally{
+                test.runOnMainSync(()->{try{
+                    previewStore.remove("entry-preview","ms51-preview");
+                    ManagedChecks.set(a,"accountId",previewOwner);ManagedChecks.set(a,"username",previewName);
+                    ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
+                }catch(Exception e){failure.set(e);}});
+            }
+            check(failure.get()==null,String.valueOf(failure.get()));
+            report.putString("stream","PASS: first-pair RSSI strength/stability, per-device isolation, stale/invalid samples, known weak reconnect; quiet login, explicit offline entry starts scanner and GIF guide, back/return/background stop scanning, home new-device and offline entries, guide on both routes, signed-in return preserved, empty home quiet, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(()->{if(sheet.get()!=null)sheet.get().close();a.finish();});}}
     }
@@ -179,16 +196,20 @@ final class NearbyChecks {
             ManagedChecks.invoke(a,"showDevices",new Class[]{});ManagedChecks.invoke(a,"stopHome",new Class[]{});
             check(!a.automaticNearbyAllowed(),"Unknown account list must not be treated as empty before server response");
             store.replace("discovery-test",new org.json.JSONArray());
-            check(a.automaticNearbyAllowed(),"Confirmed empty account can automatically discover");
+            check(!a.automaticNearbyAllowed(),"Empty account also waits for explicit entry");
             store.save("discovery-test",new DeviceStore.Device("ms51-3844be1fe4e0","MS51 1FE4E0","","",""));
             check(!a.automaticNearbyAllowed(),"Paired device suppresses auto discovery even with missing SSID or offline");
             ManagedChecks.invoke(a,"showDevices",new Class[]{});ManagedChecks.invoke(a,"stopHome",new Class[]{});
             ManagedChecks.set(a,"nearbySuppressed",false);
             ManagedChecks.invoke(a,"discoverNearby",new Class[]{boolean.class},false);
             check(ManagedChecks.get(a,"blePicker")==null && !(Boolean)ManagedChecks.get(a,"blePromptPending"),"Paired home never scans or prompts Bluetooth automatically");
-            Button scan=findButton(a.getWindow().getDecorView(),"Dò thiết bị");check(scan!=null,"Home offers explicit discovery button");
+            Button scan=findButton(a.getWindow().getDecorView(),"Dò thiết bị mới");check(scan!=null,"Home offers new device entry");
+            check(findButton(a.getWindow().getDecorView(),"Chế độ offline")!=null,"Home offers offline entry too");
             if(radio){
                 scan.performClick();BlePicker picker=(BlePicker)ManagedChecks.get(a,"blePicker");
+                check((Boolean)ManagedChecks.get(a,"bleChooseManually"),"New device entry requires explicit selection");
+                check(find(a.getWindow().getDecorView(),DeviceSpinView.class)!=null,"New device entry shows GIF guide");
+                scan=findButton(a.getWindow().getDecorView(),"Đang dò");
                 check(picker!=null && (Boolean)ManagedChecks.get(a,"bleManualDiscovery"),"Tap starts manual discovery with a paired Wi-Fi device");
                 check(scan.getText().toString().contains("Dừng dò"),"Manual scan offers visible progress and stop");
                 NearbyDeviceSheet choices=(NearbyDeviceSheet)field(picker,"sheet");
@@ -214,6 +235,16 @@ final class NearbyChecks {
                 ManagedChecks.set(a,"bleManualDiscovery",true);ManagedChecks.set(a,"blePromptPending",true);
                 a.onRequestPermissionsResult(91,new String[]{"android.permission.BLUETOOTH_SCAN"},new int[]{android.content.pm.PackageManager.PERMISSION_DENIED});
                 check(!(Boolean)ManagedChecks.get(a,"bleManualDiscovery"),"Denied scan permission ends manual intent");
+                a.onBackPressed();ManagedChecks.invoke(a,"stopHome",new Class[]{});
+                check("discovery-test".equals(ManagedChecks.get(a,"accountId")),"Returning from new device keeps account");
+                check(findButton(a.getWindow().getDecorView(),"Dò thiết bị mới")!=null,"Back returns to home instead of login");
+                findButton(a.getWindow().getDecorView(),"Chế độ offline").performClick();
+                check(!(Boolean)ManagedChecks.get(a,"bleChooseManually"),"Offline entry permits remembered reconnect");
+                check(ManagedChecks.get(a,"blePicker")!=null,"Home offline starts scan immediately");
+                findButton(a.getWindow().getDecorView(),"Quay lại thiết bị").performClick();
+                ManagedChecks.invoke(a,"stopHome",new Class[]{});
+                check(ManagedChecks.get(a,"blePicker")==null && !a.automaticNearbyAllowed(),"Return button stops scan and home remains quiet");
+                check("discovery-test".equals(ManagedChecks.get(a,"accountId")),"Offline exit retains signed-in account");
             }
             ManagedChecks.set(a,"accountId","");
             ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
