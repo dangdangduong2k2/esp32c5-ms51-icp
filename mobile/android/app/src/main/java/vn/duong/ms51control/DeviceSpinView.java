@@ -11,12 +11,14 @@ import java.io.InputStream;
 /** Bundled GIF, decoded off the UI thread and released when the popup closes. */
 @SuppressWarnings("deprecation")
 final class DeviceSpinView extends View {
+    private final String assetName;
     private Movie movie;
     private long started;
     private boolean attached, loading;
     private int loadEpoch;
-    DeviceSpinView(Context context) {
-        super(context);setLayerType(View.LAYER_TYPE_SOFTWARE,null);
+    DeviceSpinView(Context context) {this(context,"device-spin.gif");}
+    DeviceSpinView(Context context,String assetName) {
+        super(context);this.assetName=assetName;setLayerType(View.LAYER_TYPE_SOFTWARE,null);
         setBackgroundColor(android.graphics.Color.WHITE);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
@@ -27,7 +29,7 @@ final class DeviceSpinView extends View {
         final android.content.res.AssetManager assets=getContext().getAssets();
         new Thread(()->{
             Movie decoded=null;
-            try(InputStream stream=assets.open("device-spin.gif")){decoded=Movie.decodeStream(stream);}
+            try(InputStream stream=assets.open(assetName)){decoded=Movie.decodeStream(stream);}
             catch(Exception ignored){/* Name and connect action remain available. */}
             final Movie result=decoded;
             new android.os.Handler(android.os.Looper.getMainLooper()).post(()->{

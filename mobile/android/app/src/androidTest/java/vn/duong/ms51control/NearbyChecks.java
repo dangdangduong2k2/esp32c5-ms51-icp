@@ -18,21 +18,11 @@ final class NearbyChecks {
             final MainActivity a=activity;
             android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)a.getSystemService(android.content.Context.BLUETOOTH_SERVICE);
             boolean autoChecked=manager!=null && manager.getAdapter()!=null && manager.getAdapter().isEnabled();
-            if(autoChecked){
-                long autoDeadline=SystemClock.elapsedRealtime()+5000;
-                AtomicReference<Object> picker=new AtomicReference<>();
-                while(picker.get()==null && SystemClock.elapsedRealtime()<autoDeadline){
-                    test.runOnMainSync(()->{try{picker.set(ManagedChecks.get(a,"blePicker"));}catch(Exception e){failure.set(e);}});
-                    SystemClock.sleep(100);
-                }
-                check(picker.get()!=null,"Opening app starts discovery without a button tap");
-                test.runOnMainSync(()->{try{
-                    check(!(Boolean)field(picker.get(),"closed"),"Automatic scan remains active");
-                    a.onPause();
-                    check(ManagedChecks.get(a,"blePicker")==null && (Boolean)field(picker.get(),"closed"),"Background stops scan and closes popup owner");
-                    a.onResume();ManagedChecks.set(a,"nearbySuppressed",true);
-                }catch(Throwable e){failure.set(e);}});
-            }
+            SystemClock.sleep(800);
+            test.runOnMainSync(()->{try{
+                check(ManagedChecks.get(a,"blePicker")==null,"Login never starts scanner");
+                check(!(Boolean)ManagedChecks.get(a,"blePromptPending"),"Login never requests Bluetooth permission");
+            }catch(Throwable e){failure.set(e);}});
             test.runOnMainSync(()->{try{
                 checkProximity();
                 checkDiscoveryPolicy(a,autoChecked);
@@ -155,7 +145,25 @@ final class NearbyChecks {
             test.waitForIdleSync();SystemClock.sleep(700);
             android.graphics.Bitmap choicesShot=test.getUiAutomation().takeScreenshot();
             try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,"03-chon-thiet-bi.png"))){choicesShot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}choicesShot.recycle();
-            report.putString("stream","PASS: first-pair RSSI strength/stability, per-device isolation, stale/invalid samples, known weak reconnect; login auto discovery despite saved Wi-Fi pairings, no login scan button, paired home requires manual discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
+            test.runOnMainSync(()->{try{
+                sheet.get().close();ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
+            }catch(Exception e){failure.set(e);}});
+            test.waitForIdleSync();SystemClock.sleep(300);
+            saveShot(test,folder,"04-login-offline-entry.png");
+            test.runOnMainSync(()->findButton(a.getWindow().getDecorView(),"Chế độ offline").performClick());
+            long guideDeadline=SystemClock.elapsedRealtime()+5000;
+            AtomicBoolean guideLoaded=new AtomicBoolean();
+            while(!guideLoaded.get() && SystemClock.elapsedRealtime()<guideDeadline){
+                test.runOnMainSync(()->{try{
+                    DeviceSpinView guide=find(a.getWindow().getDecorView(),DeviceSpinView.class);
+                    guideLoaded.set(guide!=null && field(guide,"movie")!=null);
+                }catch(Exception e){failure.set(e);}});SystemClock.sleep(100);
+            }
+            check(guideLoaded.get(),"Phone approach GIF actually decodes on Android");
+            saveShot(test,folder,"05-offline-guide.png");
+            test.runOnMainSync(()->a.onBackPressed());test.waitForIdleSync();
+            check(failure.get()==null,String.valueOf(failure.get()));
+            report.putString("stream","PASS: first-pair RSSI strength/stability, per-device isolation, stale/invalid samples, known weak reconnect; quiet login, explicit offline entry starts scanner and GIF guide, back/return/background stop scanning, paired home requires manual discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(()->{if(sheet.get()!=null)sheet.get().close();a.finish();});}}
     }
@@ -166,7 +174,7 @@ final class NearbyChecks {
         try {
             ManagedChecks.invoke(a,"endManualDiscovery",new Class[]{});
             prefs.edit().clear().commit();ManagedChecks.set(a,"accountId","");
-            check(a.automaticNearbyAllowed(),"No Wi-Fi-linked device keeps automatic offline discovery");
+            check(!a.automaticNearbyAllowed(),"Login requires explicit offline entry even without Wi-Fi device");
             ManagedChecks.set(a,"accountId","discovery-test");
             ManagedChecks.invoke(a,"showDevices",new Class[]{});ManagedChecks.invoke(a,"stopHome",new Class[]{});
             check(!a.automaticNearbyAllowed(),"Unknown account list must not be treated as empty before server response");
@@ -209,25 +217,40 @@ final class NearbyChecks {
             }
             ManagedChecks.set(a,"accountId","");
             ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
-            check(a.automaticNearbyAllowed(),"Login automatically discovers even with cached Wi-Fi pairings");
-            check(findButton(a.getWindow().getDecorView(),"Dò thiết bị")==null,"Login has no manual discovery button");
+            check(!a.automaticNearbyAllowed(),"Login cannot auto discover even with cached Wi-Fi pairings");
+            check(findButton(a.getWindow().getDecorView(),"Dò thiết bị")==null,"Login has no scan button");
+            Button offline=findButton(a.getWindow().getDecorView(),"Chế độ offline");
+            check(offline!=null,"Login offers compact offline entry");
+            check(!ManagedChecks.texts(a.getWindow().getDecorView()).contains("Đưa điện thoại"),"Login does not show scanning instructions");
             if(radio){
                 ManagedChecks.set(a,"nearbySuppressed",false);
                 ManagedChecks.invoke(a,"discoverNearby",new Class[]{boolean.class},false);
-                BlePicker loginPicker=(BlePicker)ManagedChecks.get(a,"blePicker");
-                check(loginPicker!=null,"Login starts scanner without manual tap despite cached devices");
-                NearbyDeviceSheet popup=(NearbyDeviceSheet)field(loginPicker,"sheet");
-                check(!dialog(popup).isShowing(),"Login popup waits until device is found");
+                check(ManagedChecks.get(a,"blePicker")==null,"Login refresh cannot start scanning");
+                offline.performClick();
+                BlePicker picker=(BlePicker)ManagedChecks.get(a,"blePicker");
+                check(picker!=null,"Offline tap starts scan without another tap");
+                check(ManagedChecks.texts(a.getWindow().getDecorView()).contains("Đưa điện thoại lại gần hộp"),"Offline guide visible while scanning");
+                DeviceSpinView guide=find(a.getWindow().getDecorView(),DeviceSpinView.class);
+                check(guide!=null && field(guide,"assetName").equals("phone-near-device.gif"),"Offline shows phone approach GIF");
+                NearbyDeviceSheet popup=(NearbyDeviceSheet)field(picker,"sheet");
+                check(!dialog(popup).isShowing(),"Offline popup still waits for nearby device");
                 android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)a.getSystemService(android.content.Context.BLUETOOTH_SERVICE);
                 java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
-                emitClose(add,loginPicker,manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"));
-                check(dialog(popup).isShowing(),"Found device automatically opens login popup");
-                ManagedChecks.invoke(a,"stopNearby",new Class[]{});
+                emitClose(add,picker,manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"));
+                check(dialog(popup).isShowing(),"Close device opens offline popup");
+                a.onBackPressed();
+                check(ManagedChecks.get(a,"blePicker")==null && !dialog(popup).isShowing(),"Back closes scanner and popup");
+                check(!a.automaticNearbyAllowed(),"Returning to login stays quiet");
+                findButton(a.getWindow().getDecorView(),"Chế độ offline").performClick();
+                a.onPause();a.onResume();
+                check(ManagedChecks.get(a,"blePicker")==null,"Background stops offline scan");
+                findButton(a.getWindow().getDecorView(),"Dò thiết bị").performClick();
+                check(ManagedChecks.get(a,"blePicker")!=null,"Offline scan can be restarted");
+                findButton(a.getWindow().getDecorView(),"Quay lại đăng nhập").performClick();
+                check(ManagedChecks.get(a,"blePicker")==null,"Return button also closes scan");
             }
             ManagedChecks.set(a,"accountId","discovery-test");
-            check(a.automaticNearbyAllowed(),"Login wins over stale session identity");
-            store.remove("discovery-test","ms51-3844be1fe4e0");
-            check(a.automaticNearbyAllowed(),"Removing last Wi-Fi pairing allows automatic discovery again");
+            check(!a.automaticNearbyAllowed(),"Login remains quiet with stale account identity");
         } finally {
             android.content.SharedPreferences.Editor restore=prefs.edit().clear();
             for(java.util.Map.Entry<String,?> entry:before.entrySet())restore.putString(entry.getKey(),(String)entry.getValue());
@@ -235,6 +258,10 @@ final class NearbyChecks {
             ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
             ManagedChecks.set(a,"nearbySuppressed",true);
         }
+    }
+    private static void saveShot(Instrumentation test,java.io.File folder,String name)throws Exception {
+        android.graphics.Bitmap shot=test.getUiAutomation().takeScreenshot();
+        try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,name))){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}shot.recycle();
     }
     private static void emitClose(java.lang.reflect.Method add,BlePicker picker,android.bluetooth.BluetoothDevice device)throws Exception {
         NearbyDeviceSheet popup=(NearbyDeviceSheet)field(picker,"sheet");

@@ -75,7 +75,7 @@ public final class MainActivity extends Activity {
     private volatile int dashboardEpoch;
     private volatile boolean foreground;
 
-    private enum Screen { AUTH, HOME, CONNECT_DEVICE, CONFIGURE_WIFI, WIFI_PASSWORD, SWITCH_PHONE, CONTROL }
+    private enum Screen { AUTH, OFFLINE, HOME, CONNECT_DEVICE, CONFIGURE_WIFI, WIFI_PASSWORD, SWITCH_PHONE, CONTROL }
     private enum Tab { OVERVIEW, SETTINGS, FIRMWARE, DEVICE }
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -270,8 +270,8 @@ public final class MainActivity extends Activity {
     private boolean bleManualDiscovery;
     private Button bleDiscoveryButton;
     boolean automaticNearbyAllowed(){
-        // The login page always offers nearby offline connection automatically.
-        if(screen==Screen.AUTH)return true;
+        // Authentication never scans or prompts for Bluetooth.
+        if(screen==Screen.AUTH || screen==Screen.OFFLINE)return false;
         if(deviceStore==null)return false;
         // A new login waits for its first device-list response before deciding.
         if(accountId.isEmpty())return true;
@@ -287,7 +287,7 @@ public final class MainActivity extends Activity {
     private boolean nearbyEligible(){
         return foreground && !isFinishing() && !isDestroyed() && !demoMode && !bleMode
                 && !authBusy && !setupBusy && !openingDevice
-                && (screen==Screen.AUTH || screen==Screen.HOME || screen==Screen.CONNECT_DEVICE)
+                && (screen==Screen.OFFLINE || screen==Screen.HOME || screen==Screen.CONNECT_DEVICE)
                 && (bleManualDiscovery || automaticNearbyAllowed());
     }
     private void stopNearby(){if(blePicker!=null){blePicker.close();blePicker=null;}}
@@ -345,7 +345,7 @@ public final class MainActivity extends Activity {
                     device->!bleChooseManually && shouldReconnectBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
                     device->isPairedBle(device.getAddress(),device.getBondState()==android.bluetooth.BluetoothDevice.BOND_BONDED),
                     this::connectBleDevice,()->{nearbySuppressed=true;endManualDiscovery();});
-            if(manual)showMessage("Đưa điện thoại sát hộp mới để ghép nối…");
+            if(manual && screen!=Screen.OFFLINE)showMessage("Đưa điện thoại sát hộp mới để ghép nối…");
         }catch(SecurityException|IllegalStateException|ActivityNotFoundException error){
             blePromptPending=false;nearbySuppressed=true;endManualDiscovery();
             if(manual)showMessage("Hãy bật Bluetooth và cấp quyền Thiết bị ở gần rồi thử lại.");
@@ -522,8 +522,7 @@ public final class MainActivity extends Activity {
         if(address.equals(saved.getString("last_connected_address","")))change.remove("last_connected_address");
         change.apply();
         ++controlEpoch;++setupEpoch;stopHome();stopDashboard();disconnectBle();
-        if(accountId.isEmpty())showAuth(false);else showDevices();
-        chooseBleDevice();
+        if(accountId.isEmpty())showOfflineDiscovery(true);else {showDevices();chooseBleDevice();}
     }
 
     private void showAuth(boolean register) {
@@ -532,7 +531,7 @@ public final class MainActivity extends Activity {
         screen = Screen.AUTH; setupBusy = false; authBusy = false; registerMode = register;
         lastUiMessage = "";
         LinearLayout content = createPage("", register ? "Tạo tài khoản" : "Đăng nhập", "");
-        if(!register)addHelp(content,"Đưa điện thoại sát hộp mới để ghép Bluetooth.");
+
         LinearLayout form=card();content.addView(form);content=form;
         TextView loginLabel=mutedText("Tên đăng nhập");content.addView(loginLabel,fullParams(0,0,0,6));
         accountName = textInput("Tên đăng nhập", false);loginLabel.setLabelFor(View.generateViewId());accountName.setId(loginLabel.getLabelFor()); accountName.setSingleLine(true);
@@ -575,6 +574,32 @@ public final class MainActivity extends Activity {
         alternate.setOnClickListener(v -> { if (!authBusy) showAuth(!register); });
         content.addView(submit,fullParams(0,20,0,8)); content.addView(alternate);
         if(register) addHelp(content,"Mật khẩu tối thiểu 8 ký tự.");
+        else {
+            Button offline=neutralButton("Chế độ offline");
+            offline.setTextSize(14);
+            offline.setOnClickListener(v->{if(!authBusy && !pendingBleWifi)showOfflineDiscovery();});
+            LinearLayout.LayoutParams size=new LinearLayout.LayoutParams(-2,dp(48));
+            size.gravity=Gravity.CENTER_HORIZONTAL;size.topMargin=dp(12);
+            content.addView(offline,size);
+        }
+    }
+
+    private void showOfflineDiscovery() {showOfflineDiscovery(false);}
+    private void showOfflineDiscovery(boolean forceSelection) {
+        endManualDiscovery();stopHome();stopDashboard();++authEpoch;++setupEpoch;
+        authBusy=false;setupBusy=false;screen=Screen.OFFLINE;
+        LinearLayout content=createPage("","Chế độ offline","");
+        LinearLayout box=card();content.addView(box);
+        DeviceSpinView guide=new DeviceSpinView(this,"phone-near-device.gif");
+        box.addView(guide,new LinearLayout.LayoutParams(-1,dp(150)));
+        addSectionTitle(box,"Đưa điện thoại lại gần hộp");
+        addHelp(box,"Bật nguồn hộp và đưa điện thoại sát hộp mới. Chạm vào thiết bị tìm thấy để kết nối.");
+        addHelp(box,"Không cần Internet.");
+        addDiscoveryButton(box);
+        Button back=neutralButton("Quay lại đăng nhập");
+        back.setOnClickListener(v->showAuth(false));content.addView(back,fullParams(0,16,0,0));
+        bleChooseManually=forceSelection;bleManualDiscovery=true;nearbySuppressed=false;blePromptAttempted=false;
+        updateDiscoveryButton();discoverNearby(true);
     }
 
     private EditText accountSecret(LinearLayout content, String hint) {
@@ -3260,6 +3285,7 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        if(screen==Screen.OFFLINE){showAuth(false);return;}
         if(bleMode && screen==Screen.CONNECT_DEVICE){
             ++setupEpoch;setupBusy=false;disconnectBle();
             if(accountId.isEmpty())showAuth(false);else showDevices();return;
