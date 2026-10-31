@@ -13,7 +13,7 @@
 
 ## Cài đặt và giới hạn kiểm thử
 
-Cài đè APK 3.7.1, cùng chữ ký với 3.7.0. Lần sửa này chỉ đổi app, không đổi server/C5/MS51. Bo cần firmware hỗ trợ BLE; **gói C5 r2 ở bản 3.7.0 vẫn cần nạp lại trên bo thử đã rút ở phiên trước**.
+Cài đè APK 3.7.1, cùng chữ ký với 3.7.0. Lần sửa giao diện này chỉ đổi app, không đổi server/C5/MS51. Bo cần firmware hỗ trợ BLE. **Bo thử đã nạp C5 r2 ngày 31/10/2026 sau báo cáo tự ngắt, người dùng kết nối lại và báo hiện ổn**; xem [kiểm tra trên bo](../hen-gio-lanh-3.7.0/hardware-check-2026-10-31.md).
 
 Đã chạy build, lint (không có lỗi) và instrumentation Android 35: tự khởi động quét, dừng khi ra nền, popup chỉ hiện sau sự kiện tìm thấy, GIF thực sự đổi khung hình, chống quảng bá trùng/chạm đúp, chọn đúng thiết bị, đóng popup, mở thẳng điều khiển BLE, cài đặt offline và hồi quy các mục online. Sự kiện tìm thấy hộp trong kiểm thử được mô phỏng; chưa xác nhận kết nối vô tuyến với C5 thật ở lần sửa này.
 

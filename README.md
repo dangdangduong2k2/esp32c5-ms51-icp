@@ -6,7 +6,7 @@
 
 ## Bản thử mới: Hẹn Giờ Lạnh 3.7.0 — Bluetooth
 
-[APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.0.apk) · [C5 r2](https://103-9-78-139.sslip.io/downloads/ESP32-C5-Bluetooth-3.7.0-r2.zip) · [Cách dùng và kiểm thử](docs/hen-gio-lanh-3.7.0/README.md). Thêm và điều khiển gần không cần Internet/tài khoản; thêm Wi-Fi để nhận quyền online. C5 r2 sửa cấu hình bộ nhớ, đang chờ nạp và kiểm tra đồng thời Wi-Fi/BLE trên mạch thật. APK vẫn 3.7.0.
+[APK](https://103-9-78-139.sslip.io/downloads/Hen-Gio-Lanh-3.7.0.apk) · [C5 r2](https://103-9-78-139.sslip.io/downloads/ESP32-C5-Bluetooth-3.7.0-r2.zip) · [Cách dùng và kiểm thử](docs/hen-gio-lanh-3.7.0/README.md). Thêm và điều khiển gần không cần Internet/tài khoản; thêm Wi-Fi để nhận quyền online. C5 r2 đã nạp và xác minh ngày 31/10, điện thoại kết nối lại ổn trong kiểm tra ngắn hạn; xem [ghi nhận trên bo](docs/hen-gio-lanh-3.7.0/hardware-check-2026-10-31.md). App mới nhất ở trên là 3.7.1.
 
 ## Android 3.6.4
 

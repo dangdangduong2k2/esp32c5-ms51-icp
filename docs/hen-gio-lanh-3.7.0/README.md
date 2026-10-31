@@ -4,7 +4,7 @@
 
 Bản r2 giảm RAM dành cho tối ưu tốc độ Wi-Fi và các hàng đợi Bluetooth, chỉ cấp phát bộ đệm 36 KiB khi nhận firmware rồi giải phóng. Không giữ bộ đệm firmware cố định khi TLS cần bắt tay. Lỗi thiếu RAM cũng được báo đúng, thay vì báo nhầm file HEX hỏng. USB `debug` bổ sung thông tin RAM và IP để chẩn đoán.
 
-Trước khi người dùng rút bo, đã thấy trao đổi BLE và MS51 đã báo xác minh đủ 28.942 byte cùng tín hiệu `local_settings=1`. Tuy nhiên bản C5 đang trên bo khi rút vẫn gặp thiếu RAM khi kết nối máy chủ. **C5 r2 được build và kiểm thử phần mềm sau khi bo đã rút, chưa được nạp hoặc xác nhận đồng thời Wi-Fi/BLE/TLS trên mạch thật. Lần tới cần nạp lại C5 r2.** Không cần cài lại APK nếu đã có 3.7.0.
+Trước khi người dùng rút bo, đã thấy trao đổi BLE và MS51 đã báo xác minh đủ 28.942 byte cùng tín hiệu `local_settings=1`. Bản C5 khi đó gặp thiếu RAM; r2 được xuất sau khi bo đã rút. **Ngày 31/10/2026 đã nạp và xác minh r2, giữ nguyên NVS; người dùng kết nối lại bằng app 3.7.1 và báo hiện ổn.** RAM trống tăng từ 20.400 lên 73.564 byte sau khởi động. Xem [ghi nhận trên bo và giới hạn kiểm thử](hardware-check-2026-10-31.md). Không cần cài lại app cho lần nạp C5 này.
 
 Bản thử gồm APK, C5 và MS51. App thêm thiết bị qua BLE; không cần đăng nhập, Wi-Fi hay máy chủ để dùng chế độ gần. Khi chọn **Thêm Wi-Fi và liên kết tài khoản**, điện thoại gửi cấu hình Wi-Fi qua BLE, đăng nhập và ghép tài khoản với VPS hiện tại. Sau đó các chức năng bổ sung vẫn do quyền tài khoản trên máy chủ quyết định.
 
