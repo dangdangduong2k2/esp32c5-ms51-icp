@@ -1573,11 +1573,6 @@ public final class MainActivity extends Activity {
         LinearLayout row=new LinearLayout(this);
         LinearLayout cutoff=temperatureCard("Nhiệt độ động cơ",0);
         LinearLayout defrost=temperatureCard("Nhiệt độ giám sát",2);
-        if(bleMode){
-            triggerSave=null;row.addView(cutoff,new LinearLayout.LayoutParams(0,-2,1));
-            LinearLayout.LayoutParams right=new LinearLayout.LayoutParams(0,-2,1);right.leftMargin=dp(12);row.addView(defrost,right);
-            content.addView(row,fullParams(0,6,0,12));return;
-        }
         for(LinearLayout column : new LinearLayout[]{cutoff,defrost}) {
             View divider=new View(this); divider.setBackgroundColor(Design.LINE);
             LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));
@@ -1631,6 +1626,7 @@ public final class MainActivity extends Activity {
         releaseOffscreenDashboardFocus();
         JSONObject trigger=status==null ? null : status.optJSONObject("trigger");
         boolean supported=trigger!=null && trigger.optBoolean("enabled") && trigger.optBoolean("thermal_supported");
+        boolean transportSupported=!bleMode || (status!=null && status.optBoolean("ble_thermal_write_supported"));
         if(supported && !triggerLoaded && !triggerSaving) {
             boolean configured=trigger.optBoolean("thermal_enabled");
             if(configured) motorSensorIndex="20K".equals(trigger.optString("source")) ? 1 : 0;
@@ -1641,16 +1637,17 @@ public final class MainActivity extends Activity {
             defrostDraftPending=false; safetyDraftPending=false; triggerLoaded=true; motorSelectionPending=false; renderTemperatureCards();
         }
         boolean safetySupported=supported && trigger.optBoolean("safety_supported");
-        boolean canEdit=supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting;
+        boolean canEdit=supported && transportSupported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting;
         safetySwitch.setEnabled(canEdit && safetySupported);
         ((NumberStepper)triggerThreshold.getParent()).setEnabled(canEdit && safetySupported && safetySwitch.isChecked());
         defrostSwitch.setEnabled(canEdit && trigger.has("defrost_enabled"));
         ((NumberStepper)defrostThreshold.getParent()).setEnabled(canEdit && defrostSwitch.isChecked());
-        if(motorSensorSwitch!=null) motorSensorSwitch.setEnabled(supported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
-        triggerSave.setEnabled(supported && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting && !status.optBoolean("busy",true));
+        if(motorSensorSwitch!=null) motorSensorSwitch.setEnabled(!triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
+        triggerSave.setEnabled(canEdit && !status.optBoolean("busy",true));
         mainHandler.removeCallbacks(expireTriggerControls);
         if(triggerSave.isEnabled()) mainHandler.postDelayed(expireTriggerControls,5000);
         if(triggerSaving) triggerState.setText("Đang lưu…");
+        else if(!transportSupported && status!=null) triggerState.setText("Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
         else if(!supported) triggerState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
         else if(safetyDraftPending) triggerState.setText("Nhấn Lưu để áp dụng thay đổi.");
         else if(!safetySupported) triggerState.setText("Cần cập nhật thiết bị để dùng ngưỡng an toàn.");
@@ -1661,6 +1658,7 @@ public final class MainActivity extends Activity {
         else if(!trigger.optBoolean("sensor_valid")) triggerState.setText("Kiểm tra cảm biến động cơ · Không chuyển bước.");
         else triggerState.setText(trigger.optBoolean("active") ? "Vượt ngưỡng · Kết thúc OP1 khi đang chạy." : "Vượt ngưỡng sẽ kết thúc OP1.");
         if(triggerSaving) defrostState.setText("Đang lưu…");
+        else if(!transportSupported && status!=null) defrostState.setText("Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
         else if(!supported) defrostState.setText("Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
         else if(defrostDraftPending) defrostState.setText("Nhấn Lưu để áp dụng thay đổi.");
         else if(!trigger.has("defrost_enabled")) defrostState.setText("Cần cập nhật thiết bị để bật/tắt ngưỡng.");
@@ -1675,6 +1673,7 @@ public final class MainActivity extends Activity {
         try {
             int value=new java.math.BigDecimal(field.getText().toString().trim().replace(',','.')).movePointRight(2).intValueExact();
             if(value < -5500 || value > 12500) throw new IllegalArgumentException();
+            field.setError(null);
             return value;
         } catch(Exception invalid) {
             field.setError("Nhập từ -55 đến 125 °C, tối đa 2 số lẻ.");
@@ -1788,6 +1787,14 @@ public final class MainActivity extends Activity {
             try {
                 status = session.get("/api/status");
                 if(epoch!=dashboardEpoch || !foreground)return;
+                // Temperature comes from C5; do not wait for the separate MS51
+                // debug/history requests before showing a fresh sensor sample.
+                final JSONObject sensorStatus=status;
+                onControl(controlToken,()->{
+                    if(epoch==dashboardEpoch && foreground && screen==Screen.CONTROL && tab==Tab.OVERVIEW){
+                        rememberStatus(sensorStatus);renderTemperature(sensorStatus);renderTrigger(sensorStatus,lastDebug);
+                    }
+                });
                 debug = session.get("/api/debug");
                 if (readHistory && currentControl(controlToken) && epoch == dashboardEpoch && foreground) {
                     try { history = session.history(); }
@@ -1819,7 +1826,7 @@ public final class MainActivity extends Activity {
                     updateUnlock(finalDebug);
                 } else if (dashboardConnection != null) {
                     updateUnlock(null);
-                    renderDashboard(null, null);
+                    renderDashboard(finalStatus, null);
                     dashboardMode.setText("Mất kết nối");
                     dashboardConnection.setText("Chưa đọc được thiết bị: " + errorMessage(finalFailure));
                 }

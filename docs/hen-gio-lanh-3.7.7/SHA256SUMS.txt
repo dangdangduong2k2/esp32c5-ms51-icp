@@ -1,0 +1,3 @@
+a5ef15c365ab241a4dac0a529717f1086d3b0b288bafc4e6c3c3313c48ca1119  Hen-Gio-Lanh-3.7.7.apk
+b3fdbecc86dba73c2fbae542cef74cc6eedca416edcd1a9f43d0e62e35a64a3f  ESP32-C5-Bluetooth-3.7.7.zip
+6919670035827b746c2066ed6ec1261b0dba7a687ffe55db113a68b6ea14aa87  HUONG-DAN.txt

@@ -93,9 +93,15 @@ cJSON *ms51_ble_request(const char *method,const char *path,const cJSON *body) {
     bool get=!strcmp(method,"GET"), post=!strcmp(method,"POST");
     if(get && !strcmp(path,"/api/runtime-config")) return settings(NULL);
     if(post && !strcmp(path,"/api/ble/settings")) return settings(body);
+    if(get && !strcmp(path,"/api/status")) {
+        cJSON *status=ms51_local_request(method,path,body);
+        if(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(status,"ok")))
+            cJSON_AddBoolToObject(status,"ble_thermal_write_supported",true);
+        return status;
+    }
     bool allowed=(get && (!strcmp(path,"/api/status") || !strcmp(path,"/api/debug") ||
                          !strcmp(path,"/api/uplink/scan"))) ||
-                 (post && (!strcmp(path,"/api/mode") || !strcmp(path,"/api/unlock") ||
+                 (post && (!strcmp(path,"/api/mode") || !strcmp(path,"/api/unlock") || !strcmp(path,"/api/thermal") ||
                            !strcmp(path,"/api/uplink") || !strcmp(path,"/api/cloud/pair")));
     if(!allowed) return failure("Chức năng này cần kết nối Internet và quyền từ tài khoản.");
     return ms51_local_request(method,path,body);

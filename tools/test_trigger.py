@@ -118,6 +118,8 @@ expiry_end=source.index('\n\t\t\telse',expiry_start)
 expiry='void safety_step(void){if(safety_finish_op1() && --countdown==0)'+source[expiry_start:expiry_end]+'}\n'
 with tempfile.TemporaryDirectory() as directory:
     p=Path(directory);(p/'test.c').write_text('#include <stdlib.h>\n'+prefix+source[start:end]+expiry+checks,encoding='utf-8')
-    subprocess.run([os.environ.get('CC','gcc'),'-std=c99','-Wall','-Wextra','-Werror',str(p/'test.c'),str(root/'main/ms51_ntc.c'),'-lm','-o',str(p/'test')],check=True)
-    subprocess.run([str(p/'test')],check=True)
+    binary=p/('test.exe' if os.name=='nt' else 'test')
+    math_lib=[] if os.name=='nt' else ['-lm']
+    subprocess.run([os.environ.get('CC','gcc'),'-std=c99','-Wall','-Wextra','-Werror',str(p/'test.c'),str(root/'main/ms51_ntc.c'),*math_lib,'-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True)
 print('PASS: OP1 safety eligibility, disabled/expired/legacy disarm, OP2/CL isolation, HCF hold and rollover; physical SIG at both levels despite all saved sources, trigger/thermal commands, expiry and restart; NTC conversion/faults; independent relay 3 arbitration, sensor fallback, lease expiry, rollover and invalid frames')
