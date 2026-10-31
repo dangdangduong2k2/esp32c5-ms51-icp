@@ -270,10 +270,11 @@ public final class MainActivity extends Activity {
     private boolean bleManualDiscovery;
     private Button bleDiscoveryButton;
     boolean automaticNearbyAllowed(){
+        // The login page always offers nearby offline connection automatically.
+        if(screen==Screen.AUTH)return true;
         if(deviceStore==null)return false;
-        // Cached pairings also suppress discovery while offline or signed out.
         // A new login waits for its first device-list response before deciding.
-        if(accountId.isEmpty())return !deviceStore.hasAnyDevices();
+        if(accountId.isEmpty())return true;
         return deviceStore.hasKnownList(accountId) && deviceStore.list(accountId).isEmpty();
     }
     private final Runnable nearbyRefresh=new Runnable(){
@@ -569,7 +570,6 @@ public final class MainActivity extends Activity {
         alternate.setOnClickListener(v -> { if (!authBusy) showAuth(!register); });
         content.addView(submit,fullParams(0,20,0,8)); content.addView(alternate);
         if(register) addHelp(content,"Mật khẩu tối thiểu 8 ký tự.");
-        if(!automaticNearbyAllowed())addDiscoveryButton(content);
     }
 
     private EditText accountSecret(LinearLayout content, String hint) {

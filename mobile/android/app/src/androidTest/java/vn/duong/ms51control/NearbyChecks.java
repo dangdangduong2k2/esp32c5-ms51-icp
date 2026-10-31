@@ -151,7 +151,7 @@ final class NearbyChecks {
             test.waitForIdleSync();SystemClock.sleep(700);
             android.graphics.Bitmap choicesShot=test.getUiAutomation().takeScreenshot();
             try(java.io.FileOutputStream out=new java.io.FileOutputStream(new java.io.File(folder,"03-chon-thiet-bi.png"))){choicesShot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}choicesShot.recycle();
-            report.putString("stream","PASS: Wi-Fi pairing suppresses automatic discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
+            report.putString("stream","PASS: login auto discovery despite saved Wi-Fi pairings, no login scan button, paired home requires manual discovery, unknown account waits, manual scan/stop and permission cancellation, background requires fresh manual tap, silent discovery popup, GIF rotation, deduplication, multiple-device selection, unpair and reselect, remembered reconnect; automatic scan/lifecycle="+autoChecked+".\n");test.finish(-1,report);
         }catch(Throwable e){report.putString("stream","FAIL: "+e+"\n");test.finish(0,report);}
         finally{if(activity!=null){MainActivity a=activity;test.runOnMainSync(()->{if(sheet.get()!=null)sheet.get().close();a.finish();});}}
     }
@@ -164,6 +164,7 @@ final class NearbyChecks {
             prefs.edit().clear().commit();ManagedChecks.set(a,"accountId","");
             check(a.automaticNearbyAllowed(),"No Wi-Fi-linked device keeps automatic offline discovery");
             ManagedChecks.set(a,"accountId","discovery-test");
+            ManagedChecks.invoke(a,"showDevices",new Class[]{});ManagedChecks.invoke(a,"stopHome",new Class[]{});
             check(!a.automaticNearbyAllowed(),"Unknown account list must not be treated as empty before server response");
             store.replace("discovery-test",new org.json.JSONArray());
             check(a.automaticNearbyAllowed(),"Confirmed empty account can automatically discover");
@@ -203,7 +204,24 @@ final class NearbyChecks {
                 check(!(Boolean)ManagedChecks.get(a,"bleManualDiscovery"),"Denied scan permission ends manual intent");
             }
             ManagedChecks.set(a,"accountId","");
-            check(!a.automaticNearbyAllowed(),"Signing out retains suppression for saved Wi-Fi pairings");
+            ManagedChecks.invoke(a,"showAuth",new Class[]{boolean.class},false);
+            check(a.automaticNearbyAllowed(),"Login automatically discovers even with cached Wi-Fi pairings");
+            check(findButton(a.getWindow().getDecorView(),"Dò thiết bị")==null,"Login has no manual discovery button");
+            if(radio){
+                ManagedChecks.set(a,"nearbySuppressed",false);
+                ManagedChecks.invoke(a,"discoverNearby",new Class[]{boolean.class},false);
+                BlePicker loginPicker=(BlePicker)ManagedChecks.get(a,"blePicker");
+                check(loginPicker!=null,"Login starts scanner without manual tap despite cached devices");
+                NearbyDeviceSheet popup=(NearbyDeviceSheet)field(loginPicker,"sheet");
+                check(!dialog(popup).isShowing(),"Login popup waits until device is found");
+                android.bluetooth.BluetoothManager manager=(android.bluetooth.BluetoothManager)a.getSystemService(android.content.Context.BLUETOOTH_SERVICE);
+                java.lang.reflect.Method add=BlePicker.class.getDeclaredMethod("add",android.bluetooth.le.ScanResult.class);add.setAccessible(true);
+                add.invoke(loginPicker,new android.bluetooth.le.ScanResult(manager.getAdapter().getRemoteDevice("AA:00:00:00:00:01"),null,-50,System.nanoTime()));
+                check(dialog(popup).isShowing(),"Found device automatically opens login popup");
+                ManagedChecks.invoke(a,"stopNearby",new Class[]{});
+            }
+            ManagedChecks.set(a,"accountId","discovery-test");
+            check(a.automaticNearbyAllowed(),"Login wins over stale session identity");
             store.remove("discovery-test","ms51-3844be1fe4e0");
             check(a.automaticNearbyAllowed(),"Removing last Wi-Fi pairing allows automatic discovery again");
         } finally {

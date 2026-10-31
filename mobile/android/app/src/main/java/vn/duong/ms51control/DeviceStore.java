@@ -20,10 +20,6 @@ final class DeviceStore {
     private final SharedPreferences prefs;
     DeviceStore(Context context) { prefs=context.getSharedPreferences("paired_devices_v1",Context.MODE_PRIVATE); }
     boolean hasKnownList(String user) { return prefs.contains(user); }
-    synchronized boolean hasAnyDevices() {
-        for(String user:prefs.getAll().keySet()) if(!list(user).isEmpty())return true;
-        return false;
-    }
     synchronized List<Device> list(String user) {
         ArrayList<Device> result=new ArrayList<>();
         try {
