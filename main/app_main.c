@@ -534,6 +534,7 @@ void app_main(void)
                  esp_err_to_name(debug_error));
     }
 
+    ESP_ERROR_CHECK(ms51_programmer_start_recovery());
     const esp_err_t analog_error = ms51_analog_init();
     if (analog_error != ESP_OK) ESP_LOGW(TAG, "Analog input unavailable: %s", esp_err_to_name(analog_error));
     const esp_err_t web_error = ms51_web_start();

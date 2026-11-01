@@ -51,6 +51,7 @@ enum {
 #define ICP_MASS_ERASE_HOLD_US 1000u
 
 static bool s_open;
+static bool s_recovery_guard;
 static portMUX_TYPE s_gpio_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static inline void delay_us(uint32_t microseconds)
@@ -152,7 +153,21 @@ static void release_pins(void)
 {
     gpio_set_direction((gpio_num_t)CONFIG_MS51_CLK_GPIO, GPIO_MODE_INPUT);
     gpio_set_direction((gpio_num_t)CONFIG_MS51_DAT_GPIO, GPIO_MODE_INPUT);
-    gpio_set_direction((gpio_num_t)CONFIG_MS51_RST_GPIO, GPIO_MODE_INPUT);
+    if(s_recovery_guard) {
+        set_rst(0);
+        gpio_set_direction((gpio_num_t)CONFIG_MS51_RST_GPIO, GPIO_MODE_OUTPUT);
+    } else gpio_set_direction((gpio_num_t)CONFIG_MS51_RST_GPIO, GPIO_MODE_INPUT);
+}
+
+void ms51_icp_set_recovery_guard(bool active) { s_recovery_guard=active; }
+esp_err_t ms51_icp_hold_target(void) {
+    ESP_RETURN_ON_ERROR(validate_gpio_configuration(),TAG,"invalid reset pin");
+    set_rst(0);
+    ESP_RETURN_ON_ERROR(gpio_set_direction((gpio_num_t)CONFIG_MS51_RST_GPIO,GPIO_MODE_OUTPUT),TAG,"hold reset failed");
+    gpio_set_direction((gpio_num_t)CONFIG_MS51_CLK_GPIO,GPIO_MODE_INPUT);
+    gpio_set_direction((gpio_num_t)CONFIG_MS51_DAT_GPIO,GPIO_MODE_INPUT);
+    s_open=false;
+    return ESP_OK;
 }
 
 static void bitsend(uint32_t data, unsigned bit_count, uint32_t half_bit_us, bool atomic)
@@ -251,6 +266,14 @@ static void read_identity(ms51_icp_identity_t *identity)
     identity->company_id = read_company_id();
 }
 
+esp_err_t ms51_icp_check_identity(void) {
+    if(!s_open)return ESP_ERR_INVALID_STATE;
+    ms51_icp_identity_t id;
+    read_identity(&id);
+    return id.device_id==MS51FC0AE_DEVICE_ID && id.product_id==MS51FC0AE_PRODUCT_ID &&
+        id.company_id==MS51_NUVOTON_CID ? ESP_OK : ESP_ERR_INVALID_RESPONSE;
+}
+
 esp_err_t ms51_icp_open(ms51_icp_identity_t *identity)
 {
     ESP_RETURN_ON_FALSE(identity != NULL, ESP_ERR_INVALID_ARG, TAG, "identity is NULL");
@@ -297,6 +320,7 @@ esp_err_t ms51_icp_reenter(ms51_icp_identity_t *identity)
 
 void ms51_icp_close(void)
 {
+    if(s_recovery_guard) { ms51_icp_hold_target();return; }
     if (!s_open) {
         release_pins();
         return;
@@ -378,6 +402,7 @@ esp_err_t ms51_icp_mass_erase(void)
 
 esp_err_t ms51_icp_reset_target(void)
 {
+    ESP_RETURN_ON_FALSE(!s_recovery_guard, ESP_ERR_INVALID_STATE,TAG,"recovery pending; reset is held");
     ESP_RETURN_ON_FALSE(!s_open, ESP_ERR_INVALID_STATE, TAG,
                         "cannot reset target while an ICP session is open");
     ESP_RETURN_ON_ERROR(validate_gpio_configuration(), TAG, "invalid GPIO configuration");

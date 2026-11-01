@@ -12,6 +12,7 @@
 
 #include "ms51_operation.h"
 #include "ms51_debug_uart.h"
+#include "ms51_recovery.h"
 
 static const char *TAG = "ms51_programmer";
 static bool s_uart_handoff_active;
@@ -90,7 +91,7 @@ static esp_err_t open_icp_session(ms51_icp_identity_t *identity)
         ESP_LOGW(TAG, "could not reset runtime UART pins after failed ICP handoff: %s",
                  esp_err_to_name(reset_error));
     }
-    const esp_err_t resume_error = ms51_debug_uart_resume_after_icp();
+    const esp_err_t resume_error = ms51_recovery_pending() ? ESP_OK : ms51_debug_uart_resume_after_icp();
     if (resume_error != ESP_OK) {
         ESP_LOGE(TAG, "could not restore UART RX after failed ICP handoff: %s",
                  esp_err_to_name(resume_error));
@@ -186,7 +187,7 @@ static void close_session(void)
         ESP_LOGW(TAG, "could not release runtime UART pins from ICP: %s",
                  esp_err_to_name(reset_error));
     }
-    const esp_err_t resume_error = ms51_debug_uart_resume_after_icp();
+    const esp_err_t resume_error = ms51_recovery_pending() ? ESP_OK : ms51_debug_uart_resume_after_icp();
     if (resume_error != ESP_OK) {
         ESP_LOGE(TAG, "could not restore UART RX after ICP: %s",
                  esp_err_to_name(resume_error));
@@ -209,55 +210,6 @@ static bool page_has_covered_data(const ms51_image_t *image, size_t address)
         }
     }
     return false;
-}
-
-static void expected_page(const ms51_image_t *image, size_t address, bool erase_trailing,
-                          const uint8_t current[MS51_FLASH_PAGE_SIZE],
-                          uint8_t page[MS51_FLASH_PAGE_SIZE])
-{
-    if (erase_trailing) {
-        memset(page, 0xFF, MS51_FLASH_PAGE_SIZE);
-    } else {
-        memcpy(page, current, MS51_FLASH_PAGE_SIZE);
-    }
-    if (address >= image->size) {
-        return;
-    }
-    size_t copy_length = image->size - address;
-    if (copy_length > MS51_FLASH_PAGE_SIZE) {
-        copy_length = MS51_FLASH_PAGE_SIZE;
-    }
-    for (size_t index = 0; index < copy_length; ++index) {
-        if (ms51_image_address_is_covered(image, address + index)) {
-            page[index] = image->data[address + index];
-        }
-    }
-}
-
-static size_t programmed_prefix_length(const uint8_t page[MS51_FLASH_PAGE_SIZE])
-{
-    size_t length = MS51_FLASH_PAGE_SIZE;
-    while (length > 0 && page[length - 1] == 0xFF) {
-        --length;
-    }
-    return length;
-}
-
-static void log_page_verify_mismatch(size_t page_address,
-                                     const uint8_t expected[MS51_FLASH_PAGE_SIZE],
-                                     const uint8_t actual[MS51_FLASH_PAGE_SIZE],
-                                     unsigned attempt)
-{
-    for (size_t index = 0; index < MS51_FLASH_PAGE_SIZE; ++index) {
-        if (expected[index] != actual[index]) {
-            ESP_LOGW(TAG,
-                     "Verify mismatch at APROM 0x%04X: expected 0x%02X, got 0x%02X "
-                     "(attempt %u/%u)",
-                     (unsigned)(page_address + index), expected[index], actual[index], attempt + 1,
-                     CONFIG_MS51_PROGRAM_RETRIES + 1);
-            return;
-        }
-    }
 }
 
 static esp_err_t validate_image(const ms51_image_t *image)
@@ -288,13 +240,23 @@ static ms51_image_t dense_image(const uint8_t *data, size_t size)
 
 esp_err_t ms51_programmer_init(void)
 {
-    return ms51_operation_init();
+    esp_err_t error=ms51_operation_init();
+    if(error!=ESP_OK)return error;
+    error=ms51_recovery_init();
+    ms51_icp_set_recovery_guard(ms51_recovery_pending());
+    if(ms51_recovery_pending()) {
+        esp_err_t hold=ms51_icp_hold_target();
+        if(hold!=ESP_OK)return hold;
+    }
+    if(error!=ESP_OK)ESP_LOGW(TAG,"Recovery storage unavailable/corrupt: %s; programming disabled or held",esp_err_to_name(error));
+    return ESP_OK;
 }
 
 esp_err_t ms51_programmer_get_info(ms51_device_info_t *info)
 {
     ESP_RETURN_ON_FALSE(info != NULL, ESP_ERR_INVALID_ARG, TAG, "info is NULL");
     ESP_RETURN_ON_ERROR(lock_programmer(), TAG, "lock failed");
+    if(ms51_recovery_pending()) { unlock_programmer();return ESP_ERR_INVALID_STATE; }
 
     esp_err_t error = open_checked_session(info);
     close_session();
@@ -306,6 +268,7 @@ esp_err_t ms51_programmer_try_get_info(ms51_device_info_t *info)
 {
     ESP_RETURN_ON_FALSE(info != NULL, ESP_ERR_INVALID_ARG, TAG, "info is NULL");
     ESP_RETURN_ON_ERROR(ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT), TAG, "programmer is busy");
+    if(ms51_recovery_pending()) { unlock_programmer();return ESP_ERR_INVALID_STATE; }
 
     esp_err_t error = open_checked_session(info);
     close_session();
@@ -318,6 +281,7 @@ esp_err_t ms51_programmer_read_aprom(uint32_t address, uint8_t *data, size_t len
     ESP_RETURN_ON_FALSE(data != NULL && length > 0, ESP_ERR_INVALID_ARG, TAG,
                         "read buffer is invalid");
     ESP_RETURN_ON_ERROR(lock_programmer(), TAG, "lock failed");
+    if(ms51_recovery_pending()) { unlock_programmer();return ESP_ERR_INVALID_STATE; }
 
     esp_err_t error = ESP_OK;
     ms51_device_info_t info;
@@ -341,112 +305,66 @@ done:
     return error;
 }
 
+static esp_err_t recovery_read(uint32_t address, void *data, size_t length)
+{
+    esp_err_t error=ms51_icp_check_identity();
+    return error==ESP_OK ? ms51_icp_read_flash(address,data,length) : error;
+}
+static const ms51_recovery_io_t recovery_io={
+    .read=recovery_read,.erase=ms51_icp_page_erase,.write=ms51_icp_write_flash
+};
+
 static esp_err_t program_image(const ms51_image_t *image, bool verify, bool erase_trailing)
 {
-    ESP_RETURN_ON_ERROR(validate_image(image), TAG, "invalid firmware image");
-    ESP_RETURN_ON_ERROR(lock_programmer(), TAG, "lock failed");
-
-    esp_err_t error = ESP_OK;
+    (void)verify; /* Protected updates always verify every page and the full image. */
+    ESP_RETURN_ON_ERROR(validate_image(image),TAG,"invalid firmware image");
+    ESP_RETURN_ON_ERROR(lock_programmer(),TAG,"lock failed");
+    esp_err_t error=ESP_ERR_INVALID_STATE;
     ms51_device_info_t info;
-    size_t changed_pages = 0;
-    size_t skipped_pages = 0;
-    uint8_t wanted[MS51_FLASH_PAGE_SIZE];
-    uint8_t actual[MS51_FLASH_PAGE_SIZE];
-
-    error = open_checked_session(&info);
-    if (error != ESP_OK) {
-        goto done;
+    if(ms51_recovery_pending() || !ms51_recovery_available())goto done;
+    error=open_checked_session(&info);
+    if(error!=ESP_OK)goto done;
+    if(info.locked || image->size>info.aprom_size) { error=ESP_ERR_INVALID_STATE;goto done; }
+    error=ms51_recovery_prepare(image,erase_trailing,info.aprom_size,info.config,&recovery_io);
+    ms51_icp_set_recovery_guard(ms51_recovery_pending());
+    if(error!=ESP_OK)goto done;
+    error=ms51_recovery_run(info.aprom_size,info.config,&recovery_io);
+    if(error!=ESP_OK && ms51_recovery_pending()) {
+        /* One immediate rollback attempt; disconnected targets are retried by
+         * the recovery task. The original update still returns failure. */
+        (void)ms51_recovery_run(info.aprom_size,info.config,&recovery_io);
     }
-    if (info.locked) {
-        ESP_LOGE(TAG,
-                 "Target security lock is enabled. Automatic programming will not mass-erase it; "
-                 "run 'erase CONFIRM' explicitly first");
-        error = ESP_ERR_INVALID_STATE;
-        goto done;
-    }
-    if (image->size > info.aprom_size) {
-        ESP_LOGE(TAG, "Image reaches 0x%04X but current CONFIG leaves only %u bytes of APROM",
-                 (unsigned)(image->size - 1), (unsigned)info.aprom_size);
-        error = ESP_ERR_INVALID_SIZE;
-        goto done;
-    }
-
-    const size_t page_count = erase_trailing
-                                  ? info.aprom_size / MS51_FLASH_PAGE_SIZE
-                                  : (image->size + MS51_FLASH_PAGE_SIZE - 1) /
-                                        MS51_FLASH_PAGE_SIZE;
-    ESP_LOGI(TAG, "Programming %u covered byte(s) through 0x%04X into %u-byte APROM "
-                  "(%u page(s), %s)",
-             (unsigned)image->covered_size, (unsigned)(image->size - 1),
-             (unsigned)info.aprom_size, (unsigned)page_count,
-             erase_trailing ? "full replacement" : "preserve trailing APROM");
-
-    for (size_t page_index = 0; page_index < page_count; ++page_index) {
-        const size_t address = page_index * MS51_FLASH_PAGE_SIZE;
-        if (!erase_trailing && !page_has_covered_data(image, address)) {
-            ++skipped_pages;
-            continue;
-        }
-        error = ms51_icp_read_flash((uint32_t)address, actual, sizeof(actual));
-        if (error != ESP_OK) {
-            goto done;
-        }
-        expected_page(image, address, erase_trailing, actual, wanted);
-        if (memcmp(wanted, actual, sizeof(wanted)) == 0) {
-            ++skipped_pages;
-            vTaskDelay(1);
-            continue;
-        }
-
-        bool page_ok = false;
-        const size_t write_length = programmed_prefix_length(wanted);
-        for (unsigned attempt = 0; attempt <= CONFIG_MS51_PROGRAM_RETRIES; ++attempt) {
-            error = ms51_icp_page_erase((uint32_t)address);
-            if (error != ESP_OK) {
-                goto done;
-            }
-            if (write_length > 0) {
-                error = ms51_icp_write_flash((uint32_t)address, wanted, write_length);
-                if (error != ESP_OK) {
-                    goto done;
-                }
-            }
-
-            if (!verify) {
-                page_ok = true;
-                break;
-            }
-            error = ms51_icp_read_flash((uint32_t)address, actual, sizeof(actual));
-            if (error != ESP_OK) {
-                goto done;
-            }
-            if (memcmp(wanted, actual, sizeof(wanted)) == 0) {
-                page_ok = true;
-                break;
-            }
-            log_page_verify_mismatch(address, wanted, actual, attempt);
-        }
-        if (!page_ok) {
-            ESP_LOGE(TAG, "Could not program APROM page at 0x%04X", (unsigned)address);
-            error = ESP_ERR_INVALID_RESPONSE;
-            goto done;
-        }
-
-        ++changed_pages;
-        if ((page_index & 0x0Fu) == 0 || page_index + 1 == page_count) {
-            ESP_LOGI(TAG, "Progress: %u/%u pages", (unsigned)(page_index + 1),
-                     (unsigned)page_count);
-        }
-        vTaskDelay(1);
-    }
-
-    ESP_LOGI(TAG, "MS51 programming complete: %u page(s) changed, %u already matched",
-             (unsigned)changed_pages, (unsigned)skipped_pages);
-
-done:
+ done:
+    ms51_icp_set_recovery_guard(ms51_recovery_pending());
     close_session();
     unlock_programmer();
     return error;
+}
+
+static void recovery_worker(void *unused)
+{
+    (void)unused;
+    unsigned delay_seconds=5;
+    for(;;) {
+        if(ms51_recovery_pending() && ms51_operation_lock(pdMS_TO_TICKS(100))==ESP_OK) {
+            ms51_device_info_t info;
+            esp_err_t error=open_checked_session(&info);
+            if(error==ESP_OK && !info.locked)
+                error=ms51_recovery_run(info.aprom_size,info.config,&recovery_io);
+            ms51_icp_set_recovery_guard(ms51_recovery_pending());
+            close_session();
+            unlock_programmer();
+            ESP_LOGI(TAG,"recovery: %s (%s)",ms51_recovery_state(),esp_err_to_name(error));
+            if(ms51_recovery_pending() && delay_seconds<30)delay_seconds+=5;
+            else if(!ms51_recovery_pending())delay_seconds=5;
+        }
+        vTaskDelay(pdMS_TO_TICKS(delay_seconds*1000));
+    }
+}
+
+esp_err_t ms51_programmer_start_recovery(void)
+{
+    return xTaskCreate(recovery_worker,"ms51-recovery",4096,NULL,2,NULL)==pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
 esp_err_t ms51_programmer_program_image(const ms51_image_t *image, bool verify)
@@ -463,6 +381,7 @@ esp_err_t ms51_programmer_verify_image(const ms51_image_t *image)
 {
     ESP_RETURN_ON_ERROR(validate_image(image), TAG, "invalid firmware image");
     ESP_RETURN_ON_ERROR(lock_programmer(), TAG, "lock failed");
+    if(ms51_recovery_pending()) { unlock_programmer();return ESP_ERR_INVALID_STATE; }
 
     esp_err_t error = ESP_OK;
     ms51_device_info_t info;
@@ -536,7 +455,9 @@ esp_err_t ms51_programmer_verify(const uint8_t *image, size_t image_size)
 
 esp_err_t ms51_programmer_mass_erase(void)
 {
+    if(ms51_recovery_pending())return ESP_ERR_INVALID_STATE;
     ESP_RETURN_ON_ERROR(lock_programmer(), TAG, "lock failed");
+    if(ms51_recovery_pending()) { unlock_programmer();return ESP_ERR_INVALID_STATE; }
 
     esp_err_t error = ESP_OK;
     ms51_device_info_t info;

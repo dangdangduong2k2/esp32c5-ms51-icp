@@ -40,6 +40,7 @@ idf_component_register(
         "ms51_icp.c"
         "ms51_operation.c"
         "ms51_programmer.c"
+        "ms51_recovery.c"
         "ms51_storage.c"
         "ms51_web.c"
         "${ms51_generated_c}"

@@ -36,6 +36,10 @@ esp_err_t ms51_icp_reenter(ms51_icp_identity_t *identity);
 void ms51_icp_close(void);
 
 bool ms51_icp_is_open(void);
+/** Guard all close/reset paths until a complete image has been verified. */
+void ms51_icp_set_recovery_guard(bool active);
+esp_err_t ms51_icp_hold_target(void);
+esp_err_t ms51_icp_check_identity(void);
 
 esp_err_t ms51_icp_read_flash(uint32_t address, void *data, size_t length);
 esp_err_t ms51_icp_write_flash(uint32_t address, const void *data, size_t length);

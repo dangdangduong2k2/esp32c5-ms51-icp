@@ -28,6 +28,20 @@ def visible_settings(keys):
     return [key for key in keys if key in ACCESS_CATALOG]
 
 
+def recovery_outcome(status, crc, baseline):
+    """Accept only fresh, durable C5 verification for this exact image."""
+    r = status.get('recovery', {})
+    if (not isinstance(r, dict) or r.get('available') is not True or
+            type(r.get('sequence')) is not int or r['sequence'] <= baseline or
+            r.get('source_crc32') != crc):
+        return None
+    if r.get('pending') is True:
+        return 'pending'
+    if r.get('pending') is False and r.get('state') in ('verified', 'restored'):
+        return r['state']
+    return None
+
+
 def migrate_mode_permissions(db):
     """Refresh existing app views without granting any previously hidden mode."""
     rows = db.execute('SELECT d.id,p.visible,p.revision FROM devices d '
@@ -52,6 +66,8 @@ CREATE TABLE IF NOT EXISTS device_releases(device TEXT PRIMARY KEY REFERENCES de
  created REAL NOT NULL, installed TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS update_jobs(id TEXT PRIMARY KEY, device TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
  owner TEXT NOT NULL, release TEXT NOT NULL, state TEXT NOT NULL, message TEXT NOT NULL, created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS update_recovery(job TEXT PRIMARY KEY REFERENCES update_jobs(id) ON DELETE CASCADE,
+ baseline INTEGER NOT NULL, crc32 INTEGER NOT NULL);
 """
 
 
@@ -152,6 +168,20 @@ def install(app, core, admin_identity, audit):
 
     def job_view(device):
         row = db.execute('SELECT id,release,state,message FROM update_jobs WHERE device=? ORDER BY created DESC LIMIT 1', (device,)).fetchone()
+        if row and row['state'] == 'unknown':
+            proof = db.execute('SELECT baseline,crc32 FROM update_recovery WHERE job=?', (row['id'],)).fetchone()
+            board = db.execute('SELECT * FROM devices WHERE id=?', (device,)).fetchone()
+            if proof and board and core.online(board):
+                outcome = recovery_outcome(json.loads(board['state'] or '{}'), proof['crc32'], proof['baseline'])
+                if outcome in ('verified', 'restored'):
+                    state = 'success' if outcome == 'verified' else 'failed'
+                    message = ('Đã xác nhận cập nhật và đối chiếu sau khi kết nối lại.' if outcome == 'verified'
+                               else 'Cập nhật lỗi; thiết bị đã phục hồi chương trình cũ.')
+                    db.execute('UPDATE update_jobs SET state=?,message=? WHERE id=?', (state,message,row['id']))
+                    if state == 'success':
+                        db.execute('UPDATE device_releases SET installed=? WHERE device=? AND id=?', (row['release'],device,row['release']))
+                    db.commit()
+                    row = dict(row, state=state, message=message)
         return dict(row) if row else None
 
     def acquire(row, uid, lease):
@@ -405,10 +435,27 @@ def install(app, core, admin_identity, audit):
             status = call(row, uid, job, 'GET', '/api/status')
             if status.get('busy') is not False:
                 finish(job, 'failed', 'Thiết bị đang bận. Chờ hoàn tất trước khi cập nhật.'); return
+            recovery = status.get('recovery', {})
+            recovery_supported = recovery.get('available') is True
+            baseline = recovery.get('sequence', 0)
+            if type(baseline) is not int: baseline = 0
+            if recovery_supported:
+                with lock:
+                    db.execute('INSERT OR REPLACE INTO update_recovery VALUES(?,?,?)', (job,baseline,firmware['crc32']))
+                    db.commit()
             token, upload_id = secrets.token_urlsafe(32), secrets.token_hex(16)
             with lock:
-                core.uploads[upload_id] = (time.time() + 90, core.digest(token), firmware['content'])
-            result = call(row, uid, job, 'POST', '/internal/upload', {'upload_id': upload_id, 'token': token, 'filename': firmware['filename'], 'size': len(firmware['content'])})
+                core.uploads[upload_id] = (time.time() + 660, core.digest(token), firmware['content'])
+            deadline = time.monotonic() + 600
+            while True:
+                try:
+                    result = call(row, uid, job, 'POST', '/internal/upload', {'upload_id': upload_id, 'token': token, 'filename': firmware['filename'], 'size': len(firmware['content'])})
+                    break
+                except HTTPException as error:
+                    # Repeating staging is safe; never repeat target programming.
+                    if error.status_code not in (409,503,504) or time.monotonic() >= deadline: raise
+                    finish(job, 'running', 'Mất kết nối khi tải; đang chờ để tải lại…')
+                    time.sleep(5)
             image = result.get('image', {})
             generation = image.get('generation', 0)
             if generation <= 0 or image.get('crc32') != firmware['crc32']:
@@ -416,13 +463,33 @@ def install(app, core, admin_identity, audit):
             # Program only covered APROM pages, then explicitly verify against the same generation.
             for action, message in [('program', 'Đang nạp chương trình MS51…'), ('verify', 'Đang đối chiếu chương trình…')]:
                 finish(job, 'running', message)
-                response = call(row, uid, job, 'POST', '/api/' + action, {'generation': generation})
-                if response.get('accepted') is not True or type(response.get('job_id')) is not int:
+                try:
+                    response = call(row, uid, job, 'POST', '/api/' + action, {'generation': generation})
+                except HTTPException as error:
+                    if not recovery_supported or error.status_code not in (503,504): raise
+                    response = None  # Read durable proof; do not send the command twice.
+                if response is not None and (response.get('accepted') is not True or type(response.get('job_id')) is not int):
                     core.fail(502, 'Chưa xác nhận được lệnh cập nhật.')
-                deadline = time.monotonic() + 180
+                deadline = time.monotonic() + 600
                 while time.monotonic() < deadline:
                     time.sleep(1)
-                    status = call(row, uid, job, 'GET', '/api/status')
+                    try:
+                        status = call(row, uid, job, 'GET', '/api/status')
+                    except HTTPException as error:
+                        if error.status_code not in (409,503,504): raise
+                        finish(job, 'running', 'Đang chờ kết nối lại để xác nhận cập nhật…')
+                        time.sleep(4)
+                        continue
+                    outcome = recovery_outcome(status, firmware['crc32'], baseline)
+                    if outcome == 'pending':
+                        finish(job, 'running', 'Thiết bị đang tự phục hồi; giữ nguồn và nối đủ dây.')
+                        continue
+                    if outcome == 'restored':
+                        finish(job, 'failed', 'Cập nhật lỗi; đã phục hồi và kiểm tra chương trình cũ.'); return
+                    if outcome == 'verified' and status.get('busy') is False and (action == 'program' or response is None or status.get('job_id') != response['job_id']):
+                        break
+                    if response is None:
+                        continue
                     if status.get('job_id') != response['job_id'] or status.get('image', {}).get('generation') != generation or status.get('image', {}).get('crc32') != firmware['crc32']:
                         core.fail(502, 'Tác vụ hoặc ảnh firmware đã thay đổi. Cần kiểm tra thiết bị.')
                     if status.get('busy') is False:

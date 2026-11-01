@@ -1,11 +1,13 @@
 """Runs only isolated SQLite fixtures and mock device replies; never flashes hardware."""
 import secrets
+import json
 import time
 import unittest
 from unittest.mock import patch
 
 from test_admin import AdminTests, core, temporary
-from managed import CATALOG, ACCESS_CATALOG, MODE_DISPLAY_FIELDS, migrate_mode_permissions, parse_hex
+from managed import CATALOG, ACCESS_CATALOG, MODE_DISPLAY_FIELDS, migrate_mode_permissions, parse_hex, recovery_outcome
+from fastapi import HTTPException
 
 DEVICE = 'ms51-111111111111'
 ADMIN = 'admin/api/users/u1/devices/' + DEVICE
@@ -477,6 +479,70 @@ class ManagedTests(AdminTests):
         self.assertNotIn('/api/program',paths)
         self.assertEqual(self.client.post(MOBILE+'/update',json={'id':secrets.token_hex(16),'release':firmware['id']},headers=self.mobile_headers).status_code,409)
         self.assertNotIn(DEVICE,core.managed_locks)
+
+    def test_recovery_proof_requires_new_sequence_matching_crc_and_complete_verify(self):
+        r={'available':True,'sequence':4,'source_crc32':123,'pending':False,'state':'verified'}
+        self.assertEqual(recovery_outcome({'recovery':r},123,3),'verified')
+        self.assertIsNone(recovery_outcome({'recovery':r},123,4))
+        self.assertIsNone(recovery_outcome({'recovery':r},456,3))
+        self.assertIsNone(recovery_outcome({'recovery':dict(r,pending=None)},123,3))
+        self.assertEqual(recovery_outcome({'recovery':dict(r,pending=True)},123,3),'pending')
+        self.assertEqual(recovery_outcome({'recovery':dict(r,state='restored')},123,3),'restored')
+
+    def test_worker_lost_program_ack_reconciles_without_replaying(self):
+        firmware,job,args=self.start_job();calls=[];polls=0;started=False;verifying=False
+        crc=parse_hex(HEX)
+        def fake(row,uid,rid,method,path,body,lease=None):
+            nonlocal polls,started,verifying
+            calls.append(path)
+            image={'generation':7,'crc32':crc}
+            if path=='/internal/upload':return {'ok':True,'image':image}
+            if path=='/api/program':
+                started=True;raise HTTPException(504,'ack lost')
+            if path=='/api/verify':
+                self.assertGreaterEqual(polls,4)  # Wait for cleanup after durable verification.
+                verifying=True;return {'ok':True,'accepted':True,'job_id':2}
+            if started and not verifying:
+                polls+=1
+                if polls==1:raise HTTPException(503,'offline')
+            recovery={'available':True,'sequence':3 if not started else 4,'source_crc32':crc,
+                      'pending':started and not verifying and polls==3,'state':'verified'}
+            return {'ok':True,'busy':started and not verifying and polls in (2,3),'job_id':2 if verifying else 0,
+                    'image':image,'last_error':'ESP_OK','recovery':recovery}
+        with patch.object(core.bridge,'call',side_effect=fake),patch('managed.time.sleep'):
+            core.managed_worker(*args)
+        data=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
+        self.assertEqual(data['job']['state'],'success');self.assertEqual(calls.count('/api/program'),1)
+
+    def test_unknown_job_after_server_restart_uses_fresh_recovery_proof(self):
+        firmware,job,args=self.start_job();crc=parse_hex(HEX)
+        with core.lock:
+            core.db.execute('INSERT INTO update_recovery VALUES(?,?,?)',(job,3,crc))
+            core.db.execute("UPDATE update_jobs SET state='unknown' WHERE id=?",(job,))
+            state={'recovery':{'available':True,'sequence':4,'source_crc32':crc,'pending':False,'state':'verified'}}
+            core.db.execute('UPDATE devices SET state=?,seen=? WHERE id=?',(json.dumps(state),time.time()-100,DEVICE))
+            core.db.commit()
+        self.assertEqual(self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()['job']['state'],'unknown')
+        with core.lock:
+            core.db.execute('UPDATE devices SET seen=? WHERE id=?',(time.time(),DEVICE));core.db.commit()
+        self.assertEqual(self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()['job']['state'],'success')
+
+    def test_worker_rollback_never_marks_release_installed(self):
+        firmware,job,args=self.start_job();started=False;crc=parse_hex(HEX)
+        def fake(row,uid,rid,method,path,body,lease=None):
+            nonlocal started
+            image={'generation':7,'crc32':crc}
+            if path=='/internal/upload':return {'ok':True,'image':image}
+            if path=='/api/program':
+                started=True;return {'ok':True,'accepted':True,'job_id':1}
+            self.assertNotEqual(path,'/api/verify')
+            return {'ok':True,'busy':False,'job_id':1,'image':image,'last_error':'ESP_FAIL',
+                    'recovery':{'available':True,'sequence':4 if started else 3,'source_crc32':crc,
+                                'pending':False,'state':'restored'}}
+        with patch.object(core.bridge,'call',side_effect=fake),patch('managed.time.sleep'):
+            core.managed_worker(*args)
+        data=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
+        self.assertEqual(data['job']['state'],'failed');self.assertTrue(data['update_available'])
 
 
 if __name__=='__main__':

@@ -38,6 +38,7 @@
 #include "ms51_image.h"
 #include "ms51_programmer.h"
 #include "ms51_storage.h"
+#include "ms51_recovery.h"
 
 static const char *TAG = "ms51_web";
 
@@ -182,7 +183,7 @@ static bool state_is_busy(void)
     xSemaphoreTake(s_state_mutex, portMAX_DELAY);
     const bool busy = s_state.busy;
     xSemaphoreGive(s_state_mutex);
-    return busy;
+    return busy || ms51_recovery_pending();
 }
 
 static web_state_t state_snapshot(void)
@@ -662,7 +663,7 @@ static esp_err_t status_handler(httpd_req_t *request)
     // JSON-escaped status text can be substantially larger than its source
     // buffers.  Keep this response comfortably above the compiler-calculated
     // maximum as the image metadata adds format and coverage fields.
-    char payload[2560];
+    char payload[3072];
     if (image.valid) {
         snprintf(payload, sizeof(payload),
                  "{\"ok\":true,\"busy\":%s,\"job_id\":%" PRIu32
@@ -675,7 +676,7 @@ static esp_err_t status_handler(httpd_req_t *request)
                  ",\"image\":{\"valid\":true,\"name\":\"%s\""
                  ",\"size\":%u,\"covered_size\":%u,\"format\":\"%s\""
                  ",\"crc32\":%" PRIu32 ",\"generation\":%" PRIu32 "}}",
-                 state.busy ? "true" : "false", state.job_id, operation, message,
+                 (state.busy || ms51_recovery_pending()) ? "true" : "false", state.job_id, operation, message,
                  last_error, ssid, s_ap_ip, uplink.configured ? "true" : "false",
                  uplink_connection_state_name(uplink.connection_state), uplink_ssid,
                  uplink_ip, uplink_gateway, (int)uplink.rssi,
@@ -693,7 +694,7 @@ static esp_err_t status_handler(httpd_req_t *request)
                  ",\"rssi\":%d,\"dns_ready\":%s,\"nat_enabled\":%s"
                  ",\"hostname\":\"%s\",\"mdns_ready\":%s}}"
                  ",\"image\":{\"valid\":false}}",
-                 state.busy ? "true" : "false", state.job_id, operation, message,
+                 (state.busy || ms51_recovery_pending()) ? "true" : "false", state.job_id, operation, message,
                  last_error, ssid, s_ap_ip, uplink.configured ? "true" : "false",
                  uplink_connection_state_name(uplink.connection_state), uplink_ssid,
                  uplink_ip, uplink_gateway, (int)uplink.rssi,
@@ -718,6 +719,14 @@ static esp_err_t status_handler(httpd_req_t *request)
     added = snprintf(payload+used-1,sizeof(payload)-used+1,"%s,\"cloud\":{\"protocol\":1,\"configured\":%s,\"online\":%s,\"clock_ready\":%s}}",presence,ms51_cloud_configured()?"true":"false",ms51_cloud_online()?"true":"false",ms51_cloud_clock_ready()?"true":"false");
     if (added < 0 || (size_t)added >= sizeof(payload)-used+1)
         return httpd_resp_send_err(request, HTTPD_500_INTERNAL_SERVER_ERROR, "Status too large");
+    used=strlen(payload);
+    added=snprintf(payload+used-1,sizeof(payload)-used+1,
+        ",\"recovery\":{\"available\":%s,\"pending\":%s,\"sequence\":%" PRIu32
+        ",\"source_crc32\":%" PRIu32 ",\"state\":\"%s\"}}",
+        ms51_recovery_available()?"true":"false",ms51_recovery_pending()?"true":"false",
+        ms51_recovery_sequence(),ms51_recovery_source_crc(),ms51_recovery_state());
+    if(added<0 || (size_t)added>=sizeof(payload)-used+1)
+        return httpd_resp_send_err(request,HTTPD_500_INTERNAL_SERVER_ERROR,"Status too large");
     return send_json(request, payload, NULL);
 }
 
@@ -881,6 +890,7 @@ static esp_err_t reset_handler(httpd_req_t *request)
 static esp_err_t queue_job(job_type_t type, uint32_t requested_generation,
                            uint32_t *job_id_out)
 {
+    if(ms51_recovery_pending())return ESP_ERR_INVALID_STATE;
     ms51_storage_info_t image;
     if (type != JOB_MASS_ERASE) {
         if (ms51_storage_get_info(&image) != ESP_OK || !image.valid ||

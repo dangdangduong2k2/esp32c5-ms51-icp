@@ -22,6 +22,7 @@ typedef struct {
 } ms51_device_info_t;
 
 esp_err_t ms51_programmer_init(void);
+esp_err_t ms51_programmer_start_recovery(void);
 esp_err_t ms51_programmer_get_info(ms51_device_info_t *info);
 /** Non-blocking web variant; returns ESP_ERR_TIMEOUT if the target is busy. */
 esp_err_t ms51_programmer_try_get_info(ms51_device_info_t *info);
