@@ -264,6 +264,22 @@ final class ManagedChecks {
                     JSONObject modeSource=new JSONObject().put("name","mode_source").put("value","PHYSICAL").put("age_ms",100);
                     JSONObject selectedMode=new JSONObject().put("name","selected_mode").put("value","0").put("age_ms",100);
                     preview.getJSONArray("variables").put(modeSource).put(selectedMode);
+                    for(boolean ble:new boolean[]{false,true}) {
+                        set(a,"bleMode",ble);
+                        set(a,"dashboardHdf",null);
+                        invoke(a,"renderModeControls",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                        check(cool.isEnabled() && !ice.isEnabled(),"Unknown HDF locks only defrost, BLE="+ble);
+                        set(a,"dashboardHdf",true);set(a,"dashboardHdfAt",android.os.SystemClock.elapsedRealtime());
+                        invoke(a,"renderModeControls",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                        check(cool.isEnabled() && !ice.isEnabled(),"HDF on locks defrost, BLE="+ble);
+                        set(a,"dashboardHdf",false);
+                        invoke(a,"renderModeControls",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                        check(ice.isEnabled(),"HDF off unlocks defrost, BLE="+ble);
+                        set(a,"dashboardHdfAt",android.os.SystemClock.elapsedRealtime()-16000);
+                        invoke(a,"renderModeControls",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
+                        check(!ice.isEnabled(),"Expired HDF locks defrost, BLE="+ble);
+                    }
+                    set(a,"bleMode",false);set(a,"dashboardHdfAt",android.os.SystemClock.elapsedRealtime());
                     invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},sampleStatus,preview);
                     check(cool.isEnabled() && ice.isEnabled(),"Fresh capable device enables both mode choices");
                     check(cool.getParent()==ice.getParent() && ((ViewGroup)cool.getParent()).getChildCount()==2,"Only two mode actions in row");

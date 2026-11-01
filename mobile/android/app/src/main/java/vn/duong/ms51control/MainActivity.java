@@ -154,6 +154,8 @@ public final class MainActivity extends Activity {
     private final Runnable unlockPoll=this::pollUnlock;
 
     private boolean modeChanging;
+    private Boolean dashboardHdf;
+    private long dashboardHdfAt, nextHdfRead;
     private Button coolModeButton, iceModeButton;
     private String pendingMode;
     private boolean modeAwaitingConfirmation;
@@ -653,6 +655,7 @@ public final class MainActivity extends Activity {
         lastStatus = null; lastDebug = null; imageGeneration = 0;
         temperatureStatus = null; motorSensorIndex = 0;
         lastHistory = null; nextHistoryRead = 0; historyError = "";
+        dashboardHdf=null; dashboardHdfAt=0; nextHdfRead=0;
         selectedFirmwareUri = null; selectedFirmwareName = "";
         configInputs.clear(); configChoices.clear(); configChecks.clear(); pinDependentViews.clear();
         firmwareInfo = null; firmwareFileInfo = null; deviceInfo = null;
@@ -1482,6 +1485,12 @@ public final class MainActivity extends Activity {
         io.execute(() -> {
             if (!currentControl(token)) return;
             try {
+                if ("ICE_FLUSH".equals(mode)) {
+                    boolean hdf=readHdf(session);
+                    onControl(token,()->{dashboardHdf=hdf;dashboardHdfAt=android.os.SystemClock.elapsedRealtime();});
+                    if(hdf)throw new IllegalStateException("HDF đang bật, không thể chọn Xả đá.");
+                    if(!currentControl(token))return;
+                }
                 session.post("/api/mode", new JSONObject().put("mode",mode));
                 // Refresh from hardware rather than assuming a late command still owns the mode.
                 onControl(token, () -> finishModeChange(true, "Đã gửi lệnh chuyển chế độ."));
@@ -1522,12 +1531,21 @@ public final class MainActivity extends Activity {
         boolean enabled = fresh && selected != null && ("APP".equals(source) || "PHYSICAL".equals(source)) &&
             ("COOL".equals(running) || "ICE_FLUSH".equals(running) || "IDLE".equals(running)) &&
             status != null && !status.optBoolean("busy",true) && !modeChanging && pendingMode == null && !triggerSaving && !managedUpdateStarting;
-        coolModeButton.setEnabled(enabled); iceModeButton.setEnabled(enabled);
+        boolean hdfFresh=dashboardHdf!=null && android.os.SystemClock.elapsedRealtime()-dashboardHdfAt<=15000;
+        coolModeButton.setEnabled(enabled); iceModeButton.setEnabled(enabled && hdfFresh && !dashboardHdf);
+        iceModeButton.setContentDescription(Boolean.TRUE.equals(dashboardHdf)?"Xả đá, bị khóa khi HDF bật":"Xả đá");
         String displayed = pendingMode != null ? pendingMode : fresh ? ("0".equals(selected) ? "COOL" : "1".equals(selected) ? "ICE_FLUSH" : null) : null;
         paintModeButton(coolModeButton,true,"COOL".equals(displayed),"COOL".equals(pendingMode));
         paintModeButton(iceModeButton,false,"ICE_FLUSH".equals(displayed),"ICE_FLUSH".equals(pendingMode));
         mainHandler.removeCallbacks(expireModeControls);
         if(enabled) mainHandler.postDelayed(expireModeControls,5000);
+    }
+
+    private static boolean readHdf(EspApi session) throws Exception {
+        RuntimeConfigCodec.Config config=RuntimeConfigCodec.decode(session.get("/api/runtime-config").getString("data"));
+        Integer value=config.values.get("hdf");
+        if(value==null || (value!=0 && value!=1))throw new IllegalStateException("Chưa đọc được trạng thái HDF.");
+        return value==1;
     }
 
     private void buildOverview(LinearLayout content) {
@@ -1834,6 +1852,7 @@ public final class MainActivity extends Activity {
         final int controlToken = controlEpoch;
         final EspApi session = api.snapshot(15000);
         final boolean readHistory = android.os.SystemClock.elapsedRealtime() >= nextHistoryRead;
+        final boolean readHdfNow = android.os.SystemClock.elapsedRealtime() >= nextHdfRead;
         io.execute(() -> {
             if (!currentControl(controlToken) || epoch!=dashboardEpoch || !foreground) return;
             JSONObject status = null;
@@ -1841,6 +1860,7 @@ public final class MainActivity extends Activity {
             Exception failure = null;
             long[] history = null;
             Exception historyFailure = null;
+            Boolean hdf=null;
             try {
                 status = session.get("/api/status");
                 if(epoch!=dashboardEpoch || !foreground)return;
@@ -1853,6 +1873,9 @@ public final class MainActivity extends Activity {
                     }
                 });
                 debug = session.get("/api/debug");
+                if(readHdfNow && currentControl(controlToken) && epoch==dashboardEpoch && foreground) {
+                    try { hdf=readHdf(session); } catch(Exception ignored) { }
+                }
                 if (readHistory && currentControl(controlToken) && epoch == dashboardEpoch && foreground) {
                     try { history = session.history(); }
                     catch (Exception error) { historyFailure = error; }
@@ -1865,10 +1888,16 @@ public final class MainActivity extends Activity {
             Exception finalFailure = failure;
             long[] finalHistory = history;
             Exception finalHistoryFailure = historyFailure;
+            Boolean finalHdf=hdf;
             onControl(controlToken, () -> {
                 if (epoch != dashboardEpoch || !foreground) return;
                 dashboardBusy = false;
                 if (screen != Screen.CONTROL || tab != Tab.OVERVIEW) return;
+                if(readHdfNow) {
+                    dashboardHdf=finalHdf;dashboardHdfAt=android.os.SystemClock.elapsedRealtime();
+                    nextHdfRead=dashboardHdfAt+(finalHdf==null?3000:10000);
+                }
+                if(finalFailure!=null){dashboardHdf=null;nextHdfRead=0;}
                 if (readHistory) {
                     nextHistoryRead = android.os.SystemClock.elapsedRealtime() + 15000;
                     if (finalHistory != null) { lastHistory = finalHistory; historyError = ""; }
@@ -2171,7 +2200,6 @@ public final class MainActivity extends Activity {
         addNumberField(startup, "ST LED (100 ms)", "stLed");
         addNumberField(startup, "ST LCD (100 ms)", "stLcd");
         finishSettingsRow(startup);
-        addSettingsSubgroup(advanced,"Khởi động",startup);
 
         LinearLayout modes=new LinearLayout(this); modes.setOrientation(LinearLayout.VERTICAL);
         addChoiceField(modes, "Bắt đầu làm lạnh", "coolStart", choices("CL",0,"OP",1));
@@ -2188,6 +2216,7 @@ public final class MainActivity extends Activity {
         finishSettingsRow(modes);
         addChoiceField(modes, "Số lần bật nguồn và khởi động", "onTime", choices("Nguồn: 1 lần · Khởi động: 1 lần",0,"Nguồn: 2 lần · Khởi động: 1 lần",1,"Nguồn: 1 lần · Khởi động: 2 lần",2,"Nguồn: 2 lần · Khởi động: 2 lần",3));
         addSettingsSubgroup(advanced,"Chu trình",modes);
+        addSettingsSubgroup(advanced,"Khởi động",startup);
 
         LinearLayout display=new LinearLayout(this); display.setOrientation(LinearLayout.VERTICAL);
         addNumberField(display,"Độ sáng LED đỏ","redBrightness");
@@ -3255,6 +3284,7 @@ public final class MainActivity extends Activity {
     }
 
     private void stopDashboard() {
+        dashboardHdf=null;dashboardHdfAt=0;nextHdfRead=0;
         mainHandler.removeCallbacks(unlockPoll);mainHandler.removeCallbacks(expireUnlock);
         expireUnlock.run();
         if(unlockDialog!=null){unlockDialog.dismiss();unlockDialog=null;}
