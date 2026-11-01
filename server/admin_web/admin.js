@@ -183,8 +183,8 @@ function renderPermissionGroups(data) {
     group('Thời gian hoạt động',['coolCl','coolOp','defrostCl','defrostOp']);
     const advanced=group('Cài đặt nâng cao',[]);advanced.classList.add('advanced-permissions');
     for(const [title,keys] of [
-        ['Cài đặt khởi động',['delaySt','stLed','stLcd','showSt']],
         ['Chu trình',['coolStart','defrostStart','df','end','hdf','delayDf','onTime','defrostOpSeconds']],
+        ['Cài đặt khởi động',['delaySt','stLed','stLcd','showSt']],
         ['HCF',['hcfMode','hcfTime']],
         ['Hiển thị và thao tác',['displayMode','redBrightness','greenBrightness','lockTime','touch']],
         ['Thử lại',['tryTime','tryUnit']]
