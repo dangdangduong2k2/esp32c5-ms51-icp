@@ -1,5 +1,5 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const {chromium}=require('playwright');
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 (async()=>{
  const root=path.resolve(__dirname,'..');
  const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'});
@@ -12,8 +12,8 @@ const {chromium}=require('playwright');
   if(req.method()!=='GET'){
    posts++;writes.push({path:url.pathname,body:req.postDataJSON()});
    if(mode==='save-policy-fail'&&url.pathname.endsWith('/access'))return route.fulfill({status:409,json:{message:'Quyền đã thay đổi'}});
-   if(mode==='save-options-fail'&&url.pathname.endsWith('/options'))return route.fulfill({status:504,json:{message:'Mạch chưa phản hồi'}});
-   return route.fulfill({json:{ok:true,revision:7,changed:true}});
+   if(mode==='save-options-fail'&&url.pathname.endsWith('/access'))return route.fulfill({status:504,json:{message:'Mạch chưa phản hồi'}});
+   return route.fulfill({json:{ok:true,revision:7,changed:true,board_synced:true,options_values:{showSt:1,defrostOpSeconds:1},options_revision:'c'.repeat(64)}});
   }
   if(url.pathname.includes('/api/')){
    if(url.pathname.endsWith('/session'))return route.fulfill({status:401,json:{message:'Sign in'}});
@@ -64,23 +64,24 @@ const {chromium}=require('playwright');
   assert.equal(await page.locator('#save-options, #save-policy').count(),0);
   await page.locator('#option-op-seconds').check();
   await page.locator('#save-access').click();await page.waitForFunction(()=>!state.pending);
-  assert.equal(writes.length,2);assert.match(writes[0].path,/\/access$/);assert.match(writes[1].path,/\/options$/);
+  assert.equal(writes.length,1);assert.match(writes[0].path,/\/access$/);
   assert.deepEqual(writes[0].body.visible,['coolCl']);
-  assert.deepEqual(writes[1].body.values,{showSt:1,defrostOpSeconds:1});
+  assert.deepEqual(writes[0].body.options.values,{showSt:1,defrostOpSeconds:1});
   assert.match(await page.locator('#options-status').textContent(),/đã xác nhận/);
   await page.locator('#save-access').click();await page.waitForFunction(()=>!state.pending);
-  assert.equal(writes.length,3);assert.match(writes[2].path,/\/access$/); // no duplicate MCU write
+  assert.equal(writes.length,2);assert.match(writes[1].path,/\/access$/);
+  assert.equal(writes[1].body.options,undefined); // unchanged options not re-submitted
   await close();await open('device-a');writes=[];
   await page.locator('#option-op-seconds').check();mode='save-policy-fail';
   await page.locator('#save-access').click();await page.waitForFunction(()=>!state.pending);
   assert.equal(writes.length,1);assert.match(writes[0].path,/\/access$/);
-  assert.match(await page.locator('#access-error').textContent(),/chưa gửi thay đổi xuống mạch/);
-  mode='save-options-fail';writes=[];
+  assert.match(await page.locator('#access-error').textContent(),/Đóng rồi mở lại/);
+  assert.equal(await page.locator('#save-access').isDisabled(),true);
+  await close();mode='save-options-fail';await open('device-a');writes=[];
   await page.locator('#save-access').click();await page.waitForFunction(()=>!state.pending);
-  assert.equal(writes.length,2);
-  assert.match(await page.locator('#access-error').textContent(),/Đã lưu quyền hiển thị; chưa xác nhận/);
-  await page.locator('#save-access').click();await page.waitForFunction(()=>!state.pending);
-  assert.equal(writes.length,2); // uncertain MCU write cannot be retried without a read
+  assert.equal(writes.length,1);
+  assert.match(await page.locator('#access-error').textContent(),/Mạch chưa phản hồi/);
+  assert.equal(await page.locator('#save-access').isDisabled(),true);
   posts=0;
   await close();mode='options-fail';await open('device-a');
   assert.equal(await page.locator('#save-access').isEnabled(),true);
@@ -89,7 +90,8 @@ const {chromium}=require('playwright');
   assert.match(await page.locator('#options-status').textContent(),/Chưa đọc được/);
   writes=[];await page.locator('#save-access').click();await page.waitForFunction(()=>!state.pending);
   assert.equal(writes.length,1);assert.match(writes[0].path,/\/access$/);
-  assert.match(await page.locator('#toast').textContent(),/phần này được giữ nguyên/);posts=0;
+  assert.equal(writes[0].body.options,undefined); // unread options kept by server's fresh read
+  assert.match(await page.locator('#toast').textContent(),/cả app và mạch/);posts=0;
   await close();mode='access-fail';await open('device-a');
   assert.equal(await page.locator('#save-access').isDisabled(),true);
   await page.locator('#read-options').click();await page.waitForFunction(()=>!optionsLoading);
@@ -106,6 +108,6 @@ const {chromium}=require('playwright');
   assert.equal(await page.locator('#option-show-st').count(),1);
   assert.equal(await page.locator('#option-op-seconds').count(),1);
   assert.equal(posts,0);
-  console.log('PASS: app grouping, all 44 permissions exactly once, integrated MCU options, single save, partial failure handling, no duplicate device writes, bulk action isolation, automatic GET, offline/error handling, late result isolation, no implicit writes.');
+  console.log('PASS: 44 permissions, single combined save, success confirmation, failure requires reload, unchanged/unread options omitted, bulk isolation, late result isolation, no implicit writes.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

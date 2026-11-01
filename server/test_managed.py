@@ -84,8 +84,69 @@ class ManagedTests(AdminTests):
     def setUp(self):
         super().setUp()
         core.managed_locks.clear()
+        self.board_config = bytearray(217)
+        self.board_config[0] = 2
+        original_call = core.bridge.call
+        def board(row, uid, rid, method, path, body, lease=None):
+            if lease is None:
+                return original_call(row, uid, rid, method, path, body)
+            if method == 'GET' and path == '/api/runtime-config':
+                return {'ok': True, 'data': self.board_config.hex()}
+            if method == 'POST' and path == '/api/runtime-config':
+                self.board_config[:] = bytes.fromhex(body['data'])
+                return {'ok': True}
+            raise AssertionError('Unexpected device request: ' + method + ' ' + path)
+        board_patch = patch.object(core.bridge, 'call', side_effect=board)
+        self.board_mock = board_patch.start()
+        self.addCleanup(board_patch.stop)
         self.auth()
         self.mobile_headers = self.mobile()
+
+    def test_permissions_sync_menu_flags_without_changing_mode_values(self):
+        for i, parent in enumerate(MODE_DISPLAY_FIELDS.values()):
+            self.board_config[CATALOG[parent]['offset']] = i % 2
+        before = bytes(self.board_config)
+        rev = self.set_policy(['df', 'hdf', 'displayMode', 'coolCl'])
+        expected = bytearray(before)
+        for flag, parent in MODE_DISPLAY_FIELDS.items():
+            expected[CATALOG[flag]['offset']] = int(parent in ['df', 'hdf', 'displayMode'])
+        self.assertEqual(self.board_config, expected)
+        self.assertEqual(self.client.get(MOBILE+'/access', headers=self.mobile_headers).json()['revision'], rev)
+        self.board_mock.reset_mock()
+        self.set_policy(['df', 'hdf', 'displayMode', 'coolCl'])
+        self.assertEqual(self.board_mock.call_count, 1)  # GET only when already synchronized
+        self.set_policy([])
+        for flag, parent in MODE_DISPLAY_FIELDS.items():
+            self.assertEqual(self.board_config[CATALOG[flag]['offset']], 0)
+            self.assertEqual(self.board_config[CATALOG[parent]['offset']], before[CATALOG[parent]['offset']])
+
+    def test_combined_permissions_and_options_use_one_board_write(self):
+        options = self.client.get(ADMIN+'/options').json()
+        body = {'visible':['df'], 'revision':0,
+                'options':{'values':{'showSt':1,'defrostOpSeconds':1},'revision':options['revision']}}
+        self.board_mock.reset_mock()
+        r = self.client.post(ADMIN+'/access', json=body, headers=self.headers)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()['board_synced'])
+        self.assertEqual(self.board_mock.call_count, 2)  # one GET, one POST
+        for key in ('showDf','showSt','defrostOpSeconds'):
+            self.assertEqual(self.board_config[CATALOG[key]['offset']], 1)
+        body['revision'] = r.json()['revision']
+        r = self.client.post(ADMIN+'/access', json=body, headers=self.headers)
+        self.assertEqual(r.status_code, 409)  # options changed since original read
+
+    def test_board_failure_keeps_policy_and_releases_lock(self):
+        initial = self.client.get(ADMIN+'/access').json()
+        body = {'visible':['df'], 'revision':initial['revision']}
+        for responses in ([{'ok':False,'message':'offline'}],
+                          [{'ok':True,'data':self.board_config.hex()}, {'ok':False,'message':'write timeout'}]):
+            with patch.object(core.bridge,'call',side_effect=responses):
+                r = self.client.post(ADMIN+'/access', json=body, headers=self.headers)
+            self.assertEqual(r.status_code, 502)
+            current = self.client.get(ADMIN+'/access').json()
+            self.assertEqual(current['revision'], initial['revision'])
+            self.assertEqual(current['visible'], initial['visible'])
+            self.assertNotIn(DEVICE, core.managed_locks)
 
     def test_mode_owner_validation_and_update_overlap(self):
         body = {'id':'a'*32, 'method':'POST', 'path':'/api/mode', 'body':{'mode':'COOL'}}

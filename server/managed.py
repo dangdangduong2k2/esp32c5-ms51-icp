@@ -111,11 +111,6 @@ def parse_hex(content):
     return zlib.crc32(coverage + image)
 
 
-class PolicyEdit(BaseModel):
-    visible: list[str] = Field(max_length=51)
-    revision: int = Field(ge=0)
-
-
 class SettingsEdit(BaseModel):
     values: dict = Field(max_length=51)
     revision: int = Field(ge=0)
@@ -124,6 +119,12 @@ class SettingsEdit(BaseModel):
 class AdminOptionsEdit(BaseModel):
     values: dict = Field(min_length=2, max_length=2)
     revision: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
+class PolicyEdit(BaseModel):
+    visible: list[str] = Field(max_length=51)
+    revision: int = Field(ge=0)
+    options: AdminOptionsEdit | None = None
 
 
 class UpdateStart(BaseModel):
@@ -245,17 +246,46 @@ def install(app, core, admin_identity, audit):
         who = admin_device(uid, device, request, True)
         if len(set(data.visible)) != len(data.visible) or set(data.visible) - CATALOG.keys():
             core.fail(400, 'Danh sách quyền không hợp lệ.')
-        with lock:
-            core.device_for(uid, device)
-            if device in core.managed_locks or device in core.busy:
-                core.fail(409, 'Đợi thiết bị hoàn tất thao tác trước khi đổi quyền.')
-            if policy(device)['revision'] != data.revision:
-                core.fail(409, 'Quyền vừa được thay đổi. Đóng rồi mở lại mục Cấp quyền.')
-            db.execute('INSERT INTO device_policies VALUES(?,?,?) ON CONFLICT(device) DO UPDATE SET visible=excluded.visible,revision=excluded.revision',
-                       (device, json.dumps(visible_settings(data.visible)), data.revision + 1))
-            audit(who['username'], 'device.policy', device)
-            db.commit()
-        return {'ok': True, 'revision': data.revision + 1}
+        if data.options and (set(data.options.values) != ADMIN_ONLY_FIELDS or
+                             any(type(v) is not int or v not in (0, 1) for v in data.options.values.values())):
+            core.fail(400, 'Chỉ được chọn Bật hoặc Tắt cho hai tùy chọn.')
+        row = core.device_for(uid, device)
+        lease = secrets.token_hex(16)
+        acquire(row, uid, lease)
+        try:
+            with lock:
+                if policy(device)['revision'] != data.revision:
+                    core.fail(409, 'Quyền vừa được thay đổi. Đóng rồi mở lại mục Cấp quyền.')
+            # Read fresh MCU configuration, then patch menu flags only. The mode
+            # values (DF/END/HCF/HDF/LCD-LED) must not follow the checkboxes.
+            raw, values, options_revision = read_options(row, uid, lease)
+            if data.options and options_revision != data.options.revision:
+                core.fail(409, 'Tùy chọn trên mạch đã thay đổi. Đọc lại trước khi lưu.')
+            visible = visible_settings(data.visible)
+            before = bytes(raw)
+            for flag, parent in MODE_DISPLAY_FIELDS.items():
+                raw[CATALOG[flag]['offset']] = int(parent in visible)
+            if data.options:
+                for key, value in data.options.values.items():
+                    raw[CATALOG[key]['offset']] = value
+                values = dict(data.options.values)
+            changed = bytes(raw) != before
+            if changed:
+                prepare_pin_for_write(raw)
+                call(row, uid, lease, 'POST', '/api/runtime-config', {'data': raw.hex().upper()})
+            # Publish app permissions only after the board acknowledges. On a
+            # timeout the old policy remains and a fresh read/retry reconciles it.
+            with lock:
+                core.device_for(uid, device)
+                db.execute('INSERT INTO device_policies VALUES(?,?,?) ON CONFLICT(device) DO UPDATE SET visible=excluded.visible,revision=excluded.revision',
+                           (device, json.dumps(visible), data.revision + 1))
+                audit(who['username'], 'device.policy', device)
+                db.commit()
+            return {'ok': True, 'revision': data.revision + 1, 'board_synced': True,
+                    'changed': changed, 'options_values': values,
+                    'options_revision': hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()}
+        finally:
+            release_lock(device, lease)
 
     @app.post('/admin/api/users/{uid}/devices/{device}/firmware')
     async def admin_firmware(uid: str, device: str, request: Request):

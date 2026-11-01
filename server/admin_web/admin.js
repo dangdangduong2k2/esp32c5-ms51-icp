@@ -7,7 +7,7 @@ function button(text, cls, action) { const n = el('button', cls, text); n.type =
 function message(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(message.timer); message.timer = setTimeout(() => $('toast').hidden = true, 5000); }
 function showLogin() { ++accessEpoch; accessTarget=null; accessLoading=false; optionsLoading=false; policyLoaded=false; optionsRevision=null; state.pending=false; state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); parkOptions(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
 async function api(path, body) {
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), path.endsWith("/options") ? 45000 : 15000);
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), /\/(options|access)$/.test(path) ? 45000 : 15000);
   try {
     const response = await fetch('api/' + path, {method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: body === undefined ? {} : {'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf}, body: body === undefined ? undefined : JSON.stringify(body)});
     let data; try { data = await response.json(); } catch { throw new Error('Máy chủ trả về dữ liệu chưa hợp lệ. Hãy thử lại.'); }
@@ -230,29 +230,30 @@ $('policy-form').onsubmit=async e=>{
     if(changed&&optionsRevision===null){$('access-error').textContent='Đọc lại từ mạch để xác nhận giá trị trước khi lưu tiếp.';return;}
     const revision=optionsRevision;
     const visible=[...$('permission-fields').querySelectorAll('input[data-permission]:checked')].map(n=>n.value);
-    let policySaved=false;
     accessBusy(true);$('access-error').textContent='';$('save-access').textContent='Đang lưu…';
+    $('policy-form').setAttribute('aria-busy','true');
+    $('permission-status').textContent='Đang đồng bộ quyền app và menu trên mạch…';
     try {
-        const data=await api(`users/${target.uid}/devices/${target.device}/access`,{visible,revision:target.revision});
+        const body={visible,revision:target.revision};
+        if(changed)body.options={values,revision};
+        const data=await api(`users/${target.uid}/devices/${target.device}/access`,body);
         if(epoch!==accessEpoch||!state.csrf)return;
-        accessTarget.revision=data.revision;policySaved=true;
-        $('permission-status').textContent='Đã lưu quyền hiển thị.';
-        if(changed){
-            $('options-status').textContent='Đang lưu xuống mạch…';
-            const result=await api(`users/${target.uid}/devices/${target.device}/options`,{values,revision});
-            if(epoch!==accessEpoch||!state.csrf)return;
-            optionsValues={...values};optionsRevision=null;
-            $('options-status').textContent=result.changed?'Mạch đã xác nhận lưu và đang khởi động lại.':'Giá trị trên mạch không thay đổi.';
-        }
-        message(optionsValues?'Đã lưu thay đổi.':'Đã lưu quyền hiển thị. Chưa đọc được tùy chọn trên mạch nên phần này được giữ nguyên.');
+        if(data.board_synced!==true)throw new Error('Máy chủ chưa xác nhận đồng bộ với mạch. Hãy tải lại trang.');
+        accessTarget.revision=data.revision;
+        optionsValues={...data.options_values};optionsRevision=data.options_revision;
+        $('option-show-st').checked=optionsValues.showSt===1;
+        $('option-op-seconds').checked=optionsValues.defrostOpSeconds===1;
+        for(const id of ['option-show-st','option-op-seconds'])$(id).indeterminate=false;
+        $('permission-status').textContent='Đã lưu quyền app và menu trên mạch.';
+        $('options-status').textContent=data.changed?'Mạch đã xác nhận lưu và đang khởi động lại.':'Menu trên mạch đã khớp, không cần ghi lại.';
+        message('Đã lưu cho cả app và mạch.');
     } catch(e) {
         if(epoch!==accessEpoch||!state.csrf)return;
-        if(policySaved){
-            optionsRevision=null;
-            $('access-error').textContent='Đã lưu quyền hiển thị; chưa xác nhận lưu tùy chọn trên mạch. '+e.message+' Đọc lại từ mạch để kiểm tra trước khi thử lại.';
-            $('options-status').textContent='Chưa xác nhận lưu xuống mạch.';
-        }else $('access-error').textContent='Chưa xác nhận lưu quyền hiển thị; chưa gửi thay đổi xuống mạch. '+e.message;
-    } finally { $('save-access').textContent='Lưu thay đổi';if(epoch===accessEpoch)accessBusy(false); }
+        optionsRevision=null;
+        policyLoaded=false;
+        $('permission-status').textContent='Chưa xác nhận đồng bộ.';
+        $('access-error').textContent=e.message+' Đóng rồi mở lại Cấp quyền để kiểm tra trước khi lưu tiếp.';
+    } finally { $('policy-form').setAttribute('aria-busy','false');$('save-access').textContent='Lưu thay đổi';if(epoch===accessEpoch)accessBusy(false); }
 };
 $('firmware-form').onsubmit=async e=>{
     e.preventDefault();if(state.pending||!accessTarget) return;
