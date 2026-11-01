@@ -102,6 +102,7 @@ final class Design {
             p.setColor(color); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.65f);
             p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
             switch (name) {
+                case "bluetooth": path(c,7,6,17,16,12,21,12,3,17,8,7,18); break;
                 case "check": c.drawCircle(12,12,9,p);path(c,7.5f,12,10.5f,15,16.5f,9);break;
                 case "info": c.drawCircle(12,12,9,p);path(c,12,11,12,17);c.drawCircle(12,7,0.6f,p);break;
                 case "home":

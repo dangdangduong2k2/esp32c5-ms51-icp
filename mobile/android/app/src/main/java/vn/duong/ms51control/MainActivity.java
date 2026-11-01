@@ -253,7 +253,7 @@ public final class MainActivity extends Activity {
     };
 
     private static final int BLE_PERMISSION_REQUEST=91;
-    private BleTransport bleLink;
+    private BleSession bleLink;
     private final ExecutorService bleConnectIo=Executors.newSingleThreadExecutor();
     private java.util.concurrent.Future<?> bleConnectTask;
     private BlePicker blePicker;
@@ -400,8 +400,13 @@ public final class MainActivity extends Activity {
                 final BleTransport connected=link;
                 runOnUiThread(()->{
                     if(!currentSetup(token)){connected.close();return;}
-                    bleLink=connected;bleMode=true;api.setDemo(false);demoMode=false;
-                    releaseRequestedNetwork();clearDeviceState();api.setBle(connected);api.setExpectedDeviceId(id);
+                    bleLink=new BleSession(device.getAddress(),id,connected,allowed->{
+                        if(device.getBondState()!=android.bluetooth.BluetoothDevice.BOND_BONDED)
+                            throw new IOException("Thiết bị đã bỏ ghép Bluetooth. Hãy ghép lại.");
+                        return BleTransport.connect(this,device,allowed,15000);
+                    });
+                    bleMode=true;api.setDemo(false);demoMode=false;
+                    releaseRequestedNetwork();clearDeviceState();api.setBle(bleLink);api.setExpectedDeviceId(id);
                     pairingDeviceId=id;pairingHostname=id+".local";localDeviceReady=true;
                     activeDevice=new DeviceStore.Device(id,"Hộp hẹn giờ "+id.substring(id.length()-6).toUpperCase(Locale.ROOT),"",pairingHostname,"");
                     rememberBleDevice(device.getAddress(),id);
@@ -1811,8 +1816,19 @@ public final class MainActivity extends Activity {
         return card;
     }
 
+    private void showBleRecoveryStatus() {
+        dashboardMode.setText("Đang kết nối lại…");dashboardConnection.setText("Bluetooth");
+        Design.Icon symbol=new Design.Icon("bluetooth",Design.ACCENT);symbol.setBounds(0,0,dp(22),dp(22));
+        dashboardConnection.setCompoundDrawables(compactSettings()?null:symbol,compactSettings()?symbol:null,null,null);
+        dashboardConnection.setContentDescription("Đang kết nối lại Bluetooth với thiết bị đã chọn");
+    }
+
     private void refreshDashboard() {
         if (!foreground || screen != Screen.CONTROL || tab != Tab.OVERVIEW || dashboardBusy) return;
+        if(bleMode && bleLink!=null && !bleLink.connected() && dashboardMode!=null) {
+            renderDashboard(null,null);
+            showBleRecoveryStatus();
+        }
         dashboardBusy = true;
         final int epoch = dashboardEpoch;
         final int controlToken = controlEpoch;
@@ -1868,8 +1884,12 @@ public final class MainActivity extends Activity {
                 } else if (dashboardConnection != null) {
                     updateUnlock(null);
                     renderDashboard(finalStatus, null);
-                    dashboardMode.setText("Mất kết nối");
-                    dashboardConnection.setText("Chưa đọc được thiết bị: " + errorMessage(finalFailure));
+                    boolean reconnecting=bleMode && bleLink!=null && !bleLink.connected();
+                    if(reconnecting)showBleRecoveryStatus();
+                    else {
+                        dashboardMode.setText("Mất kết nối");
+                        dashboardConnection.setText("Chưa đọc được thiết bị: " + errorMessage(finalFailure));
+                    }
                 }
                 mainHandler.postDelayed(dashboardRefresh, 1000);
             });
@@ -3275,6 +3295,7 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         foreground = true;
+        if(bleLink!=null)bleLink.resume();
         nearbySuppressed=false;
         mainHandler.removeCallbacks(nearbyRefresh);mainHandler.postDelayed(nearbyRefresh,500);
         if (screen == Screen.HOME) restartHomeChecks();
@@ -3292,6 +3313,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onPause() {
         foreground = false;
+        if(bleLink!=null)bleLink.pause();
         if(notice!=null)notice.dismiss();
         if(!blePromptPending)endManualDiscovery();
         mainHandler.removeCallbacks(nearbyRefresh);stopNearby();

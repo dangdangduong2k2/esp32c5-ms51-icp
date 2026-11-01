@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
 
 /** One bonded GATT connection, one acknowledged operation at a time. Never replay writes. */
 @SuppressLint("MissingPermission")
-final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
+final class BleTransport implements BleSession.Link {
     static final UUID SERVICE=UUID.fromString("51b10001-8c22-4f42-9a51-3844be1fe4e0");
     static final UUID RX=UUID.fromString("51b10002-8c22-4f42-9a51-3844be1fe4e0");
     static final UUID TX=UUID.fromString("51b10003-8c22-4f42-9a51-3844be1fe4e0");
@@ -36,6 +36,9 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
     private Runnable mtuFallback;
     private BleTransport(Context context,BluetoothDevice device) { this.context=context.getApplicationContext();this.device=device; }
     static BleTransport connect(Context context,BluetoothDevice device) throws IOException {
+        return connect(context,device,()->true,45000);
+    }
+    static BleTransport connect(Context context,BluetoothDevice device,java.util.function.BooleanSupplier allowed,int timeoutMs) throws IOException {
         BleTransport link=new BleTransport(context,device);
         try {
             IntentFilter filter=new IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
@@ -44,12 +47,21 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
             link.registered=true;
             link.gatt=device.connectGatt(link.context,false,link.callback,BluetoothDevice.TRANSPORT_LE);
             if(link.gatt==null) throw new IOException("Không mở được Bluetooth.");
-            link.await(link.ready,45000,"Chưa kết nối được. Hãy xác nhận ghép Bluetooth trên điện thoại.");
+            long deadline=android.os.SystemClock.elapsedRealtime()+timeoutMs;
+            while(!link.ready.await(250,TimeUnit.MILLISECONDS)) {
+                if(!allowed.getAsBoolean())throw new IOException("Đã dừng kết nối.");
+                if(android.os.SystemClock.elapsedRealtime()>=deadline) {
+                    android.util.Log.w("MS51-BLE","Connection timed out at "+link.setup.stage());
+                    throw new IOException("Chưa kết nối được. Hãy xác nhận ghép Bluetooth trên điện thoại.");
+                }
+            }
+            if(!allowed.getAsBoolean())throw new IOException("Đã dừng kết nối.");
+            link.await(link.ready,1,"Chưa kết nối được Bluetooth.");
             return link;
-        } catch(Exception error) { link.close(); throw error instanceof IOException?(IOException)error:new IOException(error.getMessage(),error); }
+        } catch(Exception error) { if(error instanceof InterruptedException)Thread.currentThread().interrupt();link.close(); throw error instanceof IOException?(IOException)error:new IOException(error.getMessage(),error); }
     }
     String address() { return device.getAddress(); }
-    boolean connected() { return !closed && failure==null && rx!=null && setup.isReady(); }
+    @Override public boolean connected() { return !closed && failure==null && rx!=null && setup.isReady(); }
     private final BroadcastReceiver bond=new BroadcastReceiver() {
         @Override public void onReceive(Context c,Intent i) {
             BluetoothDevice peer=i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
@@ -149,7 +161,7 @@ final class BleTransport implements AutoCloseable, EspApi.LocalTransport {
         failure=new IOException(message);ready.countDown();
         CountDownLatch write=writeDone,reply=responseDone;if(write!=null)write.countDown();if(reply!=null)reply.countDown();
     }
-    @Override public void close() {
+    @Override public synchronized void close() {
         if(closed)return;closed=true;fail("Bluetooth đã ngắt kết nối.");
         BluetoothGatt g=gatt;gatt=null;if(g!=null){try{g.disconnect();g.close();}catch(SecurityException revoked){/* Permission can be revoked while connected. */}}
         if(registered){context.unregisterReceiver(bond);registered=false;}
