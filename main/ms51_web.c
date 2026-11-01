@@ -1408,14 +1408,8 @@ static esp_err_t upload_handler(httpd_req_t *request)
         return send_error_json(request, "409 Conflict", "Programmer is busy.", error);
     }
 
-    ms51_image_t image={0};
-    error=ms51_image_parse_stream(upload_read,request,request->content_len,filename,&image);
-
     ms51_storage_info_t info;
-    if (error == ESP_OK) {
-        error = ms51_storage_commit_image(filename, &image, &info);
-    }
-    ms51_image_free(&image);
+    error=ms51_storage_receive(upload_read,request,request->content_len,filename,&info);
     ms51_operation_unlock();
 
     if (error != ESP_OK) {

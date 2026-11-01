@@ -45,6 +45,10 @@ esp_err_t ms51_storage_get_info(ms51_storage_info_t *info);
 esp_err_t ms51_storage_commit_image(const char *filename, const ms51_image_t *image,
                                     ms51_storage_info_t *info);
 
+/** Stream into the inactive slot with a 4 KiB parser allocation; validate before activation. */
+esp_err_t ms51_storage_receive(ms51_image_reader_t reader, void *context, size_t source_size,
+                               const char *filename, ms51_storage_info_t *info);
+
 /** Map the current valid image. Pass a zero-initialized handle and release it after use. */
 esp_err_t ms51_storage_acquire_image(uint32_t expected_generation,
                                      ms51_storage_image_t *image);

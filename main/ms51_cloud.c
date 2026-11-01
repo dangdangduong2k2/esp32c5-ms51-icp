@@ -173,7 +173,7 @@ cJSON *ms51_local_request(const char *method,const char *path,const cJSON *body)
 typedef struct { esp_http_client_handle_t http; int size; bool opened; } transfer_reader_t;
 static int transfer_read(void *context, uint8_t *buffer, size_t maximum) {
     transfer_reader_t *reader=context;
-    // The parser reserves its canonical image before the TLS handshake can fragment RAM.
+    // The streaming parser reserves only its 4 KiB coverage map before TLS.
     if(!reader->opened) {
         if(esp_http_client_open(reader->http,0)!=ESP_OK ||
            esp_http_client_fetch_headers(reader->http)!=reader->size ||
@@ -204,12 +204,11 @@ static cJSON *remote_upload(const cJSON *body) {
     esp_err_t error=ms51_operation_lock(MS51_OPERATION_FOREGROUND_WAIT);
     if(error!=ESP_OK) { esp_http_client_cleanup(download); return error_result("Thiet bi dang ban. Vui long doi."); }
     transfer_reader_t reader={.http=download,.size=n->valueint};
-    ms51_image_t image={0}; ms51_storage_info_t info;
-    error=ms51_image_parse_stream(transfer_read,&reader,n->valueint,name,&image);
-    // Close TLS before flash verification and response allocation.
+    ms51_storage_info_t info;
+    error=ms51_storage_receive(transfer_read,&reader,n->valueint,name,&info);
+    // Release TLS before constructing the response.
     esp_http_client_cleanup(download);
-    if(error==ESP_OK) error=ms51_storage_commit_image(name,&image,&info);
-    ms51_image_free(&image); ms51_operation_unlock();
+    ms51_operation_unlock();
     if(error!=ESP_OK) {
         ESP_LOGW(TAG,"Upload rejected: %s",esp_err_to_name(error));
         return error_result(error==ESP_ERR_NO_MEM ? "ESP khong du bo nho nhan tep." :

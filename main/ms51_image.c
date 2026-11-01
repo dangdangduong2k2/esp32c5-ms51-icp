@@ -114,8 +114,16 @@ static esp_err_t mark_data(ms51_image_t *image, uint32_t address, const uint8_t 
         if ((image->coverage[target >> 3] & bit) != 0) {
             return ESP_ERR_INVALID_STATE;
         }
+    }
+    if (image->writer != NULL) {
+        esp_err_t error = image->writer(image->writer_context, address, data, length);
+        if (error != ESP_OK) return error;
+    }
+    for (size_t index = 0; index < length; ++index) {
+        const size_t target = (size_t)address + index;
+        const uint8_t bit = (uint8_t)(1u << (target & 7u));
         image->coverage[target >> 3] |= bit;
-        image->data[target] = data[index];
+        if (image->data != NULL) image->data[target] = data[index];
     }
     image->covered_size += length;
     const size_t end = (size_t)address + length;
@@ -265,13 +273,23 @@ esp_err_t ms51_image_parse_upload(const uint8_t *source, size_t source_size,
 }
 
 /* Preserve the same record validation while avoiding a second 96 KiB source allocation. */
-esp_err_t ms51_image_parse_stream(ms51_image_reader_t reader, void *context,
-                                  size_t source_size, const char *filename, ms51_image_t *image)
+static esp_err_t parse_stream(ms51_image_reader_t reader, void *context,
+                              size_t source_size, const char *filename,
+                              ms51_image_writer_t writer, void *writer_context,
+                              ms51_image_t *image)
 {
     if(!reader || !image || !source_size) return ESP_ERR_INVALID_ARG;
     bool hex=ms51_image_filename_is_intel_hex(filename);
     if(source_size>(hex ? MS51_IMAGE_MAX_UPLOAD_SIZE : MS51_IMAGE_MAX_SIZE)) return ESP_ERR_INVALID_SIZE;
-    esp_err_t error=image_allocate(image,hex ? MS51_IMAGE_FORMAT_INTEL_HEX : MS51_IMAGE_FORMAT_BINARY);
+    esp_err_t error=ESP_OK;
+    if(writer) {
+        memset(image,0,sizeof(*image));
+        image->allocation=heap_caps_calloc(1,MS51_IMAGE_COVERAGE_SIZE,MALLOC_CAP_8BIT);
+        if(!image->allocation)return ESP_ERR_NO_MEM;
+        image->coverage=image->allocation;
+        image->format=hex ? MS51_IMAGE_FORMAT_INTEL_HEX : MS51_IMAGE_FORMAT_BINARY;
+        image->writer=writer;image->writer_context=writer_context;
+    } else error=image_allocate(image,hex ? MS51_IMAGE_FORMAT_INTEL_HEX : MS51_IMAGE_FORMAT_BINARY);
     if(error!=ESP_OK) return error;
     uint8_t input[512], line[524]; size_t used=0, received=0;
     uint32_t base=0; bool eof=false;
@@ -294,4 +312,19 @@ esp_err_t ms51_image_parse_stream(ms51_image_reader_t reader, void *context,
     if(error==ESP_OK && hex && (!eof || !image->covered_size)) error=ESP_ERR_INVALID_ARG;
     if(error!=ESP_OK) ms51_image_free(image);
     return error;
+}
+
+esp_err_t ms51_image_parse_stream(ms51_image_reader_t reader, void *context,
+                                  size_t source_size, const char *filename, ms51_image_t *image)
+{
+    return parse_stream(reader,context,source_size,filename,NULL,NULL,image);
+}
+
+esp_err_t ms51_image_parse_to_sink(ms51_image_reader_t reader, void *context,
+                                   size_t source_size, const char *filename,
+                                   ms51_image_writer_t writer, void *writer_context,
+                                   ms51_image_t *image)
+{
+    if(!writer)return ESP_ERR_INVALID_ARG;
+    return parse_stream(reader,context,source_size,filename,writer,writer_context,image);
 }

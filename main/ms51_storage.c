@@ -308,33 +308,12 @@ esp_err_t ms51_storage_get_info(ms51_storage_info_t *info)
     return ESP_OK;
 }
 
-esp_err_t ms51_storage_commit_image(const char *filename, const ms51_image_t *image,
-                                    ms51_storage_info_t *info)
+/* Caller holds storage mutex; payload has already been written to the inactive slot. */
+static esp_err_t activate_staged_image(int target_slot, const char *filename,
+                                        const ms51_image_t *image, ms51_storage_info_t *info)
 {
-    if (image == NULL || image->data == NULL || image->coverage == NULL || s_mutex == NULL ||
-        s_partition == NULL || !format_is_valid(image->format) ||
-        !coverage_is_valid(image->coverage, image->size, image->covered_size)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    xSemaphoreTake(s_mutex, portMAX_DELAY);
-    if (s_mapping_count != 0 || s_storage_degraded) {
-        xSemaphoreGive(s_mutex);
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    const int target_slot = s_active_slot == 0 ? 1 : 0;
     const size_t base = slot_offset(target_slot);
-    esp_err_t error = esp_partition_erase_range(s_partition, base, STORAGE_SLOT_SIZE);
-    if (error == ESP_OK) {
-        error = esp_partition_write(s_partition, base + STORAGE_COVERAGE_OFFSET,
-                                    image->coverage, MS51_IMAGE_COVERAGE_SIZE);
-    }
-    if (error == ESP_OK) {
-        error = esp_partition_write(s_partition, base + STORAGE_DATA_OFFSET,
-                                    image->data, MS51_IMAGE_MAX_SIZE);
-    }
-
+    esp_err_t error = ESP_OK;
     uint32_t payload_crc = 0;
     if (error == ESP_OK) {
         error = flash_crc(base + STORAGE_PAYLOAD_OFFSET, STORAGE_PAYLOAD_SIZE, &payload_crc);
@@ -384,6 +363,75 @@ esp_err_t ms51_storage_commit_image(const char *filename, const ms51_image_t *im
         }
     }
 
+    return error;
+}
+
+esp_err_t ms51_storage_commit_image(const char *filename, const ms51_image_t *image,
+                                    ms51_storage_info_t *info)
+{
+    if (image == NULL || image->data == NULL || image->coverage == NULL || s_mutex == NULL ||
+        s_partition == NULL || !format_is_valid(image->format) ||
+        !coverage_is_valid(image->coverage, image->size, image->covered_size)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (s_mapping_count != 0 || s_storage_degraded) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const int target_slot = s_active_slot == 0 ? 1 : 0;
+    const size_t base = slot_offset(target_slot);
+    esp_err_t error = esp_partition_erase_range(s_partition, base, STORAGE_SLOT_SIZE);
+    if (error == ESP_OK) {
+        error = esp_partition_write(s_partition, base + STORAGE_COVERAGE_OFFSET,
+                                    image->coverage, MS51_IMAGE_COVERAGE_SIZE);
+    }
+    if (error == ESP_OK) {
+        error = esp_partition_write(s_partition, base + STORAGE_DATA_OFFSET,
+                                    image->data, MS51_IMAGE_MAX_SIZE);
+    }
+
+    if (error == ESP_OK) error = activate_staged_image(target_slot, filename, image, info);
+
+    xSemaphoreGive(s_mutex);
+    return error;
+}
+
+static esp_err_t write_staged_record(void *context, size_t address,
+                                      const uint8_t *data, size_t length)
+{
+    const size_t base = *(const size_t *)context;
+    return esp_partition_write(s_partition, base + STORAGE_DATA_OFFSET + address, data, length);
+}
+
+esp_err_t ms51_storage_receive(ms51_image_reader_t reader, void *context, size_t source_size,
+                               const char *filename, ms51_storage_info_t *info)
+{
+    if (!reader || !source_size || !s_mutex || !s_partition) return ESP_ERR_INVALID_ARG;
+    const size_t maximum = ms51_image_filename_is_intel_hex(filename) ?
+        MS51_IMAGE_MAX_UPLOAD_SIZE : MS51_IMAGE_MAX_SIZE;
+    if (source_size > maximum) return ESP_ERR_INVALID_SIZE;
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    if (s_mapping_count || s_storage_degraded) {
+        xSemaphoreGive(s_mutex);
+        return ESP_ERR_INVALID_STATE;
+    }
+    const int target_slot = s_active_slot == 0 ? 1 : 0;
+    const size_t base = slot_offset(target_slot);
+    ms51_image_t image = {0};
+    esp_err_t error = esp_partition_erase_range(s_partition, base, STORAGE_SLOT_SIZE);
+    if (error == ESP_OK)
+        error = ms51_image_parse_to_sink(reader, context, source_size, filename,
+                                          write_staged_record, (void *)&base, &image);
+    if (error == ESP_OK && !coverage_is_valid(image.coverage, image.size, image.covered_size))
+        error = ESP_ERR_INVALID_STATE;
+    if (error == ESP_OK)
+        error = esp_partition_write(s_partition, base + STORAGE_COVERAGE_OFFSET,
+                                      image.coverage, MS51_IMAGE_COVERAGE_SIZE);
+    if (error == ESP_OK) error = activate_staged_image(target_slot, filename, &image, info);
+    ms51_image_free(&image);
     xSemaphoreGive(s_mutex);
     return error;
 }

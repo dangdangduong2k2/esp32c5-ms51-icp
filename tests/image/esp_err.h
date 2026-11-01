@@ -8,3 +8,5 @@ typedef int esp_err_t;
 #define ESP_ERR_INVALID_CRC 5
 #define ESP_ERR_NOT_SUPPORTED 6
 #define ESP_ERR_INVALID_RESPONSE 7
+#define ESP_ERR_NOT_FOUND 8
+static inline const char *esp_err_to_name(esp_err_t err) { (void)err; return "host-test error"; }
