@@ -746,6 +746,12 @@ static esp_err_t status_handler(httpd_req_t *request)
         (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     if(added<0 || (size_t)added>=sizeof(payload)-used+1)
         return httpd_resp_send_err(request,HTTPD_500_INTERNAL_SERVER_ERROR,"Status too large");
+    char clock_status[128];
+    ms51_cloud_clock_json(clock_status,sizeof(clock_status));
+    used=strlen(payload);
+    added=snprintf(payload+used-1,sizeof(payload)-used+1,",\"clock\":%s}",clock_status);
+    if(added<0 || (size_t)added>=sizeof(payload)-used+1)
+        return httpd_resp_send_err(request,HTTPD_500_INTERNAL_SERVER_ERROR,"Status too large");
     return send_json(request, payload, NULL);
 }
 

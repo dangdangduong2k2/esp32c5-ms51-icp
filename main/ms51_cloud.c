@@ -3,6 +3,9 @@
 #include "ms51_image.h"
 #include "ms51_operation.h"
 #include "ms51_storage.h"
+#include "ms51_cloud_time.h"
+#include <inttypes.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +15,7 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_netif_sntp.h"
+#include "esp_sntp.h"
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -54,6 +58,8 @@ static char s_seen[32][33];
 static unsigned s_seen_index;
 static char s_mutations[8][33];
 static unsigned s_mutation_index;
+static bool s_clock_resync_requested;
+static atomic_uint s_clock_sync_count, s_clock_sync_ms;
 
 static const char *str(const cJSON *o, const char *key) {
     const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
@@ -75,7 +81,20 @@ bool ms51_cloud_configured(void) {
     return configured;
 }
 bool ms51_cloud_online(void) { return s_connected; }
-bool ms51_cloud_clock_ready(void) { return time(NULL)>1767225600; }
+bool ms51_cloud_clock_ready(void) { return time(NULL)>MS51_CLOUD_TIME_FLOOR; }
+static void clock_synced(struct timeval *tv) {
+    if(tv->tv_sec<=MS51_CLOUD_TIME_FLOOR)return;
+    atomic_store(&s_clock_sync_ms,(uint32_t)(esp_timer_get_time()/1000));
+    atomic_fetch_add(&s_clock_sync_count,1);
+}
+void ms51_cloud_clock_json(char *buffer, size_t size) {
+    bool synced=atomic_load(&s_clock_sync_count)>0;
+    char age[16]="null";
+    if(synced)snprintf(age,sizeof(age),"%" PRIu32,
+        (uint32_t)(esp_timer_get_time()/1000)-atomic_load(&s_clock_sync_ms));
+    snprintf(buffer,size,"{\"unix_time\":%" PRId64 ",\"sntp_synced\":%s,\"sync_age_ms\":%s}",
+        (int64_t)time(NULL),synced?"true":"false",age);
+}
 
 esp_err_t ms51_cloud_pair(const char *json) {
     if (!s_mutex) return ESP_ERR_INVALID_STATE;
@@ -287,10 +306,15 @@ static void process(char *text) {
     for(size_t i=0;i<8;i++) if(!strcmp(id,s_mutations[i])) duplicate=true;
     cJSON *result=NULL;
     time_t now=time(NULL);
+    ms51_cloud_time_result_t command_time=cJSON_IsNumber(expires) && cJSON_IsNumber(issued) ?
+        ms51_cloud_check_time(issued->valuedouble,expires->valuedouble,now) : MS51_CLOUD_TIME_INVALID;
     if(duplicate) result=error_result("Yeu cau da duoc xu ly. Kiem tra trang thai thiet bi.");
-    else if(!cJSON_IsNumber(expires) || !cJSON_IsNumber(issued) || expires->valuedouble<now ||
-            issued->valuedouble>now+5 || expires->valuedouble-issued->valuedouble>60 ||
+    else if(command_time==MS51_CLOUD_TIME_INVALID ||
             !cJSON_IsObject(body) || !allowed(method,path)) result=error_result("Lenh khong hop le hoac da het han.");
+    else if(command_time!=MS51_CLOUD_TIME_OK) {
+        s_clock_resync_requested=true;
+        result=error_result("Thiết bị đang đồng bộ giờ. Vui lòng thử lại.");
+    }
     else if(!strcmp(method,"POST") && strcmp(path,"/api/info") && !remember_mutation(id))
         result=error_result("Khong luu duoc ma lenh; chua thuc hien thao tac.");
     else {
@@ -334,18 +358,26 @@ static void worker(void *arg) {
     esp_sntp_config_t ntp=ESP_NETIF_SNTP_DEFAULT_CONFIG_MULTIPLE(3,
         ESP_SNTP_SERVER_LIST("time.google.com","time.cloudflare.com","pool.ntp.org"));
     ntp.start=false;
-    esp_netif_sntp_init(&ntp);
+    ntp.sync_cb=clock_synced;
+    esp_err_t ntp_init=esp_netif_sntp_init(&ntp);
+    esp_sntp_set_sync_interval(60000);
+    if(ntp_init!=ESP_OK)ESP_LOGE(TAG,"SNTP init failed: %s",esp_err_to_name(ntp_init));
+    bool time_started=false;
     int64_t last_time_attempt=-60000000;
     int64_t last_heartbeat=0;
     for(;;) {
-        if(!ms51_cloud_clock_ready() && esp_timer_get_time()-last_time_attempt>=60000000) {
-            esp_netif_t *station=esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-            esp_netif_ip_info_t ip;
-            if(station && esp_netif_get_ip_info(station,&ip)==ESP_OK && ip.ip.addr!=0) {
-                // DNS must be available before starting SNTP, especially after a cold boot.
-                last_time_attempt=esp_timer_get_time(); esp_netif_sntp_start();
-                ESP_LOGI(TAG,"Synchronizing clock for TLS");
-            }
+        esp_netif_t *station=esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        esp_netif_ip_info_t ip;
+        bool has_ip=station && esp_netif_get_ip_info(station,&ip)==ESP_OK && ip.ip.addr!=0;
+        if(!has_ip) { time_started=false;last_time_attempt=-60000000; }
+        else if(ntp_init==ESP_OK && ms51_cloud_sync_due(time_started,ms51_cloud_clock_ready(),
+                s_clock_resync_requested,esp_timer_get_time(),last_time_attempt)) {
+            // Always start once per network connection, including a retained RTC.
+            last_time_attempt=esp_timer_get_time();
+            esp_err_t error=esp_netif_sntp_start();
+            time_started=error==ESP_OK;
+            if(time_started)s_clock_resync_requested=false;
+            ESP_LOGI(TAG,"Synchronizing clock for TLS: %s",esp_err_to_name(error));
         }
         if(s_revoked && s_client) {
             esp_mqtt_client_stop(s_client); esp_mqtt_client_destroy(s_client); s_client=NULL; s_connected=false;

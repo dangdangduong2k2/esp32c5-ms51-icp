@@ -1,5 +1,6 @@
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include "esp_err.h"
 #include "cJSON.h"
 /* Shared loopback transport; callers must enforce their own route policy. */
@@ -11,3 +12,4 @@ esp_err_t ms51_cloud_pair(const char *json);
 bool ms51_cloud_configured(void);
 bool ms51_cloud_online(void);
 bool ms51_cloud_clock_ready(void);
+void ms51_cloud_clock_json(char *buffer, size_t size);

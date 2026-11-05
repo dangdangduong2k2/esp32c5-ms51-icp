@@ -37,5 +37,11 @@ Lượt thử tải riêng dùng cùng cửa sổ sống 45 giây và timestamp 
 C5 chấp nhận. Không tắt kiểm tra thời hạn và không thay đổi timestamp của API
 sản xuất. Kết quả nhận HEX không chứng minh luồng app cập nhật MS51 đã hoàn tất.
 
-Đã đề nghị người dùng RESET/EN C5 để đồng bộ lại giờ và kiểm tra tiếp lệnh có
-timestamp bình thường. Chưa xác minh kết quả sau lần reset này.
+Người dùng đã RESET/EN C5. Sau reset, máy chủ ghi nhận offline; BLE vẫn được
+điện thoại dò thấy. Chưa nhận được kết quả thử lệnh bình thường sau reset.
+Đây là lỗi kết nối/đồng bộ giờ riêng, không phủ định kết quả nhận HEX ở trên.
+
+Kiểm tra source cho thấy SNTP chỉ được bắt đầu khi RTC chưa có năm hợp lệ.
+RTC có giá trị nhưng lệch sẽ bỏ qua bước bắt đầu SNTP trong lần boot đó.
+Bản R4 sửa điều kiện này, thêm đồng bộ định kỳ, yêu cầu đồng bộ lại khi thời
+hạn lệnh không khớp và thông tin giờ trong trạng thái. Chưa nạp R4 trên bo này.
