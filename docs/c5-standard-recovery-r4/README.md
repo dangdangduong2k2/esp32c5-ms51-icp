@@ -51,9 +51,12 @@ Khởi động bình thường, không giữ BOOT. Version cần đọc sau nạ
 - Đóng gói kiểm tra version, header flash, địa chỉ phân vùng, NVS và SHA256.
 - R3 đã nhận HEX qua HTTPS trên bo thật trong 5,41 giây, CRC đúng và cấu hình
   MS51 trước/sau giống nhau. Chưa ghi chương trình MS51 trong lần thử đó.
-- R4 chưa được nạp và kiểm tra trên bo ở xa. Sau RESET R3, BLE vẫn dò được nhưng
-  cloud chưa trở lại. Chưa đọc được trạng thái Wi-Fi/SNTP trực tiếp sau reset,
-  nên không khẳng định lỗi giờ là nguyên nhân duy nhất của lần mất Internet.
+- Sau RESET, R3 mất kết nối cloud một thời gian trong khi BLE vẫn dò được;
+  sau đó trở lại và nhận lệnh với timestamp bình thường. Thử nhận HEX lần nữa
+  thành công trong 5,55 giây, CRC đúng, cấu hình giữ nguyên, chưa ghi MS51.
+- R4 chưa được nạp và kiểm tra trên bo ở xa. Chưa đo được trạng thái Wi-Fi/SNTP
+  của R3 trong lúc offline, nên không khẳng định lỗi giờ là nguyên nhân duy nhất
+  của khoảng mất Internet sau reset.
 
 SNTP vẫn cần mạng truy cập được máy chủ thời gian. Bản sửa không thay thế việc
 kiểm tra Wi-Fi, DNS hoặc UDP bị chặn. Các giới hạn điện và phục hồi của R1/R2

@@ -37,9 +37,16 @@ Lượt thử tải riêng dùng cùng cửa sổ sống 45 giây và timestamp 
 C5 chấp nhận. Không tắt kiểm tra thời hạn và không thay đổi timestamp của API
 sản xuất. Kết quả nhận HEX không chứng minh luồng app cập nhật MS51 đã hoàn tất.
 
-Người dùng đã RESET/EN C5. Sau reset, máy chủ ghi nhận offline; BLE vẫn được
-điện thoại dò thấy. Chưa nhận được kết quả thử lệnh bình thường sau reset.
-Đây là lỗi kết nối/đồng bộ giờ riêng, không phủ định kết quả nhận HEX ở trên.
+Người dùng đã RESET/EN C5. Ban đầu máy chủ ghi nhận offline trong khi BLE vẫn
+được điện thoại dò thấy. Sau đó bo trở lại cloud và nhận GET mới với timestamp
+bình thường của máy chủ, không cần điều chỉnh giờ lệnh.
+
+Chạy lại toàn bộ thử nhận HEX bằng timestamp bình thường: thành công sau 5,55
+giây, CRC32 820705851, generation tăng từ 13 lên 14. Cấu hình MS51 trước/sau
+giống nhau, recovery vẫn idle/sequence 0, không gọi lệnh nạp hoặc xóa MS51.
+Route transfer chẩn đoán tiếp tục được gỡ và Nginx được khôi phục sau thử nghiệm.
+Đây là lỗi kết nối/đồng bộ giờ riêng, không phải lỗi thiếu RAM ở bước nhận HEX
+trên bản R3 chuẩn đã thử.
 
 Kiểm tra source cho thấy SNTP chỉ được bắt đầu khi RTC chưa có năm hợp lệ.
 RTC có giá trị nhưng lệch sẽ bỏ qua bước bắt đầu SNTP trong lần boot đó.
