@@ -431,6 +431,7 @@ def install(app, core, admin_identity, audit):
 
     def worker(row, uid, job, firmware):
         upload_id = None
+        program_requested = False
         try:
             status = call(row, uid, job, 'GET', '/api/status')
             if status.get('busy') is not False:
@@ -464,6 +465,9 @@ def install(app, core, admin_identity, audit):
             for action, message in [('program', 'Đang nạp chương trình MS51…'), ('verify', 'Đang đối chiếu chương trình…')]:
                 finish(job, 'running', message)
                 try:
+                    # Once sent, even a lost ACK can mean target flash changed.
+                    # Before this point only staging on C5 has been attempted.
+                    if action == 'program': program_requested = True
                     response = call(row, uid, job, 'POST', '/api/' + action, {'generation': generation})
                 except HTTPException as error:
                     if not recovery_supported or error.status_code not in (503,504): raise
@@ -503,7 +507,7 @@ def install(app, core, admin_identity, audit):
                 finish(job, 'success', 'Đã cập nhật và đối chiếu chương trình thành công.')
         except Exception as error:
             message = str(error.detail) if isinstance(error, HTTPException) else 'Kết nối bị gián đoạn. Cần admin kiểm tra rồi cấp lại bản cập nhật.'
-            finish(job, 'unknown', message)
+            finish(job, 'unknown' if program_requested else 'failed', message)
         finally:
             with lock:
                 if upload_id:

@@ -475,10 +475,37 @@ class ManagedTests(AdminTests):
             return {'ok':True,'busy':False,'image':{'generation':1,'crc32':0}}
         with patch.object(core.bridge,'call',side_effect=fake):core.managed_worker(*args)
         data=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
-        self.assertEqual(data['job']['state'],'unknown');self.assertTrue(data['update_available'])
+        self.assertEqual(data['job']['state'],'failed');self.assertTrue(data['update_available'])
         self.assertNotIn('/api/program',paths)
-        self.assertEqual(self.client.post(MOBILE+'/update',json={'id':secrets.token_hex(16),'release':firmware['id']},headers=self.mobile_headers).status_code,409)
         self.assertNotIn(DEVICE,core.managed_locks)
+        with patch.object(core,'managed_spawn'):
+            self.assertEqual(self.client.post(MOBILE+'/update',json={'id':secrets.token_hex(16),'release':firmware['id']},headers=self.mobile_headers).status_code,200)
+
+    def test_worker_upload_memory_failure_is_retryable_without_programming(self):
+        firmware,job,args=self.start_job();paths=[]
+        def fake(row,uid,rid,method,path,body,lease=None):
+            paths.append(path)
+            if path=='/internal/upload':return {'ok':False,'message':'ESP khong du bo nho nhan tep.'}
+            return {'ok':True,'busy':False,'image':{'valid':False}}
+        with patch.object(core.bridge,'call',side_effect=fake):core.managed_worker(*args)
+        data=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
+        self.assertEqual(data['job']['state'],'failed');self.assertTrue(data['update_available'])
+        self.assertIn('bo nho',data['job']['message']);self.assertNotIn('/api/program',paths)
+        self.assertNotIn(DEVICE,core.managed_locks);self.assertFalse(core.uploads)
+        with patch.object(core,'managed_spawn'):
+            self.assertEqual(self.client.post(MOBILE+'/update',json={'id':secrets.token_hex(16),'release':firmware['id']},headers=self.mobile_headers).status_code,200)
+
+    def test_worker_lost_program_ack_without_proof_stays_unknown(self):
+        firmware,job,args=self.start_job();paths=[]
+        def fake(row,uid,rid,method,path,body,lease=None):
+            paths.append(path)
+            if path=='/internal/upload':return {'ok':True,'image':{'generation':7,'crc32':parse_hex(HEX)}}
+            if path=='/api/program':raise HTTPException(504,'Lost program acknowledgement')
+            return {'ok':True,'busy':False}
+        with patch.object(core.bridge,'call',side_effect=fake):core.managed_worker(*args)
+        data=self.client.get(MOBILE+'/access',headers=self.mobile_headers).json()
+        self.assertEqual(data['job']['state'],'unknown');self.assertEqual(paths.count('/api/program'),1)
+        self.assertEqual(self.client.post(MOBILE+'/update',json={'id':secrets.token_hex(16),'release':firmware['id']},headers=self.mobile_headers).status_code,409)
 
     def test_recovery_proof_requires_new_sequence_matching_crc_and_complete_verify(self):
         r={'available':True,'sequence':4,'source_crc32':123,'pending':False,'state':'verified'}

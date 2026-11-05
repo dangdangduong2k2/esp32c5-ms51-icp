@@ -13,9 +13,11 @@
 #include <string.h>
 
 #include "esp_check.h"
+#include "esp_app_desc.h"
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_heap_caps.h"
+#include "esp_flash.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -725,6 +727,23 @@ static esp_err_t status_handler(httpd_req_t *request)
         ",\"source_crc32\":%" PRIu32 ",\"state\":\"%s\"}}",
         ms51_recovery_available()?"true":"false",ms51_recovery_pending()?"true":"false",
         ms51_recovery_sequence(),ms51_recovery_source_crc(),ms51_recovery_state());
+    if(added<0 || (size_t)added>=sizeof(payload)-used+1)
+        return httpd_resp_send_err(request,HTTPD_500_INTERNAL_SERVER_ERROR,"Status too large");
+    char version[96], build_hash[17];
+    uint32_t flash_bytes=0;
+    if(!json_escape(esp_app_get_description()->version,version,sizeof(version)))
+        return httpd_resp_send_err(request,HTTPD_500_INTERNAL_SERVER_ERROR,"Version too large");
+    esp_app_get_elf_sha256(build_hash,sizeof(build_hash));
+    (void)esp_flash_get_physical_size(NULL,&flash_bytes);
+    used=strlen(payload);
+    added=snprintf(payload+used-1,sizeof(payload)-used+1,
+        ",\"firmware\":{\"version\":\"%s\",\"build\":\"%s\",\"flash_bytes\":%" PRIu32
+        ",\"configured_flash\":\"%s\",\"pins\":{\"dat\":%d,\"clk\":%d,\"reset\":%d}"
+        ",\"heap_free\":%u,\"heap_largest\":%u}}",
+        version,build_hash,flash_bytes,CONFIG_ESPTOOLPY_FLASHSIZE,
+        CONFIG_MS51_DAT_GPIO,CONFIG_MS51_CLK_GPIO,CONFIG_MS51_RST_GPIO,
+        (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+        (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     if(added<0 || (size_t)added>=sizeof(payload)-used+1)
         return httpd_resp_send_err(request,HTTPD_500_INTERNAL_SERVER_ERROR,"Status too large");
     return send_json(request, payload, NULL);

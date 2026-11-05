@@ -47,6 +47,7 @@ idf_component_register(
     INCLUDE_DIRS "."
     EMBED_TXTFILES "web/index.html"
     PRIV_REQUIRES bt mqtt cjson mbedtls esp_http_client
+        esp_app_format
         esp_adc
         console
         esp_driver_gpio
@@ -62,6 +63,7 @@ idf_component_register(
         freertos
         mdns
         nvs_flash
+        spi_flash
 )
 
 # Optional private local-test configuration; production builds keep their defaults.
