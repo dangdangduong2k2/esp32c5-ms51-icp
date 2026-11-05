@@ -105,10 +105,9 @@ static esp_err_t read_info_in_session(ms51_device_info_t *info)
     ESP_RETURN_ON_ERROR(ms51_icp_read_flash(MS51_CONFIG_ADDRESS, info->config,
                                              sizeof(info->config)),
                         TAG, "could not read configuration bytes");
-    /* A security-locked MS51 can mask CID. Treat that conservatively as locked,
-     * while still allowing the explicit, confirmed mass-erase recovery flow. */
-    info->locked = info->identity.company_id != MS51_NUVOTON_CID ||
-                   (info->config[0] & (1u << 1)) == 0;
+    /* CONFIG remains readable while locked. A missing CID alone is not proof
+     * of protection: do not confuse an unreliable ICP read with chip lock. */
+    info->locked = (info->config[0] & (1u << 1)) == 0;
     info->ldrom_size = ldrom_size_from_config(info->config[1]);
     info->aprom_size = MS51_FLASH_SIZE - info->ldrom_size;
     return ESP_OK;
@@ -146,11 +145,6 @@ static esp_err_t open_checked_session(ms51_device_info_t *info)
         ms51_icp_close();
         return ESP_ERR_NOT_FOUND;
     }
-    if (info->identity.company_id != MS51_NUVOTON_CID) {
-        ESP_LOGW(TAG, "MS51 CID is masked (0x%02" PRIX8 "); treating target as locked",
-                 info->identity.company_id);
-    }
-
     esp_err_t error = read_info_in_session(info);
     if (error != ESP_OK) {
         ms51_icp_close();
@@ -166,9 +160,28 @@ static esp_err_t open_checked_session(ms51_device_info_t *info)
         ms51_icp_close();
         return error;
     }
-    if (!has_expected_identity(&info->identity)) {
+    if (!has_expected_part_id(&info->identity)) {
         ms51_icp_close();
         return ESP_ERR_NOT_FOUND;
+    }
+    uint8_t first_config[MS51_CONFIG_SIZE];
+    memcpy(first_config, info->config, sizeof(first_config));
+    error = read_info_in_session(info);
+    if (error != ESP_OK || memcmp(first_config, info->config, sizeof(first_config)) != 0) {
+        ESP_LOGE(TAG, "CONFIG is not stable across ICP entries; refusing target access");
+        ms51_icp_close();
+        return error != ESP_OK ? error : ESP_ERR_INVALID_RESPONSE;
+    }
+    ESP_LOGI(TAG, "CONFIG=%02X %02X %02X %02X %02X, chip_lock=%s, CID=0x%02X",
+             info->config[0], info->config[1], info->config[2], info->config[3],
+             info->config[4], info->locked ? "on" : "off", info->identity.company_id);
+    /* Permit stable, locked targets for information and the separately
+     * confirmed whole-chip erase only. Program/read/verify still reject locked
+     * targets. An unlocked target with missing CID is a communication error. */
+    if (info->identity.company_id != MS51_NUVOTON_CID &&
+        !(info->identity.company_id == UINT8_MAX && info->locked)) {
+        ms51_icp_close();
+        return ESP_ERR_INVALID_RESPONSE;
     }
     return ESP_OK;
 }
@@ -349,8 +362,9 @@ static void recovery_worker(void *unused)
         if(ms51_recovery_pending() && ms51_operation_lock(pdMS_TO_TICKS(100))==ESP_OK) {
             ms51_device_info_t info;
             esp_err_t error=open_checked_session(&info);
-            if(error==ESP_OK && !info.locked)
-                error=ms51_recovery_run(info.aprom_size,info.config,&recovery_io);
+            if(error==ESP_OK)
+                error=info.locked ? ESP_ERR_INVALID_STATE :
+                    ms51_recovery_run(info.aprom_size,info.config,&recovery_io);
             ms51_icp_set_recovery_guard(ms51_recovery_pending());
             close_session();
             unlock_programmer();
