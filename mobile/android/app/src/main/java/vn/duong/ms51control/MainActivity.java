@@ -2890,7 +2890,7 @@ public final class MainActivity extends Activity {
         chipCard.addView(info, fullParams(0, 10, 0, 0));
         content.addView(chipCard, fullParams(0, 12, 0, 0));
         LinearLayout about = card();
-        addSectionTitle(about, "Hẹn Giờ Lạnh");
+        addSectionTitle(about, getString(R.string.app_name));
         addHelp(about, "Phiên bản " + BuildConfig.VERSION_NAME);
         Button exit = neutralButton("Danh sách thiết bị");
         exit.setOnClickListener(v -> showDevices());
@@ -2944,7 +2944,7 @@ public final class MainActivity extends Activity {
             logo.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),rounded(Color.TRANSPARENT,dp(10)),null));
             logo.setOnClickListener(v -> showDevices());
         }
-        TextView wordmark=valueText("Hẹn Giờ Lạnh");wordmark.setTextColor(Design.INK);
+        TextView wordmark=valueText(getString(R.string.app_name));wordmark.setTextColor(Design.INK);
         wordmark.setTextSize(22);wordmark.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
         wordmark.setSingleLine(true);
         if(Build.VERSION.SDK_INT>=26)wordmark.setAutoSizeTextTypeUniformWithConfiguration(18,22,1,android.util.TypedValue.COMPLEX_UNIT_SP);
@@ -2970,6 +2970,13 @@ public final class MainActivity extends Activity {
         }
         TextView heading=valueText(title); heading.setTextSize(22);
         heading.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
+        if(screen==Screen.CONTROL && "Tổng quan".equals(title)) {
+            android.text.SpannableString overviewTitle=new android.text.SpannableString(title+"  "+getString(R.string.overview_hotline));
+            int hotlineStart=title.length()+2;
+            overviewTitle.setSpan(new android.text.style.RelativeSizeSpan(13f/22f),hotlineStart,overviewTitle.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            overviewTitle.setSpan(new android.text.style.ForegroundColorSpan(Design.MUTED),hotlineStart,overviewTitle.length(),android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            heading.setText(overviewTitle);
+        }
         if(Build.VERSION.SDK_INT>=28)heading.setAccessibilityHeading(true);
         content.addView(heading,fullParams(0,0,0,subtitle.isEmpty() ? 10 : 5));
         if (!subtitle.isEmpty()) content.addView(bodyText(subtitle),fullParams(0,0,0,22));

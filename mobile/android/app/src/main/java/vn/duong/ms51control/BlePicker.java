@@ -15,6 +15,7 @@ final class BlePicker implements AutoCloseable {
     interface Selected { void select(BluetoothDevice device); }
     private final Handler handler=new Handler(Looper.getMainLooper());
     private final BluetoothLeScanner scanner;
+    private final String defaultName;
     private final NearbyDeviceSheet sheet;
     private final BooleanSupplier eligible;
     private final Selected selected;
@@ -24,6 +25,7 @@ final class BlePicker implements AutoCloseable {
     private final Set<String> admitted=new HashSet<>();
     private boolean closed, scanning;
     BlePicker(Activity activity,BluetoothAdapter adapter,BooleanSupplier eligible,Predicate<BluetoothDevice> remembered,Predicate<BluetoothDevice> paired,Selected selected,Runnable dismissed) {
+        defaultName=activity.getString(R.string.app_name);
         scanner=adapter.getBluetoothLeScanner();this.eligible=eligible;this.selected=selected;this.dismissed=dismissed;
         this.remembered=remembered;this.paired=paired;
         sheet=new NearbyDeviceSheet(activity,()->{close();dismissed.run();});scan();
@@ -45,7 +47,7 @@ final class BlePicker implements AutoCloseable {
             admitted.add(address);
         }
         String name=result.getScanRecord()==null?null:result.getScanRecord().getDeviceName();
-        sheet.addDevice(device.getAddress(),name==null?"Hẹn Giờ Lạnh":name,()->{
+        sheet.addDevice(device.getAddress(),name==null?defaultName:name,()->{
             if(closed || !eligible.getAsBoolean())return;
             close();selected.select(device);
         });

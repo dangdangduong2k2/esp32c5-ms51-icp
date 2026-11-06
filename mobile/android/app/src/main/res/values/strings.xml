@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Điều khiển MS51</string>
+    <string name="app_name">ThuầnPhongvlog</string>
+    <string name="overview_hotline">Hotline: 0973210690</string>
 </resources>
