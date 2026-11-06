@@ -11,6 +11,11 @@ Trong **Tài khoản → thiết bị → Cấp quyền → Gia hạn sử dụn
 - Chỉ admin được thay đổi thời hạn. Khóa PIN, mật khẩu, bộ đếm bảo vệ PIN,
   relay và các cài đặt khác được giữ nguyên. Đây là mở TRY, không xóa khóa
   bảo vệ chương trình chip hoặc thay thế cơ chế PIN.
+- **Đọc lại từ mạch** điền lại thời gian TRY và đơn vị đang lưu trên MS51,
+  kể cả đã cài từ trước khi dùng web gia hạn. Hiển thị riêng thời gian còn
+  lại ước tính; không cấp kỳ mới, không xóa bộ đếm. Nếu đang có lệnh chưa rõ
+  kết quả, các ô giữ đúng giá trị lệnh chờ để thử lại an toàn. Mạch lưu kỳ
+  hiện tại; không phải danh sách toàn bộ các kỳ cũ đã bị gia hạn thay thế.
 
 ## Tương thích và lưu xuống mạch
 

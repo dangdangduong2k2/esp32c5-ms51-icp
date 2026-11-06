@@ -5,8 +5,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const page=await browser.newPage({viewport:{width:1000,height:900}});
  const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'settings_catalog.json'),'utf8'));
  for(const key of ['showDf','showEnd','showSl','showHcf','showHdf','showSt','defrostOpSeconds','tryTime','tryUnit'])delete catalog[key];
- let mode='expired',grant=null,writes=[],applications=new Set();
- const usage=()=>({ok:true,state:mode==='expired'?'expired':mode==='unlimited'?'unlimited':'active',period:mode==='unlimited'?0:24,unit:'hours',remaining_seconds:mode==='unlimited'?null:mode==='expired'?0:86400,
+ let mode='expired',grant=null,writes=[],applications=new Set(),boardPeriod=4,boardUnit='hours';
+ const usage=()=>({ok:true,state:mode==='expired'?'expired':mode==='unlimited'?'unlimited':'active',period:boardPeriod,unit:boardUnit,remaining_seconds:mode==='unlimited'?null:mode==='expired'?0:7200,
    revision:'a'.repeat(64),supported:mode!=='unsupported',unlimited_supported:!['unsupported','legacy'].includes(mode),grant});
  await page.route('http://admin.test/**',async route=>{
   const req=route.request(),url=new URL(req.url());
@@ -21,7 +21,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
      grant={...body,state:'unknown',message:'Chưa xác nhận gia hạn.'};
      return route.fulfill({status:504,json:{message:'Chưa nhận được phản hồi.'}});
     }
-    applications.add(body.id);grant={...body,state:'applied',message:body.amount===0?'Đã mở không giới hạn thời gian.':'Mạch đã xác nhận gia hạn.'};mode=body.amount===0?'unlimited':'active';
+    applications.add(body.id);boardPeriod=body.amount;boardUnit=body.unit;
+    grant={...body,state:'applied',message:body.amount===0?'Đã mở không giới hạn thời gian.':'Mạch đã xác nhận gia hạn.'};mode=body.amount===0?'unlimited':'active';
     return route.fulfill({json:{ok:true,grant}});
    }
    return route.fulfill({status:404,json:{message:'fixture'}});
@@ -35,9 +36,18 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.goto('http://admin.test/');await page.waitForFunction(()=>!document.getElementById('login').hidden);
   await open();assert.match(await page.locator('#usage-state').textContent(),/Đã hết/);
   assert.equal(await page.locator('#renew-usage').isEnabled(),true);
+  assert.equal(await page.locator('#usage-amount').inputValue(),'4');
+  assert.equal(await page.locator('#usage-unit').inputValue(),'hours');
+  // Read the board's existing TRY even with no server grant history; never write/reset it.
+  mode='active';boardPeriod=8;boardUnit='days';
+  await page.locator('#usage-amount').fill('99');await page.locator('#usage-unit').selectOption('hours');
+  await page.locator('#read-usage').click();await page.waitForFunction(()=>!usageLoading);
+  assert.equal(await page.locator('#usage-amount').inputValue(),'8');assert.equal(await page.locator('#usage-unit').inputValue(),'days');
+  assert.equal(writes.length,0);assert.match(await page.locator('#usage-remaining').textContent(),/2 giờ/);
   await page.locator('#usage-amount').fill('12');await page.locator('#usage-unit').selectOption('hours');
   await page.locator('#renew-usage').click();await page.waitForFunction(()=>document.getElementById('usage-state').textContent==='Đang sử dụng'&&!state.pending);
   assert.equal(writes.length,1);assert.equal(writes[0].amount,12);assert.match(writes[0].id,/^[a-f0-9]{32}$/);assert.equal(applications.size,1);
+  assert.equal(await page.locator('#usage-amount').inputValue(),'12');assert.equal(await page.locator('#usage-unit').inputValue(),'hours');
   await close();mode='unsupported';grant=null;await open();assert.equal(await page.locator('#renew-usage').isDisabled(),true);
   assert.match(await page.locator('#usage-status').textContent(),/cập nhật/);
   await close();mode='offline';await open();assert.equal(await page.locator('#renew-usage').isDisabled(),true);
@@ -45,7 +55,9 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await close();mode='lost';grant=null;await open();await page.locator('#renew-usage').click();
   await page.waitForFunction(()=>!state.pending&&document.getElementById('usage-error').textContent.length>0);
   const first=writes.at(-1);assert.equal(await page.locator('#usage-amount').isDisabled(),true);
+  boardPeriod=44;boardUnit='days'; // unresolved retry must retain the original transaction values
   await page.locator('#read-usage').click();await page.waitForFunction(()=>!usageLoading);
+  assert.equal(await page.locator('#usage-amount').inputValue(),String(first.amount));assert.equal(await page.locator('#usage-unit').inputValue(),first.unit);
   assert.equal(await page.locator('#renew-usage').textContent(),'Thử lại gia hạn');mode='active';
   await page.locator('#renew-usage').click();await page.waitForFunction(()=>!state.pending&&!usageLoading);
   assert.equal(writes.at(-1).id,first.id);assert.equal(applications.size,2);
@@ -56,6 +68,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await close();mode='expired';await open();await page.locator('#usage-amount').fill('0');
   await page.locator('#renew-usage').click();await page.waitForFunction(()=>document.getElementById('usage-state').textContent==='Không giới hạn'&&!state.pending);
   assert.equal(writes.at(-1).amount,0);assert.equal(await page.locator('#usage-remaining').textContent(),'');
+  assert.equal(await page.locator('#usage-amount').inputValue(),'0');assert.equal(await page.locator('#usage-unit').isDisabled(),true);
   assert.match(await page.locator('#usage-status').textContent(),/không giới hạn/);
   await page.locator('#usage-amount').fill('1');assert.equal(await page.locator('#usage-unit').isEnabled(),true);
   await page.locator('#usage-amount').fill('0');
@@ -63,6 +76,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.evaluate(()=>document.getElementById('access-dialog').scrollWidth<=document.getElementById('access-dialog').clientWidth),true);
   assert.equal(await page.locator('label[for="usage-amount"]').count(),1);
   if(process.env.MS51_UI_PREVIEW){fs.mkdirSync(process.env.MS51_UI_PREVIEW,{recursive:true});await page.locator('.usage-section').screenshot({path:path.join(process.env.MS51_UI_PREVIEW,'admin-gia-han.png')});}
-  console.log('PASS: finite/unlimited grants, legacy/unsupported guards, lost-ACK retry, mobile layout');
+  console.log('PASS: read stored TRY and units without writes, finite/unlimited grants, pending receipt isolation, legacy guards, mobile layout');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exit(1);});

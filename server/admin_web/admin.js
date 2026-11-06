@@ -320,7 +320,8 @@ async function readUsage(target,epoch) {
         $('usage-remaining').textContent=data.state==='unlimited'?'':'Còn khoảng '+usageDuration(data.remaining_seconds);
         const grant=data.grant;
         usageAttempt=grant&&['pending','unknown'].includes(grant.state)?{id:grant.id,amount:grant.amount,unit:grant.unit}:null;
-        if(usageAttempt){$('usage-amount').value=usageAttempt.amount;$('usage-unit').value=usageAttempt.unit;}
+        const values=usageAttempt||{amount:data.period,unit:data.unit};
+        $('usage-amount').value=values.amount;$('usage-unit').value=values.unit;
         $('renew-usage').textContent=usageAttempt?'Thử lại gia hạn':'Gia hạn';
         $('usage-status').textContent=!data.supported?'Cần cập nhật chương trình MS51 để dùng tính năng gia hạn.':grant?grant.message:!data.unlimited_supported?'Cần cập nhật MS51 bản 3.7.6 để nhập 0 mở không giới hạn. Vẫn có thể cấp thời gian từ 1–999.':'Sẵn sàng cấp thời gian hoặc mở không giới hạn.';
     }catch(e){if(epoch===accessEpoch&&state.csrf){usageData=null;$('usage-error').textContent=e.message;$('usage-status').textContent='Chưa đọc được từ mạch.';}}
