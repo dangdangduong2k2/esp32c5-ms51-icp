@@ -50,6 +50,10 @@ class ManagedTests(AdminTests):
                     self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
             call.reset_mock()
             valid={'source':'10K','threshold_centi':3000,'defrost_centi':500}
+            for selected in ('10K','20K'):
+                body['body']=dict(valid,source=selected,roles_version=2,safety_enabled=True,defrost_enabled=True)
+                self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
+                self.assertEqual(call.call_args.args[-1]['roles_version'],2)
             for enabled in (True,False):
                 body['body']=dict(valid,safety_enabled=enabled)
                 self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
@@ -65,6 +69,7 @@ class ManagedTests(AdminTests):
             self.assertEqual(self.client.post(MOBILE+'/request',json=body,headers=self.mobile_headers).status_code,200)
             call.reset_mock()
             invalid=[{},dict(valid,source='SIG'),dict(valid,source='50K'),dict(valid,extra=1)]
+            invalid += [dict(valid,roles_version=value) for value in (0,1,3,True,None,'2',2.5,[],{})]
             invalid += [dict(valid,**{key:v}) for key in ('safety_enabled','defrost_enabled') for v in (0,1,None,'true',[],{})]
             for key in ('threshold_centi','defrost_centi'):
                 for value in (-5501,12501,True,False,None,3.5,'20'):

@@ -165,11 +165,13 @@ final class BleChecks {
             ManagedChecks.invoke(a,"stopDashboard",new Class[]{});
             JSONObject status=device.status();ManagedChecks.invoke(a,"rememberStatus",new Class[]{JSONObject.class},status);
             ManagedChecks.invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,null);
+            android.widget.TextView connection=(android.widget.TextView)ManagedChecks.get(a,"dashboardConnection");
+            check(connection.getText().toString().equals("Bluetooth") && connection.getContentDescription().toString().contains("Bluetooth"),"Offline connection is labeled Bluetooth, never cached Wi-Fi");
             check(((android.widget.TextView)ManagedChecks.get(a,"temperatureValue")).getText().toString().equals("25,0 °C"),"10k temperature over offline status");
             check(((android.widget.TextView)ManagedChecks.get(a,"temperature50Value")).getText().toString().equals("30,2 °C"),"50k independent temperature over BLE");
             String text=ManagedChecks.texts(a.getWindow().getDecorView());
             check(text.contains("Ngưỡng an toàn") && text.contains("Ngưỡng xả đá"),"Both threshold cards exist over BLE");
-            ((android.widget.ImageButton)ManagedChecks.get(a,"motorSensorSwitch")).performClick();
+            ((android.widget.ImageButton)ManagedChecks.get(a,"monitorSensorSwitch")).performClick();
             check(((android.widget.TextView)ManagedChecks.get(a,"temperatureValue")).getText().toString().equals("28,8 °C"),"Switch displays 20k without changing 50k");
             ((EditText)ManagedChecks.get(a,"triggerThreshold")).setText("31,5");
             ((EditText)ManagedChecks.get(a,"defrostThreshold")).setText("-5");
@@ -181,7 +183,7 @@ final class BleChecks {
         long deadline=SystemClock.elapsedRealtime()+5000;
         while((device.thermalSaved==null || (Boolean)ManagedChecks.get(a,"triggerSaving")) && SystemClock.elapsedRealtime()<deadline)SystemClock.sleep(50);
         check(device.thermalSaved!=null && !(Boolean)ManagedChecks.get(a,"triggerSaving"),"Offline save completes");
-        check(device.thermalSaved.getString("source").equals("20K") && device.thermalSaved.getInt("threshold_centi")==3150 && device.thermalSaved.getInt("defrost_centi")==-500,"Source and decimal/negative thresholds delivered unchanged");
+        check(device.thermalSaved.getString("source").equals("20K") && device.thermalSaved.getInt("roles_version")==2 && device.thermalSaved.getInt("threshold_centi")==3150 && device.thermalSaved.getInt("defrost_centi")==-500,"Monitoring source and explicit role version delivered with thresholds");
         check(device.thermalSaved.getBoolean("safety_enabled") && !device.thermalSaved.getBoolean("defrost_enabled"),"Independent toggle values delivered");
         ui(test,()->{try{
             ManagedChecks.invoke(a,"stopDashboard",new Class[]{});
@@ -191,6 +193,11 @@ final class BleChecks {
             check(((EditText)ManagedChecks.get(a,"triggerThreshold")).getText().toString().equals("31.5"),"Reread restores saved thermal threshold");
             ((EditText)ManagedChecks.get(a,"triggerThreshold")).setText("126");
             ManagedChecks.invoke(a,"saveTrigger",new Class[]{});check(device.thermalWrites==1,"Out-of-range value never sends BLE request");
+            status.getJSONObject("trigger").remove("roles_version");
+            ManagedChecks.invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,null);
+            check(!((android.widget.Button)ManagedChecks.get(a,"triggerSave")).isEnabled(),"Old role mapping cannot receive new threshold edits");
+            check(ManagedChecks.texts(a.getWindow().getDecorView()).contains("nguồn cảm biến mới"),"Explain that C5 must support the new roles");
+            status.getJSONObject("trigger").put("roles_version",2);
             status.remove("ble_thermal_write_supported");
             ManagedChecks.invoke(a,"renderDashboard",new Class[]{JSONObject.class,JSONObject.class},status,null);
             check(!((android.widget.Button)ManagedChecks.get(a,"triggerSave")).isEnabled(),"Old C5 cannot attempt unsupported thermal write");
@@ -249,7 +256,7 @@ final class BleChecks {
             JSONObject state=new JSONObject().put("ok",true).put("busy",false).put("ble_thermal_write_supported",true).put("device",new JSONObject().put("id",ID));
             state.put("analog",sensor(5,2500)).put("analog20k",sensor(6,2880)).put("analog50k",sensor(4,3020));
             JSONObject thermal=thermalSaved==null ? new JSONObject().put("source","10K").put("threshold_centi",3100).put("defrost_centi",2500).put("safety_enabled",true).put("defrost_enabled",true) : new JSONObject(thermalSaved.toString());
-            thermal.put("enabled",true).put("thermal_supported",true).put("thermal_enabled",true).put("safety_supported",true).put("synced",true).put("sensor_valid",true).put("defrost_valid",true);
+            thermal.put("enabled",true).put("thermal_supported",true).put("thermal_enabled",true).put("safety_supported",true).put("synced",true).put("sensor_valid",true).put("defrost_valid",true).put("roles_version",2).put("motor_source","50K").put("monitor_source",thermal.getString("source"));
             return state.put("trigger",thermal);
         }
         JSONObject sensor(int gpio,int centi)throws Exception{return new JSONObject().put("gpio",gpio).put("enabled",true).put("valid",true).put("age_ms",0).put("sensor","ok").put("temperature_centi",centi);}

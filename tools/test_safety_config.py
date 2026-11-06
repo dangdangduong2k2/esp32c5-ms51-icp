@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile actual C5 safety task/storage code with host NVS/UART/sensor doubles."""
 from pathlib import Path
-import subprocess, tempfile
+import os, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 source=(root/'main/ms51_trigger.c').read_text()
 source='\n'.join(line for line in source.splitlines() if not line.startswith('#include "'))
@@ -65,19 +65,23 @@ int main(void){
  thermal_config_t v3={0x53494733,2,3000,500,1,1,0};memcpy(stored,&v3,24);stored_size=24;
  reboot();assert(defrost_enabled && safety_enabled && thermal_enabled);
  for(int safety=0;safety<2;safety++)for(int monitor=0;monitor<2;monitor++){
-   temps[2]=3001;valid_sensor[3]=true;temps[3]=0;
+   temps[3]=3001;valid_sensor[2]=true;temps[2]=0;
    assert(ms51_thermal_configure(2,3000,500,safety,monitor)==0);heartbeat();
    assert(last_active==safety && last_valid==monitor && last_on==monitor);
    reboot();assert(safety_enabled==safety && defrost_enabled==monitor && last_active==safety && last_valid==monitor);
-   temps[3]=500;heartbeat();assert(last_valid==monitor && !last_on); // equal threshold turns R3 off only when enabled
-   valid_sensor[3]=false;heartbeat();assert(!last_valid && !last_on && last_active==safety);
+   temps[2]=500;heartbeat();assert(last_valid==monitor && !last_on); // monitor equality turns R3 off
+   valid_sensor[2]=false;heartbeat();assert(!last_valid && !last_on && last_active==safety);
  }
- valid_sensor[3]=true;temps[3]=0;
+ valid_sensor[2]=true;temps[2]=0;temps[1]=0;temps[3]=3000;
  assert(ms51_thermal_configure(1,3000,500,true,true)==0);heartbeat();assert(cmd==0x56 && !last_active && last_on); // equality, independent R3
- temps[1]=3001;heartbeat();assert(last_active);
- valid_sensor[1]=false;heartbeat();assert(!last_active && last_on); // sensor fault cannot finish OP1
- valid_sensor[1]=true;temps[1]=2999;heartbeat();assert(!last_active);
- assert(ms51_thermal_configure(2,3000,500,true,true)==0);temps[2]=3001;heartbeat();assert(last_source==2 && last_active);
+ temps[3]=3001;heartbeat();assert(last_active);
+ valid_sensor[3]=false;heartbeat();assert(!last_active && last_on); // motor fault cannot finish OP1; monitor stays independent
+ valid_sensor[3]=true;temps[3]=2999;heartbeat();assert(!last_active);
+ temps[3]=3001;assert(ms51_thermal_configure(2,3000,500,true,true)==0);heartbeat();assert(last_source==2 && last_active && last_on);
+ assert(((thermal_config_t *)stored)->magic==0x53494735);
+ temps[1]=9000;temps[2]=0;heartbeat();assert(last_on); // unselected 10k cannot affect monitoring 20k
+ valid_sensor[2]=false;heartbeat();assert(last_active && !last_valid && !last_on); // monitoring fault doesn't suppress motor safety
+ valid_sensor[2]=true;
  reboot();assert(safety_enabled && thermal_enabled && source==2);assert(last_active); // saved on
  assert(ms51_thermal_configure(2,3000,500,false,true)==0);heartbeat();assert(!last_active && last_on);
  reboot();assert(!safety_enabled && !last_active); // saved off
@@ -88,11 +92,13 @@ int main(void){
  heartbeat();assert(ms51_thermal_configure(2,3000,500,true,true)==0);
  assert(ms51_trigger_configure(0,2500)==0);assert(!safety_enabled && !thermal_enabled && !defrost_enabled); // legacy SIG path disarms
  char json[512];ms51_trigger_json(json,sizeof(json));assert(strstr(json,"\"safety_enabled\":false"));assert(json[strlen(json)-1]=='}');
+ assert(strstr(json,"\"roles_version\":2") && strstr(json,"\"motor_source\":\"50K\""));
  return 0;
 }
 '''
 with tempfile.TemporaryDirectory() as d:
  p=Path(d);(p/'test.c').write_text(prefix+source+checks)
- subprocess.run(['gcc','-std=c99','-Wall','-Wextra','-Werror',str(p/'test.c'),'-o',str(p/'test')],check=True)
- subprocess.run([str(p/'test')],check=True)
-print('PASS: C5 v1/v2/v3 migration, v4 independent safety/defrost persistence on/off, motor selection, strict greater-than, invalid sensor disarm, independent R3, stale/old capability rejection, NVS failure and JSON capacity')
+ binary=p/('test.exe' if os.name=='nt' else 'test')
+ subprocess.run([os.environ.get('CC','gcc'),'-std=c99','-Wall','-Wextra','-Werror',str(p/'test.c'),'-o',str(binary)],check=True)
+ subprocess.run([str(binary)],check=True)
+print('PASS: motor safety always 50k, independent monitoring 10k/20k, v1-v5 migration/persistence, strict thresholds, invalid sensors, legacy MS51 protocol, stale capability, NVS failure and complete JSON')

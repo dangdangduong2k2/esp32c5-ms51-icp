@@ -108,14 +108,14 @@ public final class MainActivity extends Activity {
     private TextView dashboardLogs;
     private TextView temperatureValue;
     private TextView temperatureNote;
-    private TextView temperature50Value, temperature50Note, motorSensorLabel;
-    private android.widget.ImageButton motorSensorSwitch;
-    private int motorSensorIndex;
+    private TextView temperature50Value, temperature50Note, monitorSensorLabel;
+    private android.widget.ImageButton monitorSensorSwitch;
+    private int monitorSensorIndex;
     private JSONObject temperatureStatus;
     private long temperatureStatusAt;
     private EditText defrostThreshold;
     private TextView defrostState;
-    private boolean motorSelectionPending;
+    private boolean monitorSelectionPending;
     private EditText triggerThreshold;
     private TextView triggerState;
     private Button triggerSave;
@@ -653,7 +653,7 @@ public final class MainActivity extends Activity {
         deviceAccess = new JSONObject(); managedUpdateStarting = false; modeChanging = false; pendingMode = null; modeAwaitingConfirmation = false; triggerLoaded=false; triggerSaving=false; mainHandler.removeCallbacks(expireModeConfirmation); ++accessViewEpoch;
         configLoaded = false; runtimeConfig = RuntimeConfigCodec.defaults();
         lastStatus = null; lastDebug = null; imageGeneration = 0;
-        temperatureStatus = null; motorSensorIndex = 0;
+        temperatureStatus = null; monitorSensorIndex = 0;
         lastHistory = null; nextHistoryRead = 0; historyError = "";
         dashboardHdf=null; dashboardHdfAt=0; nextHdfRead=0;
         selectedFirmwareUri = null; selectedFirmwareName = "";
@@ -1593,8 +1593,8 @@ public final class MainActivity extends Activity {
         content.addView(timers, fullParams(0, 0, 0, 10));
 
 
-        motorSensorIndex = getSharedPreferences("temperature_display",MODE_PRIVATE)
-                .getBoolean(motorSensorPreferenceKey(),false) ? 1 : 0;
+        monitorSensorIndex = getSharedPreferences("temperature_display",MODE_PRIVATE)
+                .getBoolean(monitorSensorPreferenceKey(),false) ? 1 : 0;
         buildTriggerCard(content);
 
         LinearLayout relayCard = card();
@@ -1622,10 +1622,10 @@ public final class MainActivity extends Activity {
     }
 
     private void buildTriggerCard(LinearLayout content) {
-        triggerLoaded=false; motorSelectionPending=false; safetyDraftPending=false; defrostDraftPending=false;
+        triggerLoaded=false; monitorSelectionPending=false; safetyDraftPending=false; defrostDraftPending=false;
         LinearLayout row=new LinearLayout(this);
-        LinearLayout cutoff=temperatureCard("Nhiệt độ động cơ",0);
-        LinearLayout defrost=temperatureCard("Nhiệt độ giám sát",2);
+        LinearLayout cutoff=temperatureCard("Nhiệt độ động cơ",2);
+        LinearLayout defrost=temperatureCard("Nhiệt độ giám sát",0);
         for(LinearLayout column : new LinearLayout[]{cutoff,defrost}) {
             View divider=new View(this); divider.setBackgroundColor(Design.LINE);
             LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));
@@ -1687,40 +1687,42 @@ public final class MainActivity extends Activity {
         JSONObject trigger=status==null ? null : status.optJSONObject("trigger");
         boolean supported=trigger!=null && trigger.optBoolean("enabled") && trigger.optBoolean("thermal_supported");
         boolean transportSupported=!bleMode || (status!=null && status.optBoolean("ble_thermal_write_supported"));
+        boolean rolesSupported=trigger!=null && trigger.optInt("roles_version")==2;
         if(supported && !triggerLoaded && !triggerSaving) {
             boolean configured=trigger.optBoolean("thermal_enabled");
-            if(configured) motorSensorIndex="20K".equals(trigger.optString("source")) ? 1 : 0;
+            if(configured) monitorSensorIndex="20K".equals(trigger.optString("monitor_source",trigger.optString("source"))) ? 1 : 0;
             triggerThreshold.setText(java.math.BigDecimal.valueOf(trigger.optInt("threshold_centi",2500),2).stripTrailingZeros().toPlainString());
             defrostThreshold.setText(configured ? java.math.BigDecimal.valueOf(trigger.optInt("defrost_centi"),2).stripTrailingZeros().toPlainString() : "");
             safetySwitch.setChecked(trigger.optBoolean("safety_enabled"));
             defrostSwitch.setChecked(trigger.optBoolean("defrost_enabled",configured));
-            defrostDraftPending=false; safetyDraftPending=false; triggerLoaded=true; motorSelectionPending=false; renderTemperatureCards();
+            defrostDraftPending=false; safetyDraftPending=false; triggerLoaded=true; monitorSelectionPending=false; renderTemperatureCards();
         }
         boolean safetySupported=supported && trigger.optBoolean("safety_supported");
-        boolean canEdit=supported && transportSupported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting;
+        boolean canEdit=supported && transportSupported && rolesSupported && triggerLoaded && !triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting;
         safetySwitch.setEnabled(canEdit && safetySupported);
         ((NumberStepper)triggerThreshold.getParent()).setEnabled(canEdit && safetySupported && safetySwitch.isChecked());
         defrostSwitch.setEnabled(canEdit && trigger.has("defrost_enabled"));
         ((NumberStepper)defrostThreshold.getParent()).setEnabled(canEdit && defrostSwitch.isChecked());
-        if(motorSensorSwitch!=null) motorSensorSwitch.setEnabled(!triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
+        if(monitorSensorSwitch!=null) monitorSensorSwitch.setEnabled(!triggerSaving && !modeChanging && pendingMode==null && !managedUpdateStarting);
         triggerSave.setEnabled(canEdit && !status.optBoolean("busy",true));
         mainHandler.removeCallbacks(expireTriggerControls);
         if(triggerSave.isEnabled()) mainHandler.postDelayed(expireTriggerControls,5000);
         if(triggerSaving) setInlineStatus(triggerState,"Đang lưu…");
+        else if(!rolesSupported && status!=null) setInlineStatus(triggerState,"Cập nhật hộp để dùng nguồn cảm biến mới.");
         else if(!transportSupported && status!=null) setInlineStatus(triggerState,"Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
         else if(!supported) setInlineStatus(triggerState,"Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
         else if(safetyDraftPending) setInlineStatus(triggerState,"Chưa lưu");
         else if(!safetySupported) setInlineStatus(triggerState,"Cần cập nhật thiết bị để dùng ngưỡng an toàn.");
-        else if(motorSelectionPending) setInlineStatus(triggerState,"Chưa lưu");
         else if(!trigger.optBoolean("thermal_enabled")) setInlineStatus(triggerState,"Chưa lưu");
         else if(!trigger.optBoolean("safety_enabled")) setInlineStatus(triggerState,"");
         else if(!trigger.optBoolean("synced")) setInlineStatus(triggerState,"Đang chờ bộ điều khiển xác nhận.");
         else if(!trigger.optBoolean("sensor_valid")) setInlineStatus(triggerState,"Kiểm tra cảm biến động cơ");
         else setInlineStatus(triggerState,"");
         if(triggerSaving) setInlineStatus(defrostState,"Đang lưu…");
+        else if(!rolesSupported && status!=null) setInlineStatus(defrostState,"Cập nhật hộp để dùng nguồn cảm biến mới.");
         else if(!transportSupported && status!=null) setInlineStatus(defrostState,"Cập nhật hộp để lưu ngưỡng qua Bluetooth.");
         else if(!supported) setInlineStatus(defrostState,"Đang chờ dữ liệu hoặc cần cập nhật thiết bị.");
-        else if(defrostDraftPending) setInlineStatus(defrostState,"Chưa lưu");
+        else if(defrostDraftPending || monitorSelectionPending) setInlineStatus(defrostState,"Chưa lưu");
         else if(!trigger.has("defrost_enabled")) setInlineStatus(defrostState,"Cần cập nhật thiết bị để bật/tắt ngưỡng.");
         else if(!trigger.optBoolean("thermal_enabled")) setInlineStatus(defrostState,"Chưa lưu");
         else if(!trigger.optBoolean("defrost_enabled")) setInlineStatus(defrostState,"");
@@ -1758,14 +1760,14 @@ public final class MainActivity extends Activity {
         final boolean safety=safetySwitch.isChecked(), defrostEnabled=defrostSwitch.isChecked();
         JSONObject storedTrigger=lastStatus==null ? null : lastStatus.optJSONObject("trigger");
         final boolean supportsDefrostToggle=storedTrigger!=null && storedTrigger.has("defrost_enabled");
-        final int selected=motorSensorIndex+1, token=controlEpoch;
+        final int selected=monitorSensorIndex+1, token=controlEpoch;
         final EspApi session=api.snapshot(15000);
         triggerSaving=true; renderTrigger(lastStatus,lastDebug);renderModeControls(lastStatus,lastDebug);
         io.execute(() -> {
             if(!currentControl(token)) return;
             try {
                 JSONObject request=new JSONObject().put("source",TRIGGER_SOURCES[selected])
-                        .put("threshold_centi",cutoff).put("defrost_centi",defrost).put("safety_enabled",safety);
+                        .put("threshold_centi",cutoff).put("defrost_centi",defrost).put("safety_enabled",safety).put("roles_version",2);
                 if(supportsDefrostToggle) request.put("defrost_enabled",defrostEnabled);
                 session.post("/api/thermal",request);
                 onControl(token,() -> { triggerSaving=false;triggerLoaded=false;showMessage("Đã lưu ngưỡng nhiệt độ.");refreshDashboard(); });
@@ -1779,30 +1781,30 @@ public final class MainActivity extends Activity {
         LinearLayout box = card(); box.setPadding(dp(10),dp(12),dp(10),dp(12));
         TextView title = mutedText(label); title.setTextSize(14); title.setTextColor(Design.INK);
         title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
-        // The motor title has less width beside the swap button; reserve the same
+        // The monitoring title has less width beside the swap button; reserve the same
         // two-line title area in both cards so readings and dividers stay aligned.
         title.setMinLines(getResources().getConfiguration().fontScale>=1.3f?2:1);
         android.widget.FrameLayout heading = new android.widget.FrameLayout(this);
         LinearLayout sensorName=new LinearLayout(this);sensorName.setOrientation(LinearLayout.VERTICAL);sensorName.addView(title);
-        TextView name=mutedText(sensorIndex==0?(motorSensorIndex==0?"10k":"20k"):"50k");name.setTextSize(12);
+        TextView name=mutedText(sensorIndex==0?(monitorSensorIndex==0?"10k":"20k"):"50k");name.setTextSize(12);
         sensorName.addView(name,fullParams(0,2,48,0));heading.addView(sensorName,new android.widget.FrameLayout.LayoutParams(-1,-2));
         if (sensorIndex==0) {
-            motorSensorLabel = name;
-            motorSensorSwitch = new android.widget.ImageButton(this);
-            motorSensorSwitch.setImageDrawable(new Design.Icon("swap",Design.TEAL));
-            motorSensorSwitch.setPadding(dp(13),dp(25),dp(13),dp(1));
-            motorSensorSwitch.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),rounded(Color.TRANSPARENT,dp(10)),null));
-            motorSensorSwitch.setContentDescription(motorSensorIndex==0 ? "Đổi sang cảm biến 20k" : "Đổi sang cảm biến 10k");
-            motorSensorSwitch.setOnClickListener(v -> {
+            monitorSensorLabel = name;
+            monitorSensorSwitch = new android.widget.ImageButton(this);
+            monitorSensorSwitch.setImageDrawable(new Design.Icon("swap",Design.TEAL));
+            monitorSensorSwitch.setPadding(dp(13),dp(25),dp(13),dp(1));
+            monitorSensorSwitch.setBackground(new RippleDrawable(ColorStateList.valueOf(Design.RIPPLE),rounded(Color.TRANSPARENT,dp(10)),null));
+            monitorSensorSwitch.setContentDescription(monitorSensorIndex==0 ? "Đổi sang cảm biến 20k" : "Đổi sang cảm biến 10k");
+            monitorSensorSwitch.setOnClickListener(v -> {
                 if(triggerSaving || modeChanging || pendingMode!=null || managedUpdateStarting) return;
-                motorSensorIndex = motorSensorIndex==0 ? 1 : 0;
-                motorSelectionPending=true;
-                if(triggerState!=null) setInlineStatus(triggerState,"Chưa lưu");
+                monitorSensorIndex = monitorSensorIndex==0 ? 1 : 0;
+                monitorSelectionPending=true;
+                if(defrostState!=null) setInlineStatus(defrostState,"Chưa lưu");
                 getSharedPreferences("temperature_display",MODE_PRIVATE).edit()
-                        .putBoolean(motorSensorPreferenceKey(),motorSensorIndex==1).apply();
+                        .putBoolean(monitorSensorPreferenceKey(),monitorSensorIndex==1).apply();
                 renderTemperatureCards();
             });
-            heading.addView(motorSensorSwitch,new android.widget.FrameLayout.LayoutParams(dp(48),dp(48),Gravity.END|Gravity.BOTTOM));
+            heading.addView(monitorSensorSwitch,new android.widget.FrameLayout.LayoutParams(dp(48),dp(48),Gravity.END|Gravity.BOTTOM));
         }
         heading.setMinimumHeight(dp(48));box.addView(heading);
         TextView value = valueText("— °C"); value.setTextSize(30); value.setTypeface(Typeface.DEFAULT_BOLD);value.setSingleLine(true);
@@ -1815,7 +1817,7 @@ public final class MainActivity extends Activity {
         return box;
     }
 
-    private String motorSensorPreferenceKey() {
+    private String monitorSensorPreferenceKey() {
         return accountId + ":" + (activeDevice==null ? "" : activeDevice.id);
     }
 
@@ -2019,16 +2021,16 @@ public final class MainActivity extends Activity {
         renderTrigger(status, debug);
         JSONObject uplink = getUplink(status);
         String ssid = uplink.optString("ssid", uplinkSsid);
-        String network = ssid.isEmpty() ? "Chưa nhận Wi‑Fi" : ssid;
+        String network = bleMode ? "Bluetooth" : ssid.isEmpty() ? "Chưa nhận Wi‑Fi" : ssid;
         dashboardConnection.setText(network);
         Object signal = uplink.opt("rssi");
         int rssi = signal instanceof Number ? ((Number) signal).intValue() : 0;
         int level = Design.WifiSignal.level("connected".equals(uplink.optString("state")), rssi);
-        Design.WifiSignal wifiIcon = new Design.WifiSignal(level, Design.ACCENT);
+        android.graphics.drawable.Drawable wifiIcon = bleMode ? new Design.Icon("bluetooth",Design.ACCENT) : new Design.WifiSignal(level, Design.ACCENT);
         wifiIcon.setBounds(0, 0, dp(22), dp(22));
         dashboardConnection.setCompoundDrawables(compactSettings()?null:wifiIcon, compactSettings()?wifiIcon:null, null, null);
         dashboardConnection.setCompoundDrawablePadding(dp(8));
-        dashboardConnection.setContentDescription(network + (level > 0
+        dashboardConnection.setContentDescription(bleMode ? (bleLink!=null && bleLink.connected() ? "Đã kết nối Bluetooth" : "Chưa kết nối Bluetooth") : network + (level > 0
                 ? ", tín hiệu " + level + " trên 4 vạch, " + rssi + " dBm"
                 : ", chưa có dữ liệu tín hiệu Wi-Fi"));
 
@@ -2098,11 +2100,11 @@ public final class MainActivity extends Activity {
 
     private void renderTemperatureCards() {
         JSONObject status = android.os.SystemClock.elapsedRealtime()-temperatureStatusAt > 2000 ? null : temperatureStatus;
-        if (motorSensorLabel != null) motorSensorLabel.setText(motorSensorIndex==0 ? "10k" : "20k");
-        if (motorSensorSwitch != null) motorSensorSwitch.setContentDescription(motorSensorIndex==0
+        if (monitorSensorLabel != null) monitorSensorLabel.setText(monitorSensorIndex==0 ? "10k" : "20k");
+        if (monitorSensorSwitch != null) monitorSensorSwitch.setContentDescription(monitorSensorIndex==0
                 ? "Đổi sang cảm biến 20k" : "Đổi sang cảm biến 10k");
-        renderSensor(status == null ? null : status.optJSONObject(motorSensorIndex==0 ? "analog" : "analog20k"),
-                temperatureValue, temperatureNote, motorSensorIndex);
+        renderSensor(status == null ? null : status.optJSONObject(monitorSensorIndex==0 ? "analog" : "analog20k"),
+                temperatureValue, temperatureNote, monitorSensorIndex);
         renderSensor(status == null ? null : status.optJSONObject("analog50k"), temperature50Value, temperature50Note, 2);
     }
 
@@ -2945,9 +2947,9 @@ public final class MainActivity extends Activity {
             logo.setOnClickListener(v -> showDevices());
         }
         TextView wordmark=valueText(getString(R.string.app_name));wordmark.setTextColor(Design.INK);
-        wordmark.setTextSize(22);wordmark.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
+        wordmark.setTextSize(20);wordmark.setTypeface(Typeface.create("sans-serif",Typeface.BOLD));
         wordmark.setSingleLine(true);
-        if(Build.VERSION.SDK_INT>=26)wordmark.setAutoSizeTextTypeUniformWithConfiguration(18,22,1,android.util.TypedValue.COMPLEX_UNIT_SP);
+        if(Build.VERSION.SDK_INT>=26)wordmark.setAutoSizeTextTypeUniformWithConfiguration(16,20,1,android.util.TypedValue.COMPLEX_UNIT_SP);
         LinearLayout.LayoutParams wordmarkParams=new LinearLayout.LayoutParams(-2,dp(48));wordmarkParams.leftMargin=dp(4);
         wordmark.setGravity(Gravity.CENTER_VERTICAL);brand.addView(wordmark,wordmarkParams);
         pageRoot.addView(brand);

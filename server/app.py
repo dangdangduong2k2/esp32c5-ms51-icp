@@ -510,7 +510,8 @@ def rpc(device: str, data: Rpc, request: Request):
         fail(400, 'Chế độ không hợp lệ.')
     if data.path == '/api/thermal':
         body = data.body
-        if (not {'source','threshold_centi','defrost_centi'} <= set(body) <= {'source','threshold_centi','defrost_centi','safety_enabled','defrost_enabled'} or
+        if (not {'source','threshold_centi','defrost_centi'} <= set(body) <= {'source','threshold_centi','defrost_centi','safety_enabled','defrost_enabled','roles_version'} or
+            ('roles_version' in body and (type(body['roles_version']) is not int or body['roles_version'] != 2)) or
             any(key in body and type(body[key]) is not bool for key in ('safety_enabled','defrost_enabled')) or body.get('source') not in ('10K','20K') or
             any(type(body.get(key)) is not int or not -5500 <= body[key] <= 12500
                 for key in ('threshold_centi','defrost_centi'))):

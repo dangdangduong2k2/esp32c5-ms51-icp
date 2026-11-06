@@ -45,7 +45,8 @@ static esp_err_t save_config(unsigned selected, int limit, int defrost, bool the
     bool same=source==selected && threshold==limit && thermal_enabled==thermal && defrost_threshold==defrost && safety_enabled==safety && defrost_enabled==defrost_on;
     portEXIT_CRITICAL(&guard);
     if(same) return ESP_OK;
-    thermal_config_t data={0x53494734,selected,limit,defrost,thermal,safety,defrost_on};
+    /* v5: selected is the 10k/20k monitoring input; motor safety is fixed 50k. */
+    thermal_config_t data={0x53494735,selected,limit,defrost,thermal,safety,defrost_on};
     nvs_handle_t handle;
     esp_err_t error=nvs_open("ms51_trigger",NVS_READWRITE,&handle);
     if(error!=ESP_OK) return error;
@@ -97,15 +98,15 @@ static void trigger_task(void *unused) {
             unsigned selected=source; int limit=threshold, defrost=defrost_threshold; bool thermal=thermal_enabled, safety=safety_enabled, defrost_on=defrost_enabled;
             portEXIT_CRITICAL(&guard);
             int temperature=0;
-            bool active=selected!=0 && ms51_analog_temperature(selected,&temperature) && temperature>limit;
+            bool active=selected!=0 && ms51_analog_temperature(thermal ? 3 : selected,&temperature) && temperature>limit;
             uint8_t status=0xff;
             int monitoring=0;
-            bool valid=defrost_on && ms51_analog_temperature(3,&monitoring);
+            bool valid=defrost_on && ms51_analog_temperature(selected,&monitoring);
             esp_err_t error;
             if(thermal && safe)
                 error=ms51_debug_uart_set_safety(selected,safety && active,valid,valid && monitoring<defrost,&status);
             else if(thermal && dual)
-                error=ms51_debug_uart_set_thermal(selected,active,valid,valid && monitoring<defrost,&status);
+                error=ms51_debug_uart_set_thermal(selected,false,valid,valid && monitoring<defrost,&status);
             else if(!thermal)
                 error=ms51_debug_uart_set_trigger(selected,active,&status);
             else error=ESP_ERR_NOT_SUPPORTED;
@@ -127,7 +128,7 @@ esp_err_t ms51_trigger_init(void) {
     bool legacy=size==sizeof(config_t) && data.magic==0x53494731;
     bool v2=size==20 && data.magic==0x53494732;
     bool v3=size==24 && data.magic==0x53494733;
-    bool v4=size==sizeof(data) && data.magic==0x53494734 && data.defrost_enabled<=1 && (!data.defrost_enabled || data.enabled);
+    bool v4=size==sizeof(data) && (data.magic==0x53494734 || data.magic==0x53494735) && data.defrost_enabled<=1 && (!data.defrost_enabled || data.enabled);
     bool safety_valid=data.safety<=1 && (!data.safety || data.enabled);
     bool current=(v2 || ((v3 || v4) && safety_valid)) && data.enabled<=1 &&
         data.defrost>=-5500 && data.defrost<=12500 &&
@@ -147,16 +148,16 @@ void ms51_trigger_json(char *output,size_t size) {
     int defrost=defrost_threshold; bool thermal=thermal_enabled, safety=safety_enabled, defrost_on=defrost_enabled; int64_t seen=thermal_seen, safe_seen=safety_seen;
     portEXIT_CRITICAL(&guard);
     int temperature=0;
-    bool valid=selected!=0 && ms51_analog_temperature(selected,&temperature);
+    bool valid=selected!=0 && ms51_analog_temperature(thermal ? 3 : selected,&temperature);
     bool synced=ack && esp_timer_get_time()-ack<3000000;
-    int monitoring=0; bool monitor_valid=ms51_analog_temperature(3,&monitoring);
+    int monitoring=0; bool monitor_valid=selected!=0 && ms51_analog_temperature(selected,&monitoring);
     bool capable=seen && esp_timer_get_time()-seen<3000000;
     bool safe_capable=safe_seen && esp_timer_get_time()-safe_seen<3000000;
     snprintf(output,size,"{\"enabled\":%s,\"source\":\"%s\",\"threshold_centi\":%d,\"sensor_valid\":%s,\"active\":%s,\"synced\":%s,"
-        "\"thermal_supported\":%s,\"thermal_enabled\":%s,\"defrost_centi\":%d,\"defrost_valid\":%s,\"defrost_active\":%s,\"safety_supported\":%s,\"safety_enabled\":%s,\"defrost_enabled\":%s}",
+        "\"thermal_supported\":%s,\"thermal_enabled\":%s,\"defrost_centi\":%d,\"defrost_valid\":%s,\"defrost_active\":%s,\"safety_supported\":%s,\"safety_enabled\":%s,\"defrost_enabled\":%s,\"roles_version\":2,\"motor_source\":\"50K\",\"monitor_source\":\"%s\"}",
         enabled?"true":"false",names[selected],limit,valid?"true":"false",
         safety && safe_capable && valid && temperature>limit ? "true":"false",synced?"true":"false",
         capable?"true":"false",thermal?"true":"false",defrost,monitor_valid?"true":"false",
         thermal && defrost_on && monitor_valid && monitoring<defrost?"true":"false",
-        safe_capable?"true":"false",safety?"true":"false",defrost_on?"true":"false");
+        safe_capable?"true":"false",safety?"true":"false",defrost_on?"true":"false",names[selected]);
 }

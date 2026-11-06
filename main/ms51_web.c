@@ -1172,10 +1172,12 @@ static esp_err_t thermal_handler(httpd_req_t *request)
     const cJSON *defrost=cJSON_GetObjectItemCaseSensitive(json,"defrost_centi");
     const cJSON *safety=cJSON_GetObjectItemCaseSensitive(json,"safety_enabled");
     const cJSON *defrost_on=cJSON_GetObjectItemCaseSensitive(json,"defrost_enabled");
+    const cJSON *roles=cJSON_GetObjectItemCaseSensitive(json,"roles_version");
     int selected=!cJSON_IsString(source) ? 0 : !strcmp(source->valuestring,"10K") ? 1 :
         !strcmp(source->valuestring,"20K") ? 2 : 0;
-    bool valid=selected && (!safety || cJSON_IsBool(safety)) && (!defrost_on || cJSON_IsBool(defrost_on)) &&
-        cJSON_GetArraySize(json)==3+(safety!=NULL)+(defrost_on!=NULL) && cJSON_IsNumber(cutoff) && cJSON_IsNumber(defrost) &&
+    bool valid=selected && cJSON_IsNumber(roles) && roles->valuedouble==2 &&
+        (!safety || cJSON_IsBool(safety)) && (!defrost_on || cJSON_IsBool(defrost_on)) &&
+        cJSON_GetArraySize(json)==4+(safety!=NULL)+(defrost_on!=NULL) && cJSON_IsNumber(cutoff) && cJSON_IsNumber(defrost) &&
         cutoff->valuedouble>=-5500 && cutoff->valuedouble<=12500 && cutoff->valuedouble==cutoff->valueint &&
         defrost->valuedouble>=-5500 && defrost->valuedouble<=12500 && defrost->valuedouble==defrost->valueint;
     int c=valid ? cutoff->valueint : 0, d=valid ? defrost->valueint : 0;
