@@ -6,8 +6,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
  const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'settings_catalog.json'),'utf8'));
  for(const key of ['showDf','showEnd','showSl','showHcf','showHdf','showSt','defrostOpSeconds','tryTime','tryUnit'])delete catalog[key];
  let mode='expired',grant=null,writes=[],applications=new Set();
- const usage=()=>({ok:true,state:mode==='expired'?'expired':'active',period:24,unit:'hours',remaining_seconds:mode==='expired'?0:86400,
-   revision:'a'.repeat(64),supported:mode!=='unsupported',grant});
+ const usage=()=>({ok:true,state:mode==='expired'?'expired':mode==='unlimited'?'unlimited':'active',period:mode==='unlimited'?0:24,unit:'hours',remaining_seconds:mode==='unlimited'?null:mode==='expired'?0:86400,
+   revision:'a'.repeat(64),supported:mode!=='unsupported',unlimited_supported:!['unsupported','legacy'].includes(mode),grant});
  await page.route('http://admin.test/**',async route=>{
   const req=route.request(),url=new URL(req.url());
   if(url.pathname.startsWith('/api/')){
@@ -21,7 +21,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
      grant={...body,state:'unknown',message:'Chưa xác nhận gia hạn.'};
      return route.fulfill({status:504,json:{message:'Chưa nhận được phản hồi.'}});
     }
-    applications.add(body.id);grant={...body,state:'applied',message:'Mạch đã xác nhận gia hạn.'};mode='active';
+    applications.add(body.id);grant={...body,state:'applied',message:body.amount===0?'Đã mở không giới hạn thời gian.':'Mạch đã xác nhận gia hạn.'};mode=body.amount===0?'unlimited':'active';
     return route.fulfill({json:{ok:true,grant}});
    }
    return route.fulfill({status:404,json:{message:'fixture'}});
@@ -49,10 +49,20 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.locator('#renew-usage').textContent(),'Thử lại gia hạn');mode='active';
   await page.locator('#renew-usage').click();await page.waitForFunction(()=>!state.pending&&!usageLoading);
   assert.equal(writes.at(-1).id,first.id);assert.equal(applications.size,2);
+  await close();mode='legacy';grant=null;await open();
+  await page.locator('#usage-amount').fill('0');assert.equal(await page.locator('#usage-unit').isDisabled(),true);
+  await page.locator('#renew-usage').click();assert.match(await page.locator('#usage-error').textContent(),/3\.7\.6/);
+  assert.equal(writes.length,3); // legacy MS51 cannot receive an unsupported zero envelope
+  await close();mode='expired';await open();await page.locator('#usage-amount').fill('0');
+  await page.locator('#renew-usage').click();await page.waitForFunction(()=>document.getElementById('usage-state').textContent==='Không giới hạn'&&!state.pending);
+  assert.equal(writes.at(-1).amount,0);assert.equal(await page.locator('#usage-remaining').textContent(),'');
+  assert.match(await page.locator('#usage-status').textContent(),/không giới hạn/);
+  await page.locator('#usage-amount').fill('1');assert.equal(await page.locator('#usage-unit').isEnabled(),true);
+  await page.locator('#usage-amount').fill('0');
   await page.setViewportSize({width:390,height:900});await page.locator('#usage-title').scrollIntoViewIfNeeded();
   assert.equal(await page.evaluate(()=>document.getElementById('access-dialog').scrollWidth<=document.getElementById('access-dialog').clientWidth),true);
   assert.equal(await page.locator('label[for="usage-amount"]').count(),1);
   if(process.env.MS51_UI_PREVIEW){fs.mkdirSync(process.env.MS51_UI_PREVIEW,{recursive:true});await page.locator('.usage-section').screenshot({path:path.join(process.env.MS51_UI_PREVIEW,'admin-gia-han.png')});}
-  console.log('PASS: expired/active view, targeted grant, offline/unsupported guards, same-token retry, mobile layout');
+  console.log('PASS: finite/unlimited grants, legacy/unsupported guards, lost-ACK retry, mobile layout');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exit(1);});

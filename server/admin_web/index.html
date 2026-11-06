@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="vi">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102f40"><title>MS51 · Quản trị</title><link rel="stylesheet" href="assets/admin.css?v=20261106-usage"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102f40"><title>MS51 · Quản trị</title><link rel="stylesheet" href="assets/admin.css?v=20261106-usage-zero"></head>
 <body>
 <svg class="icons" aria-hidden="true"><defs>
 <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
@@ -41,11 +41,11 @@
 <p>Thời gian chỉ tính khi mạch bật nguồn. Hết thời gian, mạch sẽ khóa lại.</p>
 <div class="usage-summary"><strong id="usage-state">Chưa đọc từ mạch</strong><span id="usage-remaining"></span></div>
 <form id="usage-form"><div class="usage-fields">
-<div><label for="usage-amount">Thời gian cấp thêm</label><input id="usage-amount" type="number" min="1" max="999" step="1" value="1" required inputmode="numeric"></div>
+<div><label for="usage-amount">Thời gian sử dụng</label><input id="usage-amount" type="number" min="0" max="999" step="1" value="1" required inputmode="numeric" aria-describedby="usage-help"></div>
 <div><label for="usage-unit">Đơn vị</label><select id="usage-unit"><option value="hours">Giờ</option><option value="days">Ngày</option></select></div>
-</div><p class="field-help">Kỳ mới bắt đầu khi mạch xác nhận gia hạn.</p>
+</div><p id="usage-help" class="field-help">Nhập 0 để mở không giới hạn. Từ 1–999: bắt đầu kỳ mới khi mạch xác nhận; hết thời gian sẽ khóa lại.</p>
 <p id="usage-status" role="status" aria-live="polite"></p><p id="usage-error" class="error" role="alert"></p>
 <div class="access-toolbar usage-actions"><button id="renew-usage" class="primary" type="submit" disabled>Gia hạn</button><button id="read-usage" class="secondary" type="button">Đọc lại từ mạch</button></div>
 </form></section><section class="access-section"><h3>Firmware cấp cho thiết bị</h3><p>App chỉ hiện nút Cập nhật khi có bản được cấp. Tệp được gửi và nạp khi người dùng bấm nút trong app.</p><div id="assigned-firmware" class="firmware-assigned"></div><form id="firmware-form"><label for="firmware-hex">Tệp chương trình MS51 (.hex)</label><input id="firmware-hex" type="file" accept=".hex" required><p class="field-help">Tối đa 96 KiB dạng Intel HEX, vùng chương trình MS51 tối đa 32 KiB. Máy chủ kiểm tra checksum trước khi cấp.</p><div class="access-toolbar"><button id="assign-firmware" class="primary" type="submit">Cấp bản cập nhật</button><button id="revoke-firmware" class="secondary" type="button">Gỡ bản cập nhật</button></div></form><p class="field-help">Quyền và giao diện firmware mới cần MS51 Connect 3.1.0 trở lên.</p></section></dialog>
-<div id="toast" class="toast" role="status" hidden></div><script src="assets/admin.js?v=20261106-usage" defer></script>
+<div id="toast" class="toast" role="status" hidden></div><script src="assets/admin.js?v=20261106-usage-zero" defer></script>
 </body></html>

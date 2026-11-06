@@ -293,7 +293,7 @@ static void telemetry_build_snapshot(void)
 
 	telemetry_append_var_u16("unlock_v", 1);
     telemetry_append_var_u16("local_settings", 2);
-    telemetry_append_var_u16("usage_v", 1);
+    telemetry_append_var_u16("usage_v", 2);
     telemetry_append_var_prefix("usage_id");
     {
         uint8_t i, value;

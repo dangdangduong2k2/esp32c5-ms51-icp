@@ -1,5 +1,8 @@
 # Gia hạn sử dụng từ web admin — MS51 3.7.5
 
+Bản mới [MS51 3.7.6](../admin-usage-unlimited-3.7.6/README.md) bổ sung nhập
+**0 để mở không giới hạn**. Các thông tin dưới đây ghi nhận triển khai 3.7.5.
+
 Trong web admin, mở tài khoản → thiết bị → **Cấp quyền → Gia hạn sử dụng**.
 Nhập thời gian 1–999 và chọn Giờ hoặc Ngày, rồi bấm Gia hạn. Mạch bắt đầu kỳ mới
 khi xác nhận lưu; thời gian tính khi có nguồn theo cơ chế TRY. Khi hết, mạch lưu

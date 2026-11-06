@@ -15,11 +15,11 @@ class UsageTests(AdminTests):
         super().setUp();self.authed=False
         self.raw=bytearray(217);self.raw[0]=2;self.raw[0x20:0x22]=(10).to_bytes(2,'big')
         self.raw[0x2D]=1;self.raw[0xC5:]=bytes([7])*20
-        self.token='0'*32;self.supported=True;self.stale=False;self.writes=0;self.lost=None
+        self.token='0'*32;self.supported=True;self.version='2';self.stale=False;self.writes=0;self.lost=None
     def fake(self,row,uid,rid,method,path,body,lease=None):
         if path=='/api/debug':
             return {'ok':True,'enabled':True,'last_rx_age_ms':6000 if self.stale else 5,'paused_for_icp':False,
-                    'variables':[{'name':'usage_v','value':'1' if self.supported else '0','age_ms':5},
+                    'variables':[{'name':'usage_v','value':self.version if self.supported else '0','age_ms':5},
                                  {'name':'usage_id','value':self.token,'age_ms':5}]}
         self.assertEqual(path,'/api/runtime-config')
         if method=='GET':return {'ok':True,'data':self.raw.hex()}
@@ -66,7 +66,7 @@ class UsageTests(AdminTests):
     def test_permission_csrf_and_input_validation(self):
         with patch.object(core.bridge,'call',side_effect=self.fake):
             v=self.read();b=self.body(v)
-            for k,val in [('amount',0),('amount',1000),('amount',True),('amount','12'),('unit','months'),('id','bad')]:
+            for k,val in [('amount',-1),('amount',1000),('amount',True),('amount','12'),('unit','months'),('id','bad')]:
                 invalid=dict(b);invalid[k]=val
                 self.assertEqual(self.client.post(URL,json=invalid,headers=self.headers).status_code,422)
             self.assertEqual(self.client.post(URL,json=b,headers={'origin':self.headers['origin']}).status_code,403)
@@ -96,6 +96,40 @@ class UsageTests(AdminTests):
         self.assertEqual(trial_view(raw)['remaining_seconds'],171000)
         raw[0x2D]=1
         self.assertEqual(trial_view(raw)['remaining_seconds'],0)
+    def test_zero_opens_expired_try_and_preserves_other_settings(self):
+        before=bytes(self.raw)
+        with patch.object(core.bridge,'call',side_effect=self.fake),patch('usage.time.sleep'):
+            v=self.read();self.assertTrue(v['unlimited_supported'])
+            body=self.body(v,amount=0)
+            r=self.client.post(URL,json=body,headers=self.headers)
+            self.assertEqual(r.status_code,200,r.text)
+            self.assertEqual(r.json()['grant']['state'],'applied')
+            self.assertIn('không giới hạn',r.json()['grant']['message'])
+            view=self.read();self.assertEqual(view['state'],'unlimited');self.assertIsNone(view['remaining_seconds'])
+            self.assertEqual(self.raw[0x20:0x22],bytes(2));self.assertEqual(self.raw[0x2D:0x32],bytes(5))
+            for i in range(217):
+                if i not in [0x20,0x21,*range(0x2C,0x32)]:self.assertEqual(self.raw[i],before[i],hex(i))
+            self.assertEqual(self.client.post(URL,json=body,headers=self.headers).status_code,200)
+            self.assertEqual(self.writes,1)
+            finite=self.body(view,amount=1)
+            self.assertEqual(self.client.post(URL,json=finite,headers=self.headers).status_code,200)
+            self.assertEqual(self.read()['state'],'active')
+    def test_zero_lost_ack_reconciles_without_granting_again(self):
+        with patch.object(core.bridge,'call',side_effect=self.fake),patch('usage.time.sleep'):
+            body=self.body(self.read(),amount=0);self.lost='after'
+            self.assertEqual(self.client.post(URL,json=body,headers=self.headers).status_code,504)
+            view=self.read();self.assertEqual(view['state'],'unlimited')
+            self.assertEqual(view['grant']['state'],'applied');self.assertIn('không giới hạn',view['grant']['message'])
+            self.assertEqual(self.client.post(URL,json=body,headers=self.headers).status_code,200)
+            self.assertEqual(self.writes,1)
+    def test_v1_firmware_allows_finite_grants_but_never_sends_zero(self):
+        self.version='1'
+        with patch.object(core.bridge,'call',side_effect=self.fake),patch('usage.time.sleep'):
+            view=self.read();self.assertTrue(view['supported']);self.assertFalse(view['unlimited_supported'])
+            r=self.client.post(URL,json=self.body(view,amount=0),headers=self.headers)
+            self.assertEqual(r.status_code,409);self.assertIn('3.7.6',r.text);self.assertEqual(self.writes,0)
+            self.assertEqual(self.client.post(URL,json=self.body(view),headers=self.headers).status_code,200)
+            self.assertEqual(self.writes,1)
     def test_mobile_cannot_change_try_even_if_old_policy_granted_it(self):
         with core.lock:
             core.db.execute('INSERT OR REPLACE INTO device_policies VALUES(?,?,1)',(DEVICE,'["tryTime","tryUnit","coolCl"]'));core.db.commit()

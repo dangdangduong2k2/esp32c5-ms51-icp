@@ -50,13 +50,28 @@ int main(void) {
     setup();memcpy(before,&eData,sizeof(eData));fail_write=1;
     assert(!usage_renew_apply(packet) && !usage_reset_required);
     assert(memcmp(before,&eData,sizeof(eData))==0);
-    setup();packet[6]=0;assert(!usage_renew_apply(packet) && !commits);
+    // Zero permanently removes the TRY limit; it also releases an expired TRY.
+    setup();packet[6]=0;
+    assert(usage_renew_apply(packet)==1 && commits==1 && usage_reset_required==1);
+    assert(!eData.try_time && !eData.shutdown && !eData.tried_time && !shutdown_timeout);
+    for(unsigned i=0;i<100;i++)assert(eData.protected_settings[i]==0x55);
+    memset(&eData,0,sizeof(eData));memcpy(&eData,saved,sizeof(eData));
+    assert(!eData.try_time && !eData.shutdown);
+    assert(usage_renew_apply(packet)==2 && commits==1 && !usage_reset_required);
+    // Unlimited can be changed to a finite period with a different receipt.
+    packet[8]++;packet[6]=1;
+    assert(usage_renew_apply(packet)==1 && eData.try_time==1 && !usage_reset_required && commits==2);
+    // Removing the limit while running preserves the operation, without reset.
+    setup();eData.shutdown=0;eData.tried_time=50;packet[6]=0;
+    assert(usage_renew_apply(packet)==1 && !eData.try_time && !eData.tried_time && !usage_reset_required);
+    setup();packet[6]=0;fail_write=1;memcpy(before,&eData,sizeof(eData));
+    assert(!usage_renew_apply(packet) && memcmp(before,&eData,sizeof(eData))==0);
     setup();packet[5]=3;packet[6]=232;assert(!usage_renew_apply(packet) && !commits);
     setup();packet[7]=2;assert(!usage_renew_apply(packet) && !commits);
     setup();packet[216]=1;assert(!usage_renew_apply(packet) && !commits);
     setup();packet[1]='X';assert(!usage_renew_apply(packet) && !commits);
     setup();memset(packet+8,0,16);assert(!usage_renew_apply(packet) && !commits);
     setup();memset(packet+8,255,16);assert(!usage_renew_apply(packet) && !commits);
-    puts("PASS: expired/running TRY renewal, persisted replay receipt, settings preservation, EEPROM readback failure, bounds and malformed envelopes");
+    puts("PASS: finite/unlimited TRY grants, expired/running, reboot receipt, settings preservation, EEPROM readback failure, bounds and malformed envelopes");
     return 0;
 }

@@ -137,6 +137,7 @@ function accessBusy(busy) {
     for(const id of ['option-show-st','option-op-seconds']) $(id).disabled=busy||loading||optionsRevision===null;
     const unsupported=!usageData||!usageData.supported;
     for(const id of ['usage-amount','usage-unit'])$(id).disabled=busy||loading||unsupported||!!usageAttempt;
+    if($('usage-amount').value.trim()!==''&&Number($('usage-amount').value)===0)$('usage-unit').disabled=true;
     $('renew-usage').disabled=busy||loading||unsupported;
     $('read-usage').disabled=busy||loading;
 }
@@ -321,7 +322,7 @@ async function readUsage(target,epoch) {
         usageAttempt=grant&&['pending','unknown'].includes(grant.state)?{id:grant.id,amount:grant.amount,unit:grant.unit}:null;
         if(usageAttempt){$('usage-amount').value=usageAttempt.amount;$('usage-unit').value=usageAttempt.unit;}
         $('renew-usage').textContent=usageAttempt?'Thử lại gia hạn':'Gia hạn';
-        $('usage-status').textContent=!data.supported?'Cần cập nhật chương trình MS51 để dùng tính năng gia hạn.':grant?grant.message:'Sẵn sàng cấp thời gian mới.';
+        $('usage-status').textContent=!data.supported?'Cần cập nhật chương trình MS51 để dùng tính năng gia hạn.':grant?grant.message:!data.unlimited_supported?'Cần cập nhật MS51 bản 3.7.6 để nhập 0 mở không giới hạn. Vẫn có thể cấp thời gian từ 1–999.':'Sẵn sàng cấp thời gian hoặc mở không giới hạn.';
     }catch(e){if(epoch===accessEpoch&&state.csrf){usageData=null;$('usage-error').textContent=e.message;$('usage-status').textContent='Chưa đọc được từ mạch.';}}
     finally{if(epoch===accessEpoch){usageLoading=false;accessBusy(state.pending);}}
 }
@@ -329,11 +330,15 @@ $('read-usage').onclick=async()=>{
     if(state.pending||usageLoading||accessLoading||optionsLoading||!accessTarget)return;
     await readUsage({...accessTarget},accessEpoch);
 };
+$('usage-amount').oninput=()=>{accessBusy(state.pending);$('usage-error').textContent='';};
 $('usage-form').onsubmit=async e=>{
     e.preventDefault();if(state.pending||usageLoading||!usageData?.supported||!accessTarget)return;
     const amount=Number($('usage-amount').value),unit=$('usage-unit').value;
-    if(!Number.isInteger(amount)||amount<1||amount>999||!['hours','days'].includes(unit)){
-        $('usage-error').textContent='Nhập thời gian từ 1 đến 999.';return;
+    if($('usage-amount').value.trim()===''||!Number.isInteger(amount)||amount<0||amount>999||!['hours','days'].includes(unit)){
+        $('usage-error').textContent='Nhập từ 0 đến 999. Số 0 là không giới hạn.';return;
+    }
+    if(amount===0&&!usageData.unlimited_supported){
+        $('usage-error').textContent='Cần cập nhật MS51 bản 3.7.6 trở lên để mở không giới hạn.';return;
     }
     if(!usageAttempt)usageAttempt={id:Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join(''),amount,unit};
     const target={...accessTarget},epoch=accessEpoch;
@@ -342,7 +347,7 @@ $('usage-form').onsubmit=async e=>{
     try{
         const data=await api(`users/${target.uid}/devices/${target.device}/usage`,{...usageAttempt,revision:usageData.revision});
         if(epoch!==accessEpoch||!state.csrf)return;
-        if(data.grant?.state==='applied'){usageAttempt=null;message('Mạch đã xác nhận gia hạn.');}
+        if(data.grant?.state==='applied'){usageAttempt=null;message(amount===0?'Đã mở không giới hạn thời gian.':'Mạch đã xác nhận gia hạn.');}
         await readUsage(target,epoch);
     }catch(e){if(epoch===accessEpoch&&state.csrf){$('usage-error').textContent=e.message;$('usage-status').textContent='Đọc lại để kiểm tra kết quả trước khi cấp tiếp.';}}
     finally{if(epoch===accessEpoch){$('usage-form').setAttribute('aria-busy','false');$('renew-usage').textContent=usageAttempt?'Thử lại gia hạn':'Gia hạn';accessBusy(false);}}

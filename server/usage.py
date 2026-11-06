@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt
 class UsageGrant(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(pattern=r'^[a-f0-9]{32}$')
-    amount: StrictInt = Field(ge=1, le=999)
+    amount: StrictInt = Field(ge=0, le=999)
     unit: str = Field(pattern=r'^(hours|days)$')
     revision: str = Field(pattern=r'^[a-f0-9]{64}$')
 
@@ -35,12 +35,18 @@ def trial_view(raw):
 def usage_receipt(debug):
     if (debug.get('enabled') is not True or debug.get('paused_for_icp') is True or
             type(debug.get('last_rx_age_ms')) is not int or not 0 <= debug['last_rx_age_ms'] <= 5000):
-        return False, ''
+        return 0, ''
     fresh = {v.get('name'): v.get('value') for v in debug.get('variables', [])
              if isinstance(v, dict) and type(v.get('age_ms')) is int and 0 <= v['age_ms'] <= 5000}
     token = fresh.get('usage_id', '')
-    supported = fresh.get('usage_v') == '1' and isinstance(token, str) and bool(re.fullmatch('[0-9a-f]{32}', token))
-    return supported, token if supported else ''
+    version = {'1': 1, '2': 2}.get(fresh.get('usage_v'), 0)
+    supported = version and isinstance(token, str) and bool(re.fullmatch('[0-9a-f]{32}', token))
+    return version if supported else 0, token if supported else ''
+
+
+def applied_message(amount):
+    return ('Đã mở không giới hạn thời gian.' if amount == 0 else
+            'Đã cấp thời gian mới. Hết thời gian mạch sẽ khóa lại.')
 
 
 def renewal_envelope(operation, amount, unit):
@@ -81,9 +87,9 @@ def install_usage(app, core, admin_identity, audit, admin_device, acquire, relea
         except ValueError as error:
             core.fail(502, str(error))
         debug = call(row, uid, lease, 'GET', '/api/debug')
-        supported, token = usage_receipt(debug)
+        version, token = usage_receipt(debug)
         revision = hashlib.sha256(raw[0x20:0x22]+raw[0x2C:0x32]+token.encode()).hexdigest()
-        return dict(view, supported=supported, revision=revision), token
+        return dict(view, supported=bool(version), unlimited_supported=version >= 2, revision=revision), token
 
     def latest(device):
         with lock:
@@ -94,7 +100,7 @@ def install_usage(app, core, admin_identity, audit, admin_device, acquire, relea
         with lock:
             row = db.execute("SELECT * FROM usage_grants WHERE device=? AND state IN ('pending','unknown') ORDER BY created DESC LIMIT 1", (device,)).fetchone()
         if row and token == row['id']:
-            mark(row['id'], 'applied', 'Mạch đã xác nhận gia hạn.')
+            mark(row['id'], 'applied', applied_message(row['amount']))
 
     @app.get('/admin/api/users/{uid}/devices/{device}/usage')
     def get_usage(uid: str, device: str, request: Request):
@@ -134,6 +140,8 @@ def install_usage(app, core, admin_identity, audit, admin_device, acquire, relea
                     core.fail(409, 'Lần gia hạn trước chưa được xác nhận. Đọc lại hoặc thử lại cùng lần đó.')
                 if not view['supported']:
                     core.fail(409, 'Cần cập nhật chương trình MS51 để gia hạn mà giữ nguyên các cài đặt khác.')
+                if data.amount == 0 and not view['unlimited_supported']:
+                    core.fail(409, 'Cần cập nhật MS51 bản 3.7.6 trở lên để nhập 0 mở không giới hạn.')
                 if not previous and data.revision != view['revision']:
                     core.fail(409, 'Thời gian trên mạch đã thay đổi. Đọc lại trước khi gia hạn.')
                 if not previous:
@@ -157,7 +165,7 @@ def install_usage(app, core, admin_identity, audit, admin_device, acquire, relea
                 except Exception:
                     break
                 if supported and token == data.id:
-                    mark(data.id, 'applied', 'Đã cấp thời gian mới. Hết thời gian mạch sẽ khóa lại.')
+                    mark(data.id, 'applied', applied_message(data.amount))
                     return {'ok': True, 'grant': grant_view(latest(device))}
             mark(data.id, 'unknown', 'Chưa đọc được xác nhận từ mạch. Đọc lại để kiểm tra trước khi gia hạn tiếp.')
             return {'ok': True, 'grant': grant_view(latest(device))}

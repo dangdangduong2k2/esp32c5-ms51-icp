@@ -21,7 +21,8 @@ static uint8_t usage_renew_apply(const uint8_t xdata *blob)
     if (blob[0] != 0xE3 || blob[1] != 'T' || blob[2] != 'R' ||
         blob[3] != 'Y' || blob[4] != '1' || eData.init != eeprom_init_val) return 0;
     period = ((uint16_t)blob[5] << 8) | blob[6];
-    if (period == 0 || period > 999 || blob[7] > 1) return 0;
+    /* Zero removes the TRY limit, including an already expired shutdown. */
+    if (period > 999 || blob[7] > 1) return 0;
     any = not_ff = 0;
     for (i = 8; i < 24; ++i) { any |= blob[i]; not_ff |= (uint8_t)(blob[i] ^ 0xFF); }
     if (!any || !not_ff) return 0;
