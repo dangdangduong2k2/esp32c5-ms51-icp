@@ -300,8 +300,10 @@ async function readDeviceOptions(target,epoch) {
     finally{if(epoch===accessEpoch){optionsLoading=false;accessBusy(state.pending);}}
 }
 $('read-options').onclick=async()=>{
-    if(state.pending||accessLoading||optionsLoading||!accessTarget)return;
-    await readDeviceOptions({...accessTarget},accessEpoch);
+    if(state.pending||accessLoading||optionsLoading||usageLoading||!accessTarget)return;
+    const target={...accessTarget},epoch=accessEpoch;
+    await readDeviceOptions(target,epoch);
+    if(epoch===accessEpoch&&state.csrf)await readUsage(target,epoch);
 };
 
 function usageDuration(seconds) {
@@ -323,7 +325,8 @@ async function readUsage(target,epoch) {
         const values=usageAttempt||{amount:data.period,unit:data.unit};
         $('usage-amount').value=values.amount;$('usage-unit').value=values.unit;
         $('renew-usage').textContent=usageAttempt?'Thử lại gia hạn':'Gia hạn';
-        $('usage-status').textContent=!data.supported?'Cần cập nhật chương trình MS51 để dùng tính năng gia hạn.':grant?grant.message:!data.unlimited_supported?'Cần cập nhật MS51 bản 3.7.6 để nhập 0 mở không giới hạn. Vẫn có thể cấp thời gian từ 1–999.':'Sẵn sàng cấp thời gian hoặc mở không giới hạn.';
+        const status=!data.supported?'Cần cập nhật chương trình MS51 để dùng tính năng gia hạn.':grant?grant.message:!data.unlimited_supported?'Cần cập nhật MS51 bản 3.7.6 để nhập 0 mở không giới hạn. Vẫn có thể cấp thời gian từ 1–999.':'Sẵn sàng cấp thời gian hoặc mở không giới hạn.';
+        $('usage-status').textContent='Đã đọc từ mạch · '+new Date().toLocaleTimeString('vi-VN')+' · '+status;
     }catch(e){if(epoch===accessEpoch&&state.csrf){usageData=null;$('usage-error').textContent=e.message;$('usage-status').textContent='Chưa đọc được từ mạch.';}}
     finally{if(epoch===accessEpoch){usageLoading=false;accessBusy(state.pending);}}
 }

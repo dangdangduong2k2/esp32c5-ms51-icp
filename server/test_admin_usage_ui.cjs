@@ -44,6 +44,12 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   await page.locator('#read-usage').click();await page.waitForFunction(()=>!usageLoading);
   assert.equal(await page.locator('#usage-amount').inputValue(),'8');assert.equal(await page.locator('#usage-unit').inputValue(),'days');
   assert.equal(writes.length,0);assert.match(await page.locator('#usage-remaining').textContent(),/2 giờ/);
+  // The upper shared read button must restore TRY too, not just the menu options.
+  boardPeriod=4;boardUnit='hours';
+  await page.locator('#usage-amount').fill('88');await page.locator('#usage-unit').selectOption('days');
+  await page.locator('#read-options').click();await page.waitForFunction(()=>!optionsLoading&&!usageLoading);
+  assert.equal(await page.locator('#usage-amount').inputValue(),'4');assert.equal(await page.locator('#usage-unit').inputValue(),'hours');
+  assert.match(await page.locator('#usage-status').textContent(),/Đã đọc từ mạch/);assert.equal(writes.length,0);
   await page.locator('#usage-amount').fill('12');await page.locator('#usage-unit').selectOption('hours');
   await page.locator('#renew-usage').click();await page.waitForFunction(()=>document.getElementById('usage-state').textContent==='Đang sử dụng'&&!state.pending);
   assert.equal(writes.length,1);assert.equal(writes[0].amount,12);assert.match(writes[0].id,/^[a-f0-9]{32}$/);assert.equal(applications.size,1);
@@ -76,6 +82,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
   assert.equal(await page.evaluate(()=>document.getElementById('access-dialog').scrollWidth<=document.getElementById('access-dialog').clientWidth),true);
   assert.equal(await page.locator('label[for="usage-amount"]').count(),1);
   if(process.env.MS51_UI_PREVIEW){fs.mkdirSync(process.env.MS51_UI_PREVIEW,{recursive:true});await page.locator('.usage-section').screenshot({path:path.join(process.env.MS51_UI_PREVIEW,'admin-gia-han.png')});}
-  console.log('PASS: read stored TRY and units without writes, finite/unlimited grants, pending receipt isolation, legacy guards, mobile layout');
+  console.log('PASS: both read buttons restore TRY and unit without writes, finite/unlimited grants, pending receipt isolation, legacy guards, mobile layout');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exit(1);});

@@ -16,6 +16,9 @@ Trong **Tài khoản → thiết bị → Cấp quyền → Gia hạn sử dụn
   lại ước tính; không cấp kỳ mới, không xóa bộ đếm. Nếu đang có lệnh chưa rõ
   kết quả, các ô giữ đúng giá trị lệnh chờ để thử lại an toàn. Mạch lưu kỳ
   hiện tại; không phải danh sách toàn bộ các kỳ cũ đã bị gia hạn thay thế.
+- Nút **Đọc lại từ mạch** phía trên đọc tuần tự cả tùy chọn và thời gian TRY.
+  Nút trong Gia hạn ghi rõ **Đọc thời gian từ mạch**; khi thành công hiện thời
+  điểm đọc. Hai nút đều không ghi cấu hình hoặc đặt lại bộ đếm.
 
 ## Tương thích và lưu xuống mạch
 
@@ -52,6 +55,12 @@ Trong **Tài khoản → thiết bị → Cấp quyền → Gia hạn sử dụn
 - API admin thật xác nhận `unlimited_supported=true`. Kỳ 4 giờ do admin đã
   cấp được giữ nguyên; tác vụ này không tự cấp lại kỳ hoặc gửi lệnh mở 0
   tới mạch thật. Nhánh mở 0 đã được kiểm chứng trong host/API/UI tests.
+- Sau đó kiểm tra lỗi đọc trên web thật: nút phía trên chỉ đọc tùy chọn,
+  giữ nguyên giá trị thử 99 giờ trong ô trình duyệt; nút phía dưới mới đọc
+  đúng TRY. Đã sửa nút phía trên đọc cả TRY và triển khai lại file tĩnh.
+  Kiểm tra lại cùng thao tác, cả hai nút trả đúng kỳ 2 ngày đang lưu lúc thử.
+  Browser test chặn mọi POST, không có lệnh ghi xuống mạch; phiên quản trị
+  kiểm tra tạm thời được thu hồi ngay sau khi chạy.
 
 Kết quả triển khai và cập nhật phần cứng được lưu trong thư mục kết quả tác vụ
 `D:/Codex/Documents/2026-11-06/admin-usage-unlimited/outputs`. Ảnh preview ở đó
