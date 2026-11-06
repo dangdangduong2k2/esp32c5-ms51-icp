@@ -250,8 +250,8 @@ class ManagedTests(AdminTests):
 
     def test_policy_validation_and_stale_admin(self):
         data = self.client.get(ADMIN + '/access').json()
-        self.assertEqual(len(data['catalog']), 44)
-        self.assertEqual(len(data['visible']), 44)
+        self.assertEqual(len(data['catalog']), 42)
+        self.assertEqual(len(data['visible']), 42)
         rev = self.set_policy(['coolCl', 'rangeCoolClMin'])
         mobile = self.client.get(MOBILE+'/access', headers=self.mobile_headers).json()
         self.assertEqual(mobile['visible'], ['coolCl','rangeCoolClMin'])

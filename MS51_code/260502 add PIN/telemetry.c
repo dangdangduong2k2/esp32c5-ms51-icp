@@ -15,7 +15,7 @@
 
 #define TELEMETRY_INTERVAL_MS       1000UL
 #define TELEMETRY_RX_FRAME_TIMEOUT_MS 250UL
-#define TELEMETRY_TX_BUFFER_SIZE    448u
+#define TELEMETRY_TX_BUFFER_SIZE    512u
 #define TELEMETRY_RX_BUFFER_SIZE    256u
 #define TELEMETRY_CONFIG_SIZE       217u
 
@@ -40,6 +40,7 @@
 #define TELEMETRY_STATUS_OK          0u
 #define TELEMETRY_STATUS_BAD_FRAME   1u
 #define TELEMETRY_STATUS_BAD_CONFIG  2u
+#include "usage_renew.c"
 
 typedef enum {
 	telemetry_rx_wait_sof = 0,
@@ -292,6 +293,18 @@ static void telemetry_build_snapshot(void)
 
 	telemetry_append_var_u16("unlock_v", 1);
     telemetry_append_var_u16("local_settings", 2);
+    telemetry_append_var_u16("usage_v", 1);
+    telemetry_append_var_prefix("usage_id");
+    {
+        uint8_t i, value;
+        static const char code digits[] = "0123456789abcdef";
+        for (i = 0; i < 16; ++i) {
+            value = eData.usage_mark == USAGE_RECEIPT_MARK ? eData.usage_token[i] : 0;
+            telemetry_append_char(digits[value >> 4]);
+            telemetry_append_char(digits[value & 15]);
+        }
+        telemetry_append_char('\r'); telemetry_append_char('\n');
+    }
     telemetry_append_var_u16("pin_state", password_remote_state());
 	telemetry_append_var_text("mode", telemetry_mode_text());
 	telemetry_append_var_text("mode_source", mode_from_app ? "APP" : "PHYSICAL");
@@ -573,7 +586,14 @@ static void telemetry_finish_config_command(void)
     }
 	else if (telemetry_pending_command == TELEMETRY_COMMAND_SET)
 	{
-		if (!telemetry_config_blob_is_valid(telemetry_rx_payload))
+		if (telemetry_rx_payload[0] == 0xE3)
+		{
+			index = usage_renew_apply(telemetry_rx_payload);
+			telemetry_schedule_config_response(telemetry_pending_command,
+				telemetry_pending_sequence, index ? TELEMETRY_STATUS_OK : TELEMETRY_STATUS_BAD_CONFIG,
+				0, index ? usage_reset_required : 0);
+		}
+		else if (!telemetry_config_blob_is_valid(telemetry_rx_payload))
 		{
 			telemetry_schedule_config_response(telemetry_pending_command,
 				telemetry_pending_sequence, TELEMETRY_STATUS_BAD_CONFIG, 0, 0);

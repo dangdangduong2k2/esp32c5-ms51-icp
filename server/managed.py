@@ -20,8 +20,9 @@ MODE_DISPLAY_FIELDS = {
     'showHcf': 'hcfMode', 'showHdf': 'hdf',
 }
 ADMIN_ONLY_FIELDS = {'showSt', 'defrostOpSeconds'}
+ADMIN_USAGE_FIELDS = {'tryTime', 'tryUnit'}
 ACCESS_CATALOG = {key: spec for key, spec in CATALOG.items()
-                  if key not in MODE_DISPLAY_FIELDS and key not in ADMIN_ONLY_FIELDS}
+                  if key not in MODE_DISPLAY_FIELDS and key not in ADMIN_ONLY_FIELDS and key not in ADMIN_USAGE_FIELDS}
 
 
 def visible_settings(keys):
@@ -540,5 +541,7 @@ def install(app, core, admin_identity, audit):
             return {'ok': True, 'job': job_view(device)}
 
     core.managed_policy = policy
+    from usage import install_usage
+    install_usage(app, core, admin_identity, audit, admin_device, acquire, release_lock, call)
     core.managed_worker = worker
     core.managed_spawn = lambda *args: threading.Thread(target=worker, args=args, daemon=True).start()

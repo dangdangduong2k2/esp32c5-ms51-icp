@@ -88,6 +88,9 @@ struct eeprom_type
     uint8_t trigger_mark;
     uint8_t trigger_source; /* 0 SIG, 1 10k, 2 20k, 3 50k */
     uint8_t trigger_inverse;
+	/* Private renewal receipt; the public 217-byte configuration stays unchanged. */
+	uint8_t usage_mark;
+	uint8_t usage_token[16];
 } eData;
 
 #include "TM1650_multi.h"

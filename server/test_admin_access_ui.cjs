@@ -5,7 +5,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
  const browser=await chromium.launch({headless:true,executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'});
  const page=await browser.newPage();
  const catalog=JSON.parse(fs.readFileSync(path.join(__dirname,'settings_catalog.json'),'utf8'));
- for(const key of ['showDf','showEnd','showSl','showHcf','showHdf','showSt','defrostOpSeconds'])delete catalog[key];
+ for(const key of ['showDf','showEnd','showSl','showHcf','showHdf','showSt','defrostOpSeconds','tryTime','tryUnit'])delete catalog[key];
  let mode='ok',posts=0,reads=0,releaseOld,writes=[];
  await page.route('http://admin.test/**',async route=>{
   const req=route.request(),url=new URL(req.url());
@@ -55,7 +55,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
    await page.setViewportSize({width:1280,height:720});
   }
   await page.locator('#show-all').click();
-  assert.equal(await page.locator('input[data-permission]:checked').count(),44);
+  assert.equal(await page.locator('input[data-permission]:checked').count(),42);
   assert.equal(await page.locator('#option-op-seconds').isChecked(),false);
   await page.locator('#hide-all').click();
   assert.equal(await page.locator('input[data-permission]:checked').count(),0);
@@ -108,6 +108,6 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'playwright');
   assert.equal(await page.locator('#option-show-st').count(),1);
   assert.equal(await page.locator('#option-op-seconds').count(),1);
   assert.equal(posts,0);
-  console.log('PASS: 44 permissions, single combined save, success confirmation, failure requires reload, unchanged/unread options omitted, bulk isolation, late result isolation, no implicit writes.');
+  console.log('PASS: 42 permissions, single combined save, success confirmation, failure requires reload, unchanged/unread options omitted, bulk isolation, late result isolation, no implicit writes.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

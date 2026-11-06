@@ -7,7 +7,7 @@ function button(text, cls, action) { const n = el('button', cls, text); n.type =
 function message(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(message.timer); message.timer = setTimeout(() => $('toast').hidden = true, 5000); }
 function showLogin() { ++accessEpoch; accessTarget=null; accessLoading=false; optionsLoading=false; policyLoaded=false; optionsRevision=null; state.pending=false; state.epoch++; state.detailEpoch++; state.csrf = ''; state.selected = null; state.detail = null; state.user = ''; $('dashboard').hidden = true; $('login').hidden = false; $('users-body').replaceChildren(); $('detail').replaceChildren(); $('edit-dialog').close(); $('access-dialog').close(); parkOptions(); $('permission-fields').replaceChildren(); $('edit-fields').replaceChildren(); $('login-password').value = ''; }
 async function api(path, body) {
-  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), /\/(options|access)$/.test(path) ? 45000 : 15000);
+  const controller = new AbortController(), timer = setTimeout(() => controller.abort(), /\/(options|access|usage)$/.test(path) ? 45000 : 15000);
   try {
     const response = await fetch('api/' + path, {method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: body === undefined ? {} : {'Content-Type': 'application/json', 'X-CSRF-Token': state.csrf}, body: body === undefined ? undefined : JSON.stringify(body)});
     let data; try { data = await response.json(); } catch { throw new Error('Máy chủ trả về dữ liệu chưa hợp lệ. Hãy thử lại.'); }
@@ -127,17 +127,22 @@ api('session').then(authenticated).catch(() => showLogin());
 
 let accessTarget = null, accessEpoch = 0, optionsRevision = null, optionsValues = null;
 let accessLoading=false, optionsLoading=false, policyLoaded=false;
+let usageLoading=false,usageData=null,usageAttempt=null;
 function accessBusy(busy) {
     state.pending=busy;
-    const loading=accessLoading||optionsLoading;
-    $('access-dialog').querySelectorAll('button,input').forEach(n=>n.disabled=busy||loading);
+    const loading=accessLoading||optionsLoading||usageLoading;
+    $('access-dialog').querySelectorAll('button,input,select').forEach(n=>n.disabled=busy||loading);
     $('close-access').disabled=busy;
     for(const id of ['show-all','hide-all','save-access']) $(id).disabled=busy||loading||!policyLoaded;
     for(const id of ['option-show-st','option-op-seconds']) $(id).disabled=busy||loading||optionsRevision===null;
+    const unsupported=!usageData||!usageData.supported;
+    for(const id of ['usage-amount','usage-unit'])$(id).disabled=busy||loading||unsupported||!!usageAttempt;
+    $('renew-usage').disabled=busy||loading||unsupported;
+    $('read-usage').disabled=busy||loading;
 }
 function closeAccess() {
     if(state.pending)return;
-    ++accessEpoch;accessTarget=null;accessLoading=false;optionsLoading=false;policyLoaded=false;optionsRevision=null;
+    ++accessEpoch;accessTarget=null;accessLoading=false;optionsLoading=false;policyLoaded=false;optionsRevision=null;usageLoading=false;usageData=null;usageAttempt=null;
     $('access-dialog').close();parkOptions(); $('permission-fields').replaceChildren();$('firmware-hex').value='';
 }
 $('close-access').onclick=closeAccess;
@@ -186,8 +191,7 @@ function renderPermissionGroups(data) {
         ['Chu trình',['coolStart','defrostStart','df','end','hdf','delayDf','onTime','defrostOpSeconds']],
         ['Cài đặt khởi động',['delaySt','stLed','stLcd','showSt']],
         ['HCF',['hcfMode','hcfTime']],
-        ['Hiển thị và thao tác',['displayMode','redBrightness','greenBrightness','lockTime','touch']],
-        ['Thử lại',['tryTime','tryUnit']]
+        ['Hiển thị và thao tác',['displayMode','redBrightness','greenBrightness','lockTime','touch']]
     ]) {
         const section=el('div','permission-subgroup');section.append(el('h4','',title));
         fields(section,keys);advanced.append(section);
@@ -201,6 +205,9 @@ async function openAccess(uid,device) {
     if (state.pending) return;
     const epoch=++accessEpoch;
     accessTarget={uid,device:device.id,revision:0}; optionsRevision=null;optionsValues=null;policyLoaded=false;accessLoading=true;optionsLoading=true;
+    usageLoading=false;usageData=null;usageAttempt=null;
+    $('usage-state').textContent='Đang đọc từ mạch…';$('usage-remaining').textContent='';$('usage-status').textContent='';$('usage-error').textContent='';
+    $('usage-amount').value='1';$('usage-unit').value='days';$('renew-usage').textContent='Gia hạn';
     for(const id of ['option-show-st','option-op-seconds']) { $(id).checked=false;$(id).indeterminate=true; }
     $('options-status').textContent='Đang đọc giá trị từ mạch…';$('permission-status').textContent='Đang tải quyền đã cấp…';
     $('access-device-name').textContent=device.name+' · '+device.id;
@@ -219,6 +226,7 @@ async function openAccess(uid,device) {
     } catch(e) { if(epoch===accessEpoch&&state.csrf){$('access-error').textContent=e.message; parkOptions(); $('permission-fields').replaceChildren();$('permission-status').textContent='Chưa tải được quyền. Đóng rồi mở lại để thử lại.';} }
     finally { if(epoch===accessEpoch){accessLoading=false;accessBusy(state.pending);} }
     await optionsRead;
+    if(epoch===accessEpoch&&state.csrf)await readUsage({...accessTarget},epoch);
 }
 $('show-all').onclick=()=>{ $('permission-fields').querySelectorAll('input[data-permission]').forEach(n=>n.checked=true);updateVisibleCount(); };
 $('hide-all').onclick=()=>{ $('permission-fields').querySelectorAll('input[data-permission]').forEach(n=>n.checked=false);updateVisibleCount(); };
@@ -293,4 +301,49 @@ async function readDeviceOptions(target,epoch) {
 $('read-options').onclick=async()=>{
     if(state.pending||accessLoading||optionsLoading||!accessTarget)return;
     await readDeviceOptions({...accessTarget},accessEpoch);
+};
+
+function usageDuration(seconds) {
+    if(seconds===null)return 'Không giới hạn';
+    const minutes=Math.max(0,Math.ceil(seconds/60)),days=Math.floor(minutes/1440),hours=Math.floor(minutes%1440/60),rest=minutes%60;
+    return [days?days+' ngày':'',hours?hours+' giờ':'',rest?rest+' phút':''].filter(Boolean).join(' ')||'0 giờ';
+}
+async function readUsage(target,epoch) {
+    usageLoading=true;accessBusy(state.pending);$('usage-error').textContent='';
+    $('usage-status').textContent='Đang đọc thời gian từ mạch…';
+    try{
+        const data=await api(`users/${target.uid}/devices/${target.device}/usage`);
+        if(epoch!==accessEpoch||!state.csrf)return;
+        usageData=data;
+        $('usage-state').textContent=({active:'Đang sử dụng',expired:'Đã hết thời gian',unlimited:'Không giới hạn'})[data.state]||'Chưa xác định';
+        $('usage-remaining').textContent=data.state==='unlimited'?'':'Còn khoảng '+usageDuration(data.remaining_seconds);
+        const grant=data.grant;
+        usageAttempt=grant&&['pending','unknown'].includes(grant.state)?{id:grant.id,amount:grant.amount,unit:grant.unit}:null;
+        if(usageAttempt){$('usage-amount').value=usageAttempt.amount;$('usage-unit').value=usageAttempt.unit;}
+        $('renew-usage').textContent=usageAttempt?'Thử lại gia hạn':'Gia hạn';
+        $('usage-status').textContent=!data.supported?'Cần cập nhật chương trình MS51 để dùng tính năng gia hạn.':grant?grant.message:'Sẵn sàng cấp thời gian mới.';
+    }catch(e){if(epoch===accessEpoch&&state.csrf){usageData=null;$('usage-error').textContent=e.message;$('usage-status').textContent='Chưa đọc được từ mạch.';}}
+    finally{if(epoch===accessEpoch){usageLoading=false;accessBusy(state.pending);}}
+}
+$('read-usage').onclick=async()=>{
+    if(state.pending||usageLoading||accessLoading||optionsLoading||!accessTarget)return;
+    await readUsage({...accessTarget},accessEpoch);
+};
+$('usage-form').onsubmit=async e=>{
+    e.preventDefault();if(state.pending||usageLoading||!usageData?.supported||!accessTarget)return;
+    const amount=Number($('usage-amount').value),unit=$('usage-unit').value;
+    if(!Number.isInteger(amount)||amount<1||amount>999||!['hours','days'].includes(unit)){
+        $('usage-error').textContent='Nhập thời gian từ 1 đến 999.';return;
+    }
+    if(!usageAttempt)usageAttempt={id:Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join(''),amount,unit};
+    const target={...accessTarget},epoch=accessEpoch;
+    accessBusy(true);$('usage-error').textContent='';$('usage-form').setAttribute('aria-busy','true');
+    $('renew-usage').textContent='Đang gia hạn…';$('usage-status').textContent='Đang lưu thời gian xuống mạch…';
+    try{
+        const data=await api(`users/${target.uid}/devices/${target.device}/usage`,{...usageAttempt,revision:usageData.revision});
+        if(epoch!==accessEpoch||!state.csrf)return;
+        if(data.grant?.state==='applied'){usageAttempt=null;message('Mạch đã xác nhận gia hạn.');}
+        await readUsage(target,epoch);
+    }catch(e){if(epoch===accessEpoch&&state.csrf){$('usage-error').textContent=e.message;$('usage-status').textContent='Đọc lại để kiểm tra kết quả trước khi cấp tiếp.';}}
+    finally{if(epoch===accessEpoch){$('usage-form').setAttribute('aria-busy','false');$('renew-usage').textContent=usageAttempt?'Thử lại gia hạn':'Gia hạn';accessBusy(false);}}
 };
